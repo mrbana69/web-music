@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ReApple Music';
+const CACHE_NAME = 'ReApple Music-v1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -18,50 +18,59 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      if (event.request.url.includes('index.html')) {
-        // For index.html, check for updates
-        return fetch(event.request).then((networkResponse) => {
-          if (networkResponse.ok) {
-            // Compare cached and network versions
-            if (cachedResponse) {
-              Promise.all([cachedResponse.clone().text(), networkResponse.clone().text()]).then(([cachedText, networkText]) => {
-                if (cachedText !== networkText) {
-                  // Notify clients of update
-                  self.clients.matchAll().then((clients) => {
-                    clients.forEach((client) => {
-                      client.postMessage({ type: 'UPDATE_AVAILABLE' });
-                    });
-                  });
-                }
-              });
-            }
-            // Cache the new version
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse.clone());
-            });
-            return networkResponse;
-          } else if (cachedResponse) {
-            return cachedResponse;
-          }
-        }).catch(() => {
-          return cachedResponse;
-        });
-      } else {
-        return cachedResponse || fetch(event.request);
-      }
+      return cachedResponse || fetch(event.request);
     })
   );
 });
 
-// Activate Event: Clean up old caches
+// Activate Event: Clean up old caches and claim clients
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keyList) => {
-      return Promise.all(keyList.map((key) => {
-        if (key !== CACHE_NAME) {
-          return caches.delete(key);
-        }
-      }));
-    })
+    Promise.all([
+      // Take control of all clients
+      self.clients.claim(),
+      // Clean up old caches
+      caches.keys().then((keyList) => {
+        return Promise.all(keyList.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        }));
+      })
+    ])
+  );
+});
+
+// Update detection: Notify clients when a new version is available
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+// When a new service worker is installed, notify clients
+self.addEventListener('install', (event) => {
+  self.skipWaiting(); // Force activation of new SW
+});
+
+// After activation, notify all clients about the update
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((keyList) => {
+        return Promise.all(keyList.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        }));
+      }),
+      // Notify all clients that update is available
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'UPDATE_AVAILABLE' });
+        });
+      })
+    ])
   );
 });

@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Music</title>
+    <title>ReApple Music</title>
     <link rel="manifest" href="manifest.json">
     <style>
         :root {
@@ -620,6 +620,89 @@
         .full-player.active .main-controls { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
         .full-player.active .vol-container { opacity: 1; transform: translateY(0); transition-delay: 0.25s; }
         .full-player.active .player-footer { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
+
+        /* --- Small Screen Adjustments (iPhone SE, Huawei P9 Lite, etc.) --- */
+        @media (max-width: 400px) {
+            .full-player {
+                padding: 40px 15px 20px;
+            }
+
+            .full-art-container {
+                width: 90%;
+                height: 0;
+                padding-bottom: 90%;
+            }
+
+            .full-info {
+                margin-bottom: 20px;
+            }
+
+            .full-title {
+                font-size: 20px;
+            }
+
+            .full-artist {
+                font-size: 16px;
+            }
+
+            .progress-container {
+                margin-bottom: 30px;
+            }
+
+            .main-controls {
+                margin-bottom: 30px;
+            }
+
+            .player-visual-column {
+                margin-bottom: 20px;
+            }
+
+            .mini-player {
+                bottom: 95px;
+                left: 5px;
+                right: 5px;
+                height: 56px;
+                padding: 0 8px;
+            }
+
+            .mini-art {
+                width: 40px;
+                height: 40px;
+            }
+
+            .mini-info {
+                margin-right: 8px;
+            }
+
+            .mini-text {
+                font-size: 14px;
+            }
+
+            .mini-artist {
+                font-size: 11px;
+            }
+
+            .mini-controls > .control-btn + .control-btn {
+                margin-left: 12px;
+            }
+
+            .tab-bar {
+                height: 75px;
+                padding-bottom: calc(5px + var(--safe-area-bottom));
+            }
+
+            .tab-btn {
+                width: 50px;
+            }
+
+            .tab-btn > svg {
+                margin-bottom: 2px;
+            }
+
+            .tab-btn > span {
+                font-size: 9px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -746,12 +829,6 @@
                 <div class="full-info">
                     <div class="full-title" id="fullTitle">Song Title</div>
                     <div class="full-artist" id="fullArtist">Artist Name</div>
-                    <div style="display:flex; align-items:center; justify-content:center; margin-top:10px;">
-                        <div id="qualityBadge"></div>
-                        <button class="like-btn" id="likeBtn" onclick="toggleLike()">
-                            <svg class="icon" style="color:var(--text-secondary)" viewBox="0 0 24 24"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z"/></svg>
-                        </button>
-                    </div>
                 </div>
 
                 <div class="progress-container">
@@ -794,6 +871,9 @@
                     </button>
                     <button class="control-btn" onclick="togglePlayerView('queue')">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+                    </button>
+                    <button class="like-btn" id="likeBtn" onclick="toggleLike()">
+                        <svg class="icon" style="color:var(--text-secondary)" viewBox="0 0 24 24"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z"/></svg>
                     </button>
                 </div>
             </div>
@@ -1031,20 +1111,46 @@
             document.getElementById('fullPlayer').classList.remove('active');
         }
 
+        // Swipe down to close full player
+        let touchStartY = 0;
+        let touchEndY = 0;
+
+        const fullPlayer = document.getElementById('fullPlayer');
+        fullPlayer.addEventListener('touchstart', (e) => {
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        fullPlayer.addEventListener('touchend', (e) => {
+            touchEndY = e.changedTouches[0].screenY;
+            if (touchEndY - touchStartY > 100) { // Swipe down threshold
+                closeFullPlayer();
+            }
+        }, { passive: true });
+
         // --- 4. Audio Control Wrapper ---
         // Handles routing between DashPlayer (HiRes) and Native Audio (Standard)
 
         async function loadMix(track) {
             try {
-                const res = await fetch(`${API_URL}/mix?id=${track.id}`);
-                const data = await res.json();
-                if (data.data && data.data.items) {
-                    const newTracks = data.data.items.filter(t => t.id !== track.id);
-                    if (newTracks.length > 0) {
-                        state.queue.push(...newTracks);
-                        updateQueueUI();
+                // First fetch track info using /info endpoint
+                const infoRes = await fetch(`${API_URL}/info/?id=${track.id}`);
+                const infoData = await infoRes.json();
+
+                if (infoData.data && infoData.data.mixes && infoData.data.mixes.TRACK_MIX) {
+                    // Get the mix id from the mixes.TRACK_MIX field
+                    const mixId = infoData.data.mixes.TRACK_MIX;
+                    const mixRes = await fetch(`${API_URL}/mix?id=${mixId}`);
+                    const mixData = await mixRes.json();
+
+                    if (mixData.data && mixData.items) {
+                        const newTracks = mixData.data.items.filter(t => t.id !== track.id);
+                        if (newTracks.length > 0) {
+                            state.queue.push(...newTracks);
+                            updateQueueUI();
+                        }
                     }
                 }
+                // If mixes is null, do nothing
             } catch (e) {
                 console.error("Mix load failed", e);
             }
@@ -1206,13 +1312,7 @@
             updateLikeIcon();
             updateQueueUI();
 
-            // HiRes Badge
-            const badgeContainer = document.getElementById('qualityBadge');
-            if(state.isHiRes) {
-                badgeContainer.innerHTML = '<span class="badge">HI-RES LOSSLESS</span>';
-            } else {
-                badgeContainer.innerHTML = '';
-            }
+
         }
 
         // --- 5. Timeline & Volume Events ---
