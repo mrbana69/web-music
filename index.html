@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#1c1c1e">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Music</title>
     <link rel="manifest" href="manifest.json">
@@ -53,7 +54,7 @@
         .main-container {
             flex: 1;
             overflow-y: auto;
-            padding-bottom: 140px; /* Space for player + tab bar */
+            padding-bottom: 180px; /* Space for player + tab bar */
             scroll-behavior: smooth;
         }
 
@@ -92,8 +93,8 @@
             padding: 10px 12px;
             display: flex;
             align-items: center;
-            gap: 10px;
             margin-bottom: 20px;
+            margin-top: 15px;
         }
 
         .search-input {
@@ -105,6 +106,8 @@
             outline: none;
         }
         
+        .search-wrapper > svg { margin-right: 10px; }
+
         .search-input::placeholder { color: var(--text-secondary); }
 
         /* --- Grids & Lists --- */
@@ -141,7 +144,8 @@
 
         .artwork {
             width: 100%;
-            aspect-ratio: 1/1;
+            height: 0;
+            padding-bottom: 100%; /* Fallback per aspect-ratio */
             background: var(--bg-secondary);
             border-radius: 12px;
             overflow: hidden;
@@ -151,6 +155,8 @@
         }
 
         .artwork img {
+            position: absolute;
+            top: 0; left: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -177,11 +183,13 @@
         .list-item {
             display: flex;
             align-items: center;
-            gap: 16px;
             padding: 12px 0;
             border-bottom: 1px solid var(--divider);
             cursor: pointer;
         }
+
+        .list-item > .list-artwork { margin-right: 16px; }
+        .list-item > .list-info { margin-right: 16px; }
         
         .list-item:last-child { border-bottom: none; }
 
@@ -204,7 +212,8 @@
             left: 0;
             width: 100%;
             height: 85px; /* taller for safe area */
-            background: rgba(30, 30, 30, 0.95);
+            background: #1c1c1e;
+            background: rgba(30, 30, 30, 0.98); /* Più opaco per fallback */
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border-top: 0.5px solid rgba(255,255,255,0.1);
@@ -222,28 +231,29 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 4px;
             font-size: 10px;
             width: 60px;
         }
+
+        .tab-btn > svg { margin-bottom: 4px; }
 
         .tab-btn.active { color: var(--accent); }
 
         /* --- Mini Player --- */
         .mini-player {
             position: fixed;
-            bottom: 85px; /* Above tab bar */
+            bottom: 110px; /* Above tab bar */
             left: 10px;
             right: 10px;
             height: 64px;
-            background: rgba(35, 35, 35, 0.9);
+            background: #232323;
+            background: rgba(35, 35, 35, 0.96); /* Più opaco per fallback */
             backdrop-filter: blur(25px);
             -webkit-backdrop-filter: blur(25px);
             border-radius: 14px;
             display: flex;
             align-items: center;
             padding: 0 12px;
-            gap: 12px;
             z-index: 90;
             box-shadow: 0 5px 20px rgba(0,0,0,0.4);
             transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
@@ -251,6 +261,9 @@
         }
 
         .mini-player.visible { transform: translateY(0); }
+
+        .mini-player > .mini-art { margin-right: 12px; }
+        .mini-player > .mini-info { margin-right: 12px; }
 
         .mini-art {
             width: 44px;
@@ -263,17 +276,20 @@
         
         .mini-art img { width: 100%; height: 100%; object-fit: cover; }
 
-        .mini-info { flex: 1; overflow: hidden; display: flex; align-items: center; }
+        .mini-info { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
         .mini-text { 
             white-space: nowrap; 
             overflow: hidden; 
             text-overflow: ellipsis; 
             font-size: 15px; 
             font-weight: 500;
+            width: 100%;
         }
-        .mini-artist { color: var(--text-secondary); margin-left: 5px; font-weight: 400;}
+        .mini-artist { color: var(--text-secondary); font-weight: 400; font-size: 12px; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        .mini-controls { display: flex; align-items: center; gap: 16px; padding-right: 4px; }
+        .mini-controls { display: flex; align-items: center; padding-right: 4px; }
+        .mini-controls > .control-btn + .control-btn { margin-left: 16px; }
+
         .control-btn {
             background: none;
             border: none;
@@ -289,7 +305,8 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.85);
+            background: #000000;
+            background: rgba(0,0,0,0.92); /* Più opaco per fallback */
             backdrop-filter: blur(40px);
             -webkit-backdrop-filter: blur(40px);
             z-index: 200;
@@ -317,8 +334,9 @@
 
         .full-art-container {
             width: 100%;
-            aspect-ratio: 1/1;
-            margin: 20px 0 40px;
+            height: 0;
+            padding-bottom: 100%; /* Fallback per aspect-ratio */
+            margin: 0;
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
@@ -328,11 +346,17 @@
 
         .full-player.active .full-art-container { transform: scale(1); }
 
-        .full-art-container img { width: 100%; height: 100%; object-fit: cover; }
+        .full-art-container img { 
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%; object-fit: cover; 
+        }
 
         .full-info { margin-bottom: 30px; }
         .full-title { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
         .full-artist { font-size: 20px; color: var(--text-accent); opacity: 0.8; }
+
+        .full-info > div > :not(:last-child) { margin-right: 15px; }
 
         .progress-container { margin-bottom: 40px; }
         .progress-bar-bg {
@@ -366,9 +390,10 @@
 
         .vol-container {
             display: flex;
-            gap: 15px;
             align-items: center;
         }
+        .vol-container > :not(:last-child) { margin-right: 15px; }
+
         .vol-slider {
             flex: 1;
             -webkit-appearance: none;
@@ -424,10 +449,10 @@
 
         .lyrics-view, .queue-view {
             position: absolute;
-            top: 80px; /* Below notch */
+            top: 0;
             left: 0;
             width: 100%;
-            height: calc(100% - 250px); /* Leave space for controls */
+            height: 100%;
             padding: 20px 30px;
             overflow-y: auto;
             z-index: 10;
@@ -518,6 +543,12 @@
         .player-visual-column {
             position: relative;
             width: 100%;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 0;
+            margin-bottom: 30px; /* Sostituisce gap */
         }
 
         .player-controls-column {
@@ -529,15 +560,17 @@
                 flex-direction: row;
                 align-items: center;
                 justify-content: center;
-                gap: 60px;
                 max-width: 1000px;
                 margin: 0 auto;
             }
+            
+            .full-player-content > .player-visual-column { margin-right: 60px; margin-bottom: 0; }
 
             .player-visual-column {
                 flex: 1;
                 max-width: 500px;
-                aspect-ratio: 1/1;
+                height: auto;
+                padding-bottom: 0;
             }
 
             .player-controls-column {
@@ -545,8 +578,48 @@
                 max-width: 400px;
             }
 
-            .lyrics-view, .queue-view { top: 0; height: 100%; border-radius: 12px; }
+            .lyrics-view, .queue-view { border-radius: 12px; }
         }
+
+        /* --- Animations & Transitions --- */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-in {
+            animation: fadeInUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+            opacity: 0;
+        }
+
+        /* Interactive Elements Scale & Feedback */
+        .control-btn, .btn-text, .tab-btn, .card, .list-item, .mini-player {
+            transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, background-color 0.2s;
+        }
+        .control-btn:active, .btn-text:active, .tab-btn:active {
+            transform: scale(0.92);
+        }
+        .card:active, .list-item:active {
+            transform: scale(0.96);
+            background-color: rgba(255,255,255,0.05);
+        }
+
+        /* Full Player Staggered Animation */
+        .full-player .full-info,
+        .full-player .progress-container,
+        .full-player .main-controls,
+        .full-player .vol-container,
+        .full-player .player-footer {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .full-player.active .full-info { opacity: 1; transform: translateY(0); transition-delay: 0.1s; }
+        .full-player.active .progress-container { opacity: 1; transform: translateY(0); transition-delay: 0.15s; }
+        .full-player.active .main-controls { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
+        .full-player.active .vol-container { opacity: 1; transform: translateY(0); transition-delay: 0.25s; }
+        .full-player.active .player-footer { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
     </style>
 </head>
 <body>
@@ -564,9 +637,6 @@
             <h2 class="section-title">Top Picks</h2>
             <div class="grid" id="recommendations">
                 </div>
-            
-            <h2 class="section-title">Heavy Rotation</h2>
-            <div class="grid" id="heavy-rotation"></div>
         </div>
     </div>
 
@@ -606,8 +676,9 @@
 
             <div class="section-title">
                 <span>Playlists</span>
-                <div style="display:flex; gap:15px;">
+                <div style="display:flex;">
                     <button class="btn-text" onclick="document.getElementById('csvInput').click()">Import</button>
+                    <div style="width:15px"></div>
                     <button class="btn-text" onclick="createPlaylist()">New</button>
                 </div>
             </div>
@@ -675,7 +746,7 @@
                 <div class="full-info">
                     <div class="full-title" id="fullTitle">Song Title</div>
                     <div class="full-artist" id="fullArtist">Artist Name</div>
-                    <div style="display:flex; align-items:center; justify-content:center; gap:15px; margin-top:10px;">
+                    <div style="display:flex; align-items:center; justify-content:center; margin-top:10px;">
                         <div id="qualityBadge"></div>
                         <button class="like-btn" id="likeBtn" onclick="toggleLike()">
                             <svg class="icon" style="color:var(--text-secondary)" viewBox="0 0 24 24"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z"/></svg>
@@ -841,21 +912,43 @@
                         
                         if (this.loadId !== currentId) break;
 
-                        // Wait if buffer is updating
-                        while(this.sourceBuffer && this.sourceBuffer.updating) {
-                            await new Promise(r => setTimeout(r, 50));
-                        }
-                        
-                        if (this.loadId !== currentId) break;
+                        let appended = false;
+                        while (!appended) {
+                            if (this.loadId !== currentId) break;
+                            
+                            while(this.sourceBuffer && this.sourceBuffer.updating) {
+                                await new Promise(r => setTimeout(r, 50));
+                            }
+                            if (this.loadId !== currentId) break;
 
-                        if (this.sourceBuffer && !this.sourceBuffer.updating) {
-                            this.sourceBuffer.appendBuffer(data);
+                            try {
+                                this.sourceBuffer.appendBuffer(data);
+                                appended = true;
+                            } catch (err) {
+                                if (err.name === 'QuotaExceededError') {
+                                    const currentTime = this.audioElement.currentTime;
+                                    if (currentTime > 10) {
+                                        if (!this.sourceBuffer.updating) {
+                                            this.sourceBuffer.remove(0, currentTime - 10);
+                                        }
+                                    } else {
+                                        await new Promise(r => setTimeout(r, 1000));
+                                    }
+                                } else {
+                                    throw err;
+                                }
+                            }
                         }
                     } catch (e) {
                         console.error("Segment load failed", e);
+                        if (e.name === 'QuotaExceededError') break;
                     }
                 }
                 
+                while(this.sourceBuffer && this.sourceBuffer.updating) {
+                    await new Promise(r => setTimeout(r, 50));
+                }
+
                 if (this.loadId === currentId && this.mediaSource && this.mediaSource.readyState === 'open') {
                     this.mediaSource.endOfStream();
                 }
@@ -870,6 +963,14 @@
                 this.loadId++;
                 if (this.audioElement) {
                     this.audioElement.pause();
+                    if (this.mediaSource && this.sourceBuffer) {
+                        try {
+                            if (this.sourceBuffer.updating) this.sourceBuffer.abort();
+                            if (this.mediaSource.readyState === 'open') {
+                                this.mediaSource.removeSourceBuffer(this.sourceBuffer);
+                            }
+                        } catch (e) {}
+                    }
                     this.audioElement.removeAttribute('src');
                     this.audioElement.load();
                 }
@@ -883,6 +984,10 @@
         const API_URL = 'https://api.monochrome.tf'; // Using one for stability
         const dashPlayer = new DashPlayer();
         const nativeAudio = document.getElementById('nativeAudio');
+
+        // Auto-advance logic (Handles Shuffle/Mix when song ends)
+        dashPlayer.audioElement.addEventListener('ended', () => nextTrack());
+        nativeAudio.addEventListener('ended', () => nextTrack());
         
         let state = {
             queue: [],
@@ -929,11 +1034,28 @@
         // --- 4. Audio Control Wrapper ---
         // Handles routing between DashPlayer (HiRes) and Native Audio (Standard)
 
+        async function loadMix(track) {
+            try {
+                const res = await fetch(`${API_URL}/mix?id=${track.id}`);
+                const data = await res.json();
+                if (data.data && data.data.items) {
+                    const newTracks = data.data.items.filter(t => t.id !== track.id);
+                    if (newTracks.length > 0) {
+                        state.queue.push(...newTracks);
+                        updateQueueUI();
+                    }
+                }
+            } catch (e) {
+                console.error("Mix load failed", e);
+            }
+        }
+
         async function playTrack(track, fromQueue = false) {
             addToHistory(track);
             if (!fromQueue) {
                 state.queue = [track];
                 state.currentIndex = 0;
+                loadMix(track);
             }
 
             const currentTrack = state.queue[state.currentIndex];
@@ -941,6 +1063,7 @@
             // UI Updates
             updatePlayerUI(currentTrack);
             fetchLyrics(currentTrack);
+            updateMediaSession(currentTrack);
             document.getElementById('miniPlayer').classList.add('visible');
 
             // Reset Players
@@ -995,6 +1118,63 @@
                 state.isPlaying ? nativeAudio.play() : nativeAudio.pause();
             }
             updatePlayIcons();
+        }
+
+        function updateMediaSession(track) {
+            if ('mediaSession' in navigator) {
+                const artUrl = track.album?.cover 
+                    ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/640x640.jpg`
+                    : 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.title,
+                    artist: track.artist?.name || "Unknown Artist",
+                    album: track.album?.title || "Unknown Album",
+                    artwork: [
+                        { src: artUrl, sizes: '512x512', type: 'image/jpeg' }
+                    ]
+                });
+
+                navigator.mediaSession.setActionHandler('play', togglePlay);
+                navigator.mediaSession.setActionHandler('pause', togglePlay);
+                navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
+                navigator.mediaSession.setActionHandler('nexttrack', nextTrack);
+            }
+        }
+
+        async function nextTrack() {
+            if (state.queue.length === 0) return;
+            
+            if (state.currentIndex >= state.queue.length - 1) {
+                await loadMix(state.queue[state.currentIndex]);
+            }
+
+            let nextIndex = state.currentIndex + 1;
+            if (nextIndex >= state.queue.length) nextIndex = 0;
+            
+            playTrackFromQueue(nextIndex);
+        }
+
+        function prevTrack() {
+            if (state.queue.length === 0) return;
+            const player = state.isHiRes ? dashPlayer.audioElement : nativeAudio;
+            if (player.currentTime > 3) {
+                player.currentTime = 0;
+                return;
+            }
+            let prevIndex = state.currentIndex - 1;
+            if (prevIndex < 0) prevIndex = state.queue.length - 1;
+            playTrackFromQueue(prevIndex);
+        }
+
+        function toggleShuffle() {
+            state.shuffle = !state.shuffle;
+            document.getElementById('shuffleBtn').style.opacity = state.shuffle ? '1' : '0.6';
+        }
+
+        function toggleRepeat() {
+            state.repeat = !state.repeat;
+            document.getElementById('repeatBtn').style.opacity = state.repeat ? '1' : '0.6';
         }
 
         function updatePlayIcons() {
@@ -1085,15 +1265,12 @@
                 const grid = container.querySelector('.grid');
 
                 if(data.data && data.data.items) {
-                    data.data.items.slice(0, 10).forEach(track => {
-                        const card = createCard(track);
-                        grid.innerHTML += card;
-                    });
+                    grid.innerHTML = data.data.items.slice(0, 10).map((track, i) => createCard(track, i)).join('');
                 }
             }
         });
 
-        function createCard(track) {
+        function createCard(track, index = 0) {
             const artUrl = track.album?.cover 
                 ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg`
                 : '';
@@ -1102,7 +1279,7 @@
             const trackStr = JSON.stringify(track).replace(/"/g, '&quot;');
             
             return `
-                <div class="card" onclick='playTrack(${trackStr})'>
+                <div class="card animate-in" style="animation-delay: ${index * 50}ms" onclick='playTrack(${trackStr})'>
                     <div class="artwork">
                         <img src="${artUrl}" loading="lazy">
                     </div>
@@ -1134,7 +1311,7 @@
                 return;
             }
 
-            history.forEach(track => grid.innerHTML += createCard(track));
+            grid.innerHTML = history.map((track, i) => createCard(track, i)).join('');
         }
 
         // --- 7. Lyrics Implementation ---
@@ -1150,8 +1327,8 @@
             const album = encodeURIComponent(track.album?.title || '');
             const duration = track.duration || 0;
 
-            const url = `https://lyricsplus.prjktla.online/v2/lyrics/get?title=${title}&artist=${artist}&album=${album}&duration=${duration}&source=apple,lyricsplus,musixmatch,spotify,musixmatch-word`;
-
+            const url = `https://lyricsplus.prjktla.workers.dev/v2/lyrics/get?title=${title}&artist=${artist}&album=${album}&duration=${duration}&source=apple%2Clyricsplus%2Cmusixmatch%2Cspotify%2Cmusixmatch-word`;
+            
             try {
                 const res = await fetch(url);
                 const data = await res.json();
@@ -1171,8 +1348,20 @@
             const container = document.getElementById('lyricsContent');
             container.innerHTML = '';
             
-            // Check for synced lyrics
-            const lines = parseLRC(data.lyrics);
+            let lines = [];
+
+            // Handle JSON Array format (Apple Music / API style)
+            if (Array.isArray(data.lyrics)) {
+                lines = data.lyrics.map(line => ({
+                    time: line.time / 1000, // Convert ms to seconds
+                    text: line.text
+                }));
+            } 
+            // Handle LRC String format (Fallback)
+            else if (typeof data.lyrics === 'string') {
+                lines = parseLRC(data.lyrics);
+            }
+
             state.syncedLyrics = lines;
 
             if (lines.length > 0) {
@@ -1190,6 +1379,8 @@
                 });
             } else {
                 container.innerHTML = `<div style="white-space: pre-wrap; font-size: 18px; line-height: 1.6;">${data.lyrics}</div>`;
+                const text = typeof data.lyrics === 'string' ? data.lyrics : "Lyrics not available.";
+                container.innerHTML = `<div style="white-space: pre-wrap; font-size: 18px; line-height: 1.6;">${text}</div>`;
             }
 
             // Check translation availability (mock logic as API response structure for translation varies)
@@ -1280,20 +1471,20 @@
         function updateQueueUI() {
             const container = document.getElementById('queueList');
             container.innerHTML = '';
-            state.queue.forEach((track, i) => {
+            container.innerHTML = state.queue.map((track, i) => {
                 const isPlaying = i === state.currentIndex;
-                container.innerHTML += `
-                    <div class="list-item" onclick="playTrackFromQueue(${i})" style="${isPlaying ? 'opacity:0.5' : ''}">
+                return `
+                    <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick="playTrackFromQueue(${i})">
                         <div class="list-artwork">
                             <img src="${track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : ''}">
                         </div>
-                        <div class="list-info">
+                        <div class="list-info" style="${isPlaying ? 'opacity:0.5' : ''}">
                             <div class="card-title" style="${isPlaying ? 'color:var(--accent)' : ''}">${track.title}</div>
                             <div class="card-subtitle">${track.artist?.name}</div>
                         </div>
                     </div>
                 `;
-            });
+            }).join('');
         }
 
         function playTrackFromQueue(index) {
@@ -1310,6 +1501,86 @@
             }
         }
         
+        // --- CSV Import Helpers (Based on provided mechanism) ---
+        function levenshtein(a, b) {
+            if (a.length === 0) return b.length;
+            if (b.length === 0) return a.length;
+            const matrix = [];
+            for (let i = 0; i <= b.length; i++) { matrix[i] = [i]; }
+            for (let j = 0; j <= a.length; j++) { matrix[0][j] = j; }
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1,
+                            matrix[i][j - 1] + 1,
+                            matrix[i - 1][j] + 1
+                        );
+                    }
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+
+        function parseCSVLine(line) {
+            const parts = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    if (inQuotes && line[i + 1] === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    parts.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            parts.push(current.trim());
+            return parts;
+        }
+
+        function parseSpotifyCSV(text) {
+            const lines = text.split('\n').filter(l => l.trim());
+            let headerIndex = -1;
+            const headers = {};
+            
+            // Detect Header Row
+            for (let i = 0; i < Math.min(lines.length, 20); i++) {
+                const row = parseCSVLine(lines[i]);
+                if (row.includes('Track Name') && row.includes('Artist Name(s)')) {
+                    headerIndex = i;
+                    row.forEach((h, idx) => headers[h] = idx);
+                    break;
+                }
+            }
+
+            if (headerIndex === -1) return null;
+
+            const results = [];
+            for (let i = headerIndex + 1; i < lines.length; i++) {
+                const row = parseCSVLine(lines[i]);
+                if (row.length < 2) continue;
+                
+                results.push({
+                    title: row[headers['Track Name']] || '',
+                    artist: row[headers['Artist Name(s)']] || '',
+                    album: row[headers['Album Name']] || ''
+                });
+            }
+            return results;
+        }
+
+        let importState = { tracks: [], currentIndex: 0, foundTracks: [] };
+
         function handleCSVImport(input) {
             const file = input.files[0];
             if (!file) return;
@@ -1320,15 +1591,16 @@
                 overlay = document.createElement('div');
                 overlay.id = 'importOverlay';
                 overlay.innerHTML = `
-                    <h2 style="margin-bottom:10px">Importing...</h2>
+                    <h2 style="margin-bottom:10px">Import Playlist</h2>
                     <div id="importLog"></div>
+                    <button class="btn-text" id="nextBtn" style="margin-top:20px; display:none;" onclick="processNextTrack()">Next</button>
                     <button class="btn-text" style="margin-top:20px" onclick="this.parentElement.remove()">Close</button>
                 `;
                 document.body.appendChild(overlay);
             } else {
                 document.body.appendChild(overlay);
             }
-            
+
             const log = document.getElementById('importLog');
             log.innerHTML = '';
             const logMsg = (msg) => {
@@ -1341,89 +1613,116 @@
             };
 
             const reader = new FileReader();
-            reader.onload = async function(e) {
+            reader.onload = function(e) {
                 const text = e.target.result;
-                const rows = text.split('\n').filter(r => r.trim());
-                
-                logMsg(`File loaded. ${rows.length} rows found.`);
 
-                const foundTracks = [];
-                
-                for (let i = 0; i < rows.length; i++) {
-                    const row = rows[i];
-                    // Expected CSV: Title, Artist, Album, ISRC
-                    const parts = row.split(',').map(p => p.trim());
-                    
-                    if (parts.length === 0) continue;
-                    // Skip header
-                    if (i === 0 && parts[0].toLowerCase() === 'title') {
-                        logMsg("Skipping header row.");
-                        continue;
-                    }
+                // 1. Parse CSV using robust logic
+                const parsedRows = parseSpotifyCSV(text);
 
-                    const title = parts[0];
-                    const artist = parts[1] || '';
-                    const album = parts[2] || '';
-                    const isrc = parts[3] || ''; // Index 3 based on prompt order
-
-                    logMsg(`Processing: ${title}`);
-
-                    // Search Query: Use ISRC if available, else Title + Artist + Album
-                    let query = isrc || `${title} ${artist} ${album}`;
-
-                    try {
-                        logMsg(`Searching: "${query}"...`);
-                        const res = await fetch(`${API_URL}/search/?s=${encodeURIComponent(query)}`);
-                        const data = await res.json();
-
-                        if (data.data && data.data.items && data.data.items.length > 0) {
-                            foundTracks.push(data.data.items[0]);
-                            logMsg(`✔ Found: ${data.data.items[0].title}`);
-                        } else {
-                            // Fallback: Try Title + Artist
-                            const fallbackQuery = `${title} ${artist}`;
-                            logMsg(`⚠ Retrying with: "${fallbackQuery}"...`);
-                            const res2 = await fetch(`${API_URL}/search/?s=${encodeURIComponent(fallbackQuery)}`);
-                            const data2 = await res2.json();
-                            if (data2.data && data2.data.items && data2.data.items.length > 0) {
-                                foundTracks.push(data2.data.items[0]);
-                                logMsg(`✔ Found (Fallback): ${data2.data.items[0].title}`);
-                            } else {
-                                logMsg(`❌ Failed to find: ${title}`);
-                            }
-                        }
-                    } catch (err) {
-                        console.error("Import search error", err);
-                        logMsg(`❌ Error: ${err.message}`);
-                    }
-                    
-                    // Prevent rate limiting / UI freeze
-                    await new Promise(r => setTimeout(r, 100));
+                if (!parsedRows || parsedRows.length === 0) {
+                    logMsg("❌ Error: Could not find headers 'Track Name' & 'Artist Name(s)'.");
+                    alert("Invalid CSV format. Please use a Spotify export.");
+                    input.value = '';
+                    return;
                 }
 
-                if (foundTracks.length > 0) {
-                    const name = file.name.replace('.csv', '');
-                    state.playlists.push({ name: name, songs: foundTracks });
-                    localStorage.setItem('playlists', JSON.stringify(state.playlists));
-                    renderPlaylists();
-                    logMsg(`DONE. Imported "${name}" with ${foundTracks.length} songs.`);
-                    alert(`Import Complete. ${foundTracks.length} songs added.`);
-                } else {
-                    logMsg("DONE. No songs found.");
-                    alert("No songs found.");
-                }
+                importState.tracks = parsedRows;
+                importState.currentIndex = 0;
+                importState.foundTracks = [];
 
-                input.value = '';
+                logMsg(`File parsed. ${parsedRows.length} tracks found.`);
+                logMsg("Click 'Next' to start adding tracks one by one.");
+
+                // Show track list
+                const trackList = parsedRows.map((row, i) => `<div id="track-${i}">${i + 1}. ${row.title} - ${row.artist}</div>`).join('');
+                log.innerHTML += `<div style="margin-top:20px;">${trackList}</div>`;
+
+                document.getElementById('nextBtn').style.display = 'block';
             };
             reader.readAsText(file);
+        }
+
+        async function processNextTrack() {
+            const nextBtn = document.getElementById('nextBtn');
+            nextBtn.disabled = true;
+            nextBtn.textContent = 'Processing...';
+
+            for (let i = importState.currentIndex; i < importState.tracks.length; i++) {
+                const row = importState.tracks[i];
+                const log = document.getElementById('importLog');
+                const logMsg = (msg) => {
+                    const div = document.createElement('div');
+                    div.textContent = `> ${msg}`;
+                    div.style.marginBottom = '4px';
+                    div.style.borderBottom = '1px solid #333';
+                    log.appendChild(div);
+                    log.scrollTop = log.scrollHeight;
+                };
+
+                const trackDiv = document.getElementById(`track-${i}`);
+                trackDiv.style.color = 'yellow'; // Processing
+
+                // Search Query: Title + Artist + Album for best candidates
+                let query = `${row.title} ${row.artist} ${row.album}`;
+
+                try {
+                    logMsg(`Searching: "${query}"...`);
+                    const res = await fetch(`${API_URL}/search/?s=${encodeURIComponent(query)}`);
+                    const data = await res.json();
+
+                    if (data.data && data.data.items && data.data.items.length > 0) {
+                        // Fuzzy Match Filter
+                        const bestMatch = data.data.items.find(track => {
+                            const tTitle = track.title.toLowerCase();
+                            const tArtist = (track.artist?.name || '').toLowerCase();
+                            const expTitle = row.title.toLowerCase();
+                            const expArtist = row.artist.toLowerCase();
+
+                            const titleMatch = tTitle.includes(expTitle) || expTitle.includes(tTitle) || levenshtein(tTitle, expTitle) <= 2;
+                            const artistMatch = tArtist.includes(expArtist) || expArtist.includes(tArtist) || levenshtein(tArtist, expArtist) <= 2;
+
+                            return titleMatch && artistMatch;
+                        });
+
+                        if (bestMatch) {
+                            importState.foundTracks.push(bestMatch);
+                            trackDiv.style.color = 'green'; // Success
+                            logMsg(`✔ Added: ${bestMatch.title}`);
+                        } else {
+                            trackDiv.style.color = 'red'; // No match
+                            logMsg(`❌ No match for: ${row.title}`);
+                        }
+                    } else {
+                        trackDiv.style.color = 'red';
+                        logMsg(`❌ No results for: ${row.title}`);
+                    }
+                } catch (err) {
+                    console.error("Import search error", err);
+                    trackDiv.style.color = 'red';
+                    logMsg(`❌ Error: ${err.message}`);
+                }
+
+                importState.currentIndex = i + 1;
+
+                // Small delay to prevent overwhelming the UI
+                await new Promise(r => setTimeout(r, 100));
+            }
+
+            // All done
+            const name = 'Imported Playlist'; // Or use file name
+            state.playlists.push({ name: name, songs: importState.foundTracks });
+            localStorage.setItem('playlists', JSON.stringify(state.playlists));
+            renderPlaylists();
+            alert(`Import Complete. ${importState.foundTracks.length} songs added.`);
+            document.getElementById('importOverlay').remove();
         }
 
         function renderPlaylists() {
             const container = document.getElementById('playlistsList');
             container.innerHTML = '';
-            state.playlists.forEach((pl, index) => {
-                container.innerHTML += `
-                    <div class="list-item" onclick="openPlaylist(${index})">
+            container.innerHTML = state.playlists.map((pl, index) => {
+                return `
+                    <div class="list-item animate-in" style="animation-delay: ${index * 50}ms" onclick="openPlaylist(${index})">
                         <div class="list-artwork" style="background:#333; display:flex; align-items:center; justify-content:center;">
                             <svg class="icon" style="color:#666" viewBox="0 0 24 24"><path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z"/></svg>
                         </div>
@@ -1436,7 +1735,7 @@
                         </button>
                     </div>
                 `;
-            });
+            }).join('');
         }
 
         function deletePlaylist(event, index) {
@@ -1500,17 +1799,17 @@
                 return;
             }
 
-            songs.forEach(track => {
+            container.innerHTML = songs.map((track, i) => {
                 // We use createCard style but as list item
                 const trackStr = JSON.stringify(track).replace(/"/g, '&quot;');
                 const artUrl = track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : '';
                 
-                container.innerHTML += `
-                    <div class="list-item" onclick='playTrack(${trackStr})'>
+                return `
+                    <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick='playTrack(${trackStr})'>
                         <div class="list-artwork"><img src="${artUrl}"></div>
                         <div class="list-info"><div class="card-title">${track.title}</div><div class="card-subtitle">${track.artist?.name}</div></div>
                     </div>`;
-            });
+            }).join('');
         }
 
         function closeCollection() {
@@ -1527,6 +1826,13 @@
                 navigator.serviceWorker.register('sw.js')
                     .then(reg => console.log('SW registered:', reg))
                     .catch(err => console.log('SW registration failed:', err));
+            });
+        }
+
+        // --- Request Persistent Storage ---
+        if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persist().then(granted => {
+                console.log("Persistent storage granted: " + granted);
             });
         }
     </script>
