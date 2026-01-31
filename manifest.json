@@ -1,6 +1,6 @@
 {
-  "name": "Music PWA",
-  "short_name": "Music",
+  "name": "ReApple Music",
+  "short_name": "Apple Music",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#000000",
@@ -19,4 +19,5 @@
     }
   ]
 }
+
 
