@@ -8,14 +8,15 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/4430/4430494.png",
+      "src": "https://raw.githubusercontent.com/mrbana69/web-music/refs/heads/main/icons/192x192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/4430/4430494.png",
+      "src": "https://raw.githubusercontent.com/mrbana69/web-music/refs/heads/main/icons/512x512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
   ]
 }
+
