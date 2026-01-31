@@ -1835,6 +1835,73 @@
                 console.log("Persistent storage granted: " + granted);
             });
         }
+
+        // --- Update Banner ---
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data && event.data.type === 'UPDATE_AVAILABLE') {
+                    showUpdateBanner();
+                }
+            });
+        }
+
+        function showUpdateBanner() {
+            // Remove existing banner if present
+            const existingBanner = document.getElementById('updateBanner');
+            if (existingBanner) existingBanner.remove();
+
+            const banner = document.createElement('div');
+            banner.id = 'updateBanner';
+            banner.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: var(--accent);
+                color: white;
+                padding: 12px 20px;
+                text-align: center;
+                font-size: 14px;
+                font-weight: 500;
+                z-index: 1000;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                animation: slideDown 0.3s ease;
+            `;
+            banner.innerHTML = `
+                <span>New features available! Refresh to update.</span>
+                <button onclick="location.reload()" style="
+                    margin-left: 15px;
+                    background: rgba(255,255,255,0.2);
+                    border: none;
+                    color: white;
+                    padding: 4px 12px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 12px;
+                ">Refresh</button>
+                <button onclick="this.parentElement.remove()" style="
+                    margin-left: 10px;
+                    background: none;
+                    border: none;
+                    color: white;
+                    cursor: pointer;
+                    font-size: 16px;
+                    opacity: 0.8;
+                ">×</button>
+            `;
+
+            document.body.appendChild(banner);
+
+            // Add animation
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideDown {
+                    from { transform: translateY(-100%); }
+                    to { transform: translateY(0); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
     </script>
 </body>
 </html>
