@@ -5,13 +5,14 @@ const ASSETS_TO_CACHE = [
   './manifest.json'
 ];
 
-// Install Event: Cache the app shell
+// Install Event: Cache the app shell and force activation
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
+  self.skipWaiting(); // Force activation of new SW
 });
 
 // Fetch Event: Serve from cache if available, otherwise network
@@ -23,41 +24,13 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Activate Event: Clean up old caches and claim clients
+// Activate Event: Clean up old caches, claim clients, and notify about updates
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       // Take control of all clients
       self.clients.claim(),
       // Clean up old caches
-      caches.keys().then((keyList) => {
-        return Promise.all(keyList.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        }));
-      })
-    ])
-  );
-});
-
-// Update detection: Notify clients when a new version is available
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
-// When a new service worker is installed, notify clients
-self.addEventListener('install', (event) => {
-  self.skipWaiting(); // Force activation of new SW
-});
-
-// After activation, notify all clients about the update
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    Promise.all([
-      self.clients.claim(),
       caches.keys().then((keyList) => {
         return Promise.all(keyList.map((key) => {
           if (key !== CACHE_NAME) {
@@ -73,4 +46,11 @@ self.addEventListener('activate', (event) => {
       })
     ])
   );
+});
+
+// Update detection: Handle messages from clients
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });

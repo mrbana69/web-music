@@ -1185,18 +1185,21 @@
                 // Fetch Stream Data
                 const res = await fetch(`${API_URL}/track/?id=${currentTrack.id}`);
                 const data = await res.json();
-                
-                // Logic: Check manifest type
-                if (data.data.manifestMimeType === 'application/dash+xml') {
+
+                // Check for MSE support (not available on iOS Safari)
+                const supportsMSE = 'MediaSource' in window;
+
+                // Logic: Check manifest type and MSE support
+                if (data.data.manifestMimeType === 'application/dash+xml' && supportsMSE) {
                     // It's the XML format provided in the prompt
                     const xml = atob(data.data.manifest);
                     state.isHiRes = true;
                     await dashPlayer.loadFromXML(xml);
                     dashPlayer.play();
                 } else {
-                    // Fallback to standard playback
+                    // Fallback to standard playback (for iOS or non-DASH streams)
                     state.isHiRes = false;
-                    
+
                     const decoded = atob(data.data.manifest);
                     let streamUrl = decoded;
 
