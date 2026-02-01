@@ -481,6 +481,18 @@
             text-shadow: 0 0 20px rgba(255,255,255,0.3);
         }
 
+        /* --- Syllable/Word Sync Styles --- */
+        .lyric-word {
+            display: inline-block;
+            border-radius: 4px;
+            transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease, color 0.2s ease;
+            opacity: 0.7;
+        }
+        .lyrics-line.active .lyric-word { opacity: 0.6; }
+        .lyrics-line.active .lyric-word.active {
+            opacity: 1; color: #fff; transform: scale(1.15); text-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+        }
+
         .translate-btn {
             position: absolute;
             top: 20px;
@@ -571,6 +583,7 @@
                 max-width: 500px;
                 height: auto;
                 padding-bottom: 0;
+                aspect-ratio: 1 / 1;
             }
 
             .player-controls-column {
@@ -814,7 +827,7 @@
 
                 <!-- Lyrics View -->
                 <div class="lyrics-view" id="lyricsView">
-                    <button class="translate-btn hidden" id="translateBtn" onclick="toggleTranslation()">Translate</button>
+                    <button class="translate-btn hidden" id="translateBtn" onclick="toggleTranslation()">Translate to Italian</button>
                     <div id="lyricsContent" style="padding-top: 50px; padding-bottom: 50px;"></div>
                 </div>
 
@@ -1195,7 +1208,21 @@
                     const xml = atob(data.data.manifest);
                     state.isHiRes = true;
                     await dashPlayer.loadFromXML(xml);
-                    dashPlayer.play();
+                    try {
+                        dashPlayer.play();
+                    } catch (playError) {
+                        console.error("DASH Playback failed:", playError);
+                        alert("Playback blocked by browser. Please tap play again or check your browser settings.");
+                        state.isPlaying = false;
+                        updatePlayIcons();
+                        return;
+                    }
+                } else if (data.data.manifestMimeType === 'application/dash+xml' && !supportsMSE) {
+                    // Hi-res on iOS: not supported
+                    alert("High-resolution audio is not supported on this device. Please try a standard quality track.");
+                    state.isPlaying = false;
+                    updatePlayIcons();
+                    return;
                 } else {
                     // Fallback to standard playback (for iOS or non-DASH streams)
                     state.isHiRes = false;
@@ -1209,7 +1236,15 @@
                     } catch (e) {}
 
                     nativeAudio.src = streamUrl;
-                    nativeAudio.play();
+                    try {
+                        await nativeAudio.play();
+                    } catch (playError) {
+                        console.error("Playback failed:", playError);
+                        alert("Playback blocked by browser. Please tap play again or check your browser settings.");
+                        state.isPlaying = false;
+                        updatePlayIcons();
+                        return;
+                    }
                 }
                 state.isPlaying = true;
                 updatePlayIcons();
@@ -1457,7 +1492,11 @@
             if (Array.isArray(data.lyrics)) {
                 lines = data.lyrics.map(line => ({
                     time: line.time / 1000, // Convert ms to seconds
-                    text: line.text
+                    text: line.text,
+                    words: line.words ? line.words.map(w => ({
+                        text: w.text,
+                        time: w.time / 1000
+                    })) : null
                 }));
             } 
             // Handle LRC String format (Fallback)
@@ -1473,7 +1512,15 @@
                     div.className = 'lyrics-line';
                     div.dataset.time = line.time;
                     div.dataset.index = index;
-                    div.textContent = line.text;
+                    
+                    if (line.words && line.words.length > 0) {
+                        div.innerHTML = line.words.map(w => 
+                            `<span class="lyric-word" data-time="${w.time}">${w.text}</span>`
+                        ).join(' ');
+                    } else {
+                        div.textContent = line.text;
+                    }
+
                     div.onclick = () => {
                         const player = state.isHiRes ? dashPlayer : nativeAudio;
                         player.currentTime = line.time;
@@ -1531,6 +1578,17 @@
                 const activeLine = divs[activeIndex];
                 activeLine.classList.add('active');
                 
+                // Handle Word Sync
+                const words = activeLine.querySelectorAll('.lyric-word');
+                if (words.length > 0) {
+                    let activeWord = null;
+                    words.forEach(w => {
+                        w.classList.remove('active');
+                        if (time >= parseFloat(w.dataset.time)) activeWord = w;
+                    });
+                    if (activeWord) activeWord.classList.add('active');
+                }
+
                 activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
@@ -1566,8 +1624,70 @@
             }
         }
 
-        function toggleTranslation() {
-            alert("Translation feature requires API support. Toggling placeholder.");
+        async function toggleTranslation() {
+            if (!state.lyrics || !state.lyrics.lyrics) {
+                alert("No lyrics available to translate.");
+                return;
+            }
+
+            // Get the lyrics text
+            let lyricsText = '';
+            if (Array.isArray(state.lyrics.lyrics)) {
+                lyricsText = state.lyrics.lyrics.map(line => line.text).join('\n');
+            } else if (typeof state.lyrics.lyrics === 'string') {
+                lyricsText = state.lyrics.lyrics;
+            } else {
+                alert("Lyrics format not supported for translation.");
+                return;
+            }
+
+            // Toggle translation state
+            state.showTranslation = !state.showTranslation;
+
+            if (state.showTranslation) {
+                // Show loading
+                const container = document.getElementById('lyricsContent');
+                container.innerHTML = '<div class="spinner"></div>';
+
+                try {
+                    // Encode the text for URL
+                    const encodedText = encodeURIComponent(lyricsText);
+
+                    // Use Google Translate API (detect source language, translate to Italian)
+                    const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q=${encodedText}`);
+                    const data = await response.json();
+
+                    // Parse the response - Google Translate returns [[[translated], [original]], ...]
+                    let translatedText = '';
+                    if (data && data[0]) {
+                        translatedText = data[0].map(item => item[0]).join('');
+                    }
+
+                    // Update the lyrics display with translated text
+                    container.innerHTML = '';
+                    const translatedLines = translatedText.split('\n');
+                    
+                    // Try to map translated lines to original timestamps if counts match
+                    const useSync = state.syncedLyrics && translatedLines.length === state.syncedLyrics.length;
+
+                    translatedLines.forEach((line, index) => {
+                        const div = document.createElement('div');
+                        div.className = 'lyrics-line';
+                        div.textContent = line;
+                        if (useSync) div.dataset.time = state.syncedLyrics[index].time;
+                        container.appendChild(div);
+                    });
+
+                } catch (error) {
+                    console.error("Translation failed:", error);
+                    alert("Translation failed. Please try again.");
+                    state.showTranslation = false;
+                    renderLyrics(state.lyrics); // Re-render original lyrics
+                }
+            } else {
+                // Re-render original lyrics
+                renderLyrics(state.lyrics);
+            }
         }
 
         // --- 8. Queue & Library Features ---
