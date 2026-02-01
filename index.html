@@ -8,17 +8,23 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>ReApple Music</title>
+    <link rel="icon" href="data:,">
     <link rel="manifest" href="manifest.json">
+    <!-- dash.js - Official DASH library for progressive chunk streaming -->
+    <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
     <style>
         :root {
             --bg-color: #000000;
             --bg-secondary: #1c1c1e;
+            --bg-tertiary: #2c2c2e;
             --text-primary: #ffffff;
             --text-secondary: #8e8e93;
             --accent: #fa2d48; /* Apple Music Pink/Red */
             --accent-dim: rgba(250, 45, 72, 0.15);
             --divider: #38383a;
             --blur-bg: rgba(30, 30, 30, 0.85);
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
             --safe-area-bottom: env(safe-area-inset-bottom);
         }
 
@@ -31,7 +37,8 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
+            background: linear-gradient(135deg, #000000 0%, #1a1a1e 100%);
+            background-attachment: fixed;
             color: var(--text-primary);
             overflow-x: hidden;
             height: 100vh;
@@ -69,7 +76,10 @@
             padding: 40px 20px 10px;
             position: sticky;
             top: 0;
-            background: var(--bg-color);
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--glass-border);
             z-index: 10;
         }
 
@@ -88,7 +98,10 @@
 
         /* --- Search --- */
         .search-wrapper {
-            background: var(--bg-secondary);
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
             border-radius: 12px;
             padding: 10px 12px;
             display: flex;
@@ -118,15 +131,26 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            color: var(--text-primary);
         }
 
         .btn-text {
             color: var(--accent);
-            background: none;
-            border: none;
-            font-size: 16px;
-            font-weight: 500;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-text:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
         }
 
         .grid {
@@ -137,21 +161,23 @@
 
         .card {
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        .card:active { transform: scale(0.97); }
+        .card:active { transform: scale(0.95); }
+        .card:hover { transform: scale(1.02); }
 
         .artwork {
             width: 100%;
             height: 0;
             padding-bottom: 100%; /* Fallback per aspect-ratio */
-            background: var(--bg-secondary);
-            border-radius: 12px;
+            background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+            border-radius: 16px;
             overflow: hidden;
             margin-bottom: 8px;
             position: relative;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--glass-border);
         }
 
         .artwork img {
@@ -164,7 +190,7 @@
 
         .card-title {
             font-size: 15px;
-            font-weight: 500;
+            font-weight: 600;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -183,9 +209,20 @@
         .list-item {
             display: flex;
             align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--divider);
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 12px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
             cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .list-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
         }
 
         .list-item > .list-artwork { margin-right: 16px; }
@@ -196,9 +233,10 @@
         .list-artwork {
             width: 50px;
             height: 50px;
-            border-radius: 6px;
-            background: var(--bg-secondary);
+            border-radius: 8px;
+            background: linear-gradient(135deg, var(--glass-bg), rgba(255, 255, 255, 0.08));
             overflow: hidden;
+            border: 1px solid var(--glass-border);
         }
         
         .list-artwork img { width: 100%; height: 100%; object-fit: cover; }
@@ -212,11 +250,10 @@
             left: 0;
             width: 100%;
             height: 85px; /* taller for safe area */
-            background: #1c1c1e;
-            background: rgba(30, 30, 30, 0.98); /* Più opaco per fallback */
+            background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border-top: 0.5px solid rgba(255,255,255,0.1);
+            border-top: 1px solid var(--glass-border);
             display: flex;
             justify-content: space-around;
             padding-top: 10px;
@@ -233,6 +270,7 @@
             align-items: center;
             font-size: 10px;
             width: 60px;
+            transition: color 0.2s ease;
         }
 
         .tab-btn > svg { margin-bottom: 4px; }
@@ -246,15 +284,17 @@
             left: 10px;
             right: 10px;
             height: 64px;
-            background: #232323;
-            background: rgba(35, 35, 35, 0.96); /* Più opaco per fallback */
+            background: rgba(35, 35, 35, 0.6);
             backdrop-filter: blur(25px);
             -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
             border-radius: 14px;
             display: flex;
             align-items: center;
             padding: 0 12px;
             z-index: 90;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+
             box-shadow: 0 5px 20px rgba(0,0,0,0.4);
             transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
             transform: translateY(150%);
@@ -295,7 +335,13 @@
             border: none;
             color: var(--text-primary);
             cursor: pointer;
-            padding: 4px;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background 0.2s ease;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
         }
 
         /* --- Full Screen Player Modal --- */
@@ -305,8 +351,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: #000000;
-            background: rgba(0,0,0,0.92); /* Più opaco per fallback */
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.95) 0%, rgba(10, 10, 20, 0.95) 100%);
             backdrop-filter: blur(40px);
             -webkit-backdrop-filter: blur(40px);
             z-index: 200;
@@ -319,18 +364,6 @@
         }
 
         .full-player.active { transform: translateY(0); visibility: visible; }
-
-        .close-notch {
-            position: absolute;
-            top: 12px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 40px;
-            height: 5px;
-            background: rgba(255,255,255,0.3);
-            border-radius: 3px;
-            cursor: pointer;
-        }
 
         .full-art-container {
             width: 100%;
@@ -724,7 +757,7 @@
         <header>
             <div class="header-actions">
                 <h1>Listen Now</h1>
-                <button class="btn-text" onclick="importModal.style.display='flex'">
+                <button class="btn-text" onclick="document.getElementById('csvInput').click()">
                     <svg class="icon" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                 </button>
             </div>
@@ -760,6 +793,30 @@
         <div class="container" id="collectionList"></div>
     </div>
 
+    <div id="tab-playlist-page" class="main-container hidden">
+        <header>
+            <div class="header-actions">
+                <button class="btn-text" onclick="closePlaylistPage()">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                </button>
+                <div style="flex:1;"></div>
+            </div>
+        </header>
+        <div class="container">
+            <div style="text-align:center; padding:40px 0;">
+                <img id="playlistPageCover" src="" alt="Playlist Cover" style="width:200px; height:200px; border-radius:12px; object-fit:cover; margin-bottom:20px; box-shadow: 0 8px 30px rgba(0,0,0,0.3);">
+                <h1 id="playlistPageTitle" style="margin-bottom:10px;">Playlist Name</h1>
+                <p id="playlistPageCount" style="color:var(--text-secondary); margin-bottom:30px;">0 songs</p>
+                <button id="playlistPlayBtn" class="btn-primary" style="padding:12px 30px; background:var(--accent); color:white; border:none; border-radius:25px; font-weight:600; cursor:pointer; font-size:16px;">
+                    <svg class="icon" viewBox="0 0 24 24" style="display:inline; margin-right:8px;"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                    Play
+                </button>
+            </div>
+            <h2 class="section-title" style="margin-top:30px;">Songs</h2>
+            <div id="playlistSongsList"></div>
+        </div>
+    </div>
+
     <div id="tab-library" class="main-container hidden">
         <header>
             <h1>Library</h1>
@@ -780,6 +837,17 @@
             </div>
             <input type="file" id="csvInput" hidden accept=".csv" onchange="handleCSVImport(this)">
             <div id="playlistsList"></div>
+
+            <div class="section-title" style="margin-top: 40px;">
+                <span>Settings</span>
+            </div>
+            <div class="list-item" onclick="clearCacheAndUpdate()">
+                <div class="list-artwork" style="display:flex; align-items:center; justify-content:center;"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg></div>
+                <div class="list-info">
+                    <div class="card-title">Update App - Fix</div>
+                    <div class="card-subtitle">Force reload the latest version uploaded</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -817,7 +885,6 @@
     </div>
 
     <div class="full-player" id="fullPlayer">
-        <div class="close-notch" onclick="closeFullPlayer()"></div>
         
         <div class="full-player-content">
             <div class="player-visual-column">
@@ -879,13 +946,16 @@
                 </div>
 
                 <div class="player-footer">
+                    <button class="control-btn" onclick="closeFullPlayer()">
+                        <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+                    </button>
                     <button class="control-btn" onclick="togglePlayerView('lyrics')">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M15 4v2h3v12h-3v2h5V4h-5zm-9 2H4v12h2V6zm11 4h-8v2h8v-2zm0 4h-8v2h8v-2z"/></svg>
                     </button>
                     <button class="control-btn" onclick="togglePlayerView('queue')">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
                     </button>
-                    <button class="like-btn" id="likeBtn" onclick="toggleLike()">
+                    <button class="control-btn" id="likeBtn" onclick="toggleLike()">
                         <svg class="icon" style="color:var(--text-secondary)" viewBox="0 0 24 24"><path d="M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z"/></svg>
                     </button>
                 </div>
@@ -896,7 +966,121 @@
     <audio id="nativeAudio"></audio>
 
     <script>
-        // --- 1. Custom DASH / MSE Player (The "Progressive Download" Logic) ---
+        // --- 1. Universal Player using dash.js (Official DASH Library) ---
+        // dash.js is the official DASH library that handles progressive chunk streaming
+        // Perfect for APIs serving DASH manifests - downloads chunks, not full file
+        class UniversalPlayer {
+            constructor() {
+                this.videoElement = document.createElement('video');
+                this.videoElement.style.display = 'none';
+                document.body.appendChild(this.videoElement);
+                this.dashPlayer = null;
+                this.isPlaying = false;
+                this.isInit = false;
+            }
+
+            async loadFromDASH(xmlUrl) {
+                try {
+                    // Check if dash.js is available
+                    if (typeof dashjs === 'undefined') {
+                        console.warn("dash.js not loaded, falling back to native audio");
+                        return false;
+                    }
+
+                    // Stop any existing player
+                    if (this.dashPlayer) {
+                        this.dashPlayer.destroy();
+                        this.dashPlayer = null;
+                    }
+
+                    // Initialize dash.js player with optimal settings
+                    this.dashPlayer = dashjs.MediaPlayer().create();
+                    
+                    // Configure for low latency and better handling
+                    this.dashPlayer.updateSettings({
+                        streaming: {
+                            buffer: {
+                                stableBufferTime: 2,
+                                bufferTimeAtTopQuality: 10
+                            },
+                            gaps: {
+                                jumpGaps: true
+                            },
+                            lowLatencyEnabled: false
+                        }
+                    });
+
+                    // Initialize the video element with the DASH manifest
+                    this.dashPlayer.initialize(this.videoElement, xmlUrl, false);
+
+                    return new Promise((resolve) => {
+                        const onStreamInitialized = () => {
+                            this.isInit = true;
+                            this.dashPlayer.off(dashjs.MediaPlayer.events.STREAM_INITIALIZED, onStreamInitialized);
+                            resolve(true);
+                        };
+
+                        const onError = (event) => {
+                            console.error("dash.js error:", event);
+                            this.dashPlayer.off(dashjs.MediaPlayer.events.STREAM_INITIALIZED, onStreamInitialized);
+                            this.dashPlayer.off(dashjs.MediaPlayer.events.ERROR, onError);
+                            resolve(false);
+                        };
+
+                        this.dashPlayer.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, onStreamInitialized);
+                        this.dashPlayer.on(dashjs.MediaPlayer.events.ERROR, onError);
+                    });
+                } catch (e) {
+                    console.error("Universal player load failed", e);
+                    return false;
+                }
+            }
+
+            play() { 
+                if (this.videoElement) {
+                    this.videoElement.play(); 
+                    this.isPlaying = true;
+                }
+            }
+            pause() { 
+                if (this.videoElement) {
+                    this.videoElement.pause(); 
+                    this.isPlaying = false;
+                }
+            }
+            setVolume(v) { 
+                if (this.videoElement) {
+                    this.videoElement.volume = v; 
+                }
+            }
+            seek(time) { 
+                if (this.videoElement) {
+                    this.videoElement.currentTime = time; 
+                }
+            }
+            
+            reset() {
+                if (this.dashPlayer) {
+                    try {
+                        this.dashPlayer.destroy();
+                    } catch (e) {}
+                    this.dashPlayer = null;
+                }
+                if (this.videoElement) {
+                    this.videoElement.pause();
+                    this.videoElement.removeAttribute('src');
+                    this.videoElement.currentTime = 0;
+                }
+                this.isInit = false;
+            }
+            
+            get audioElement() {
+                // Return video element as audio source (dash.js uses video element for audio streams)
+                return this.videoElement;
+            }
+        }
+
+        // --- 1b. Custom DASH / MSE Player (The "Progressive Download" Logic) ---
         class DashPlayer {
             constructor() {
                 this.mediaSource = null;
@@ -1075,10 +1259,12 @@
 
         // --- 2. App State & Logic ---
         const API_URL = 'https://api.monochrome.tf'; // Using one for stability
+        const universalPlayer = new UniversalPlayer();
         const dashPlayer = new DashPlayer();
         const nativeAudio = document.getElementById('nativeAudio');
 
         // Auto-advance logic (Handles Shuffle/Mix when song ends)
+        universalPlayer.audioElement.addEventListener('ended', () => nextTrack());
         dashPlayer.audioElement.addEventListener('ended', () => nextTrack());
         nativeAudio.addEventListener('ended', () => nextTrack());
         
@@ -1094,7 +1280,9 @@
             syncedLyrics: [],
             showTranslation: false,
             likedSongs: JSON.parse(localStorage.getItem('likedSongs') || '[]'),
-            playlists: JSON.parse(localStorage.getItem('playlists') || '[]')
+            playlists: JSON.parse(localStorage.getItem('playlists') || '[]'),
+            currentPlaylistIndex: -1, // Track current playlist being played
+            mixLoaded: false // Track if mix has been loaded for current song
         };
 
         // --- 3. UI Interactions ---
@@ -1141,122 +1329,148 @@
         }, { passive: true });
 
         // --- 4. Audio Control Wrapper ---
-        // Handles routing between DashPlayer (HiRes) and Native Audio (Standard)
+        // Handles routing between UniversalPlayer (all platforms), DashPlayer (legacy), and Native Audio (fallback)
 
-        async function loadMix(track) {
+        async function clearCacheAndUpdate() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    if (registrations.length) {
+                        for (const registration of registrations) {
+                            await registration.unregister();
+                        }
+                    }
+
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(key => caches.delete(key)));
+
+                    alert('Cache cleared successfully! The application will now reload.');
+                    window.location.reload(true);
+
+                } catch (error) {
+                    console.error('Failed to clear cache:', error);
+                    alert('Error clearing cache. Please try clearing your browser cache manually.');
+                }
+            } else {
+                alert('Service workers are not supported in this browser.');
+            }
+        }
+
+        // Load mix for a given track (used as fallback/auto-queue loader)
+        async function loadMix(track, fromSearch = false) {
             try {
-                // First fetch track info using /info endpoint
+                if (state.mixLoaded) return;
+
                 const infoRes = await fetch(`${API_URL}/info/?id=${track.id}`);
                 const infoData = await infoRes.json();
 
                 if (infoData.data && infoData.data.mixes && infoData.data.mixes.TRACK_MIX) {
-                    // Get the mix id from the mixes.TRACK_MIX field
                     const mixId = infoData.data.mixes.TRACK_MIX;
                     const mixRes = await fetch(`${API_URL}/mix?id=${mixId}`);
                     const mixData = await mixRes.json();
 
-                    if (mixData.data && mixData.items) {
-                        const newTracks = mixData.data.items.filter(t => t.id !== track.id);
+                    const items = mixData.items || (mixData.data && mixData.data.items);
+                    if (items) {
+                        const newTracks = items.filter(t => t.id !== track.id).map(t => {
+                            if (t.artists && !t.artist) {
+                                t.artist = t.artists[0];
+                            }
+                            return t;
+                        });
                         if (newTracks.length > 0) {
                             state.queue.push(...newTracks);
                             updateQueueUI();
+                            state.mixLoaded = true;
                         }
                     }
+                } else if (fromSearch) {
+                    // Fallback to search-based mix: add next items from search results
+                    try {
+                        const query = encodeURIComponent(track.title + ' ' + (track.artist?.name || ''));
+                        const searchRes = await fetch(`${API_URL}/search/?s=${query}`);
+                        const searchData = await searchRes.json();
+
+                        if (searchData.data && searchData.data.items) {
+                            const currentIndex = searchData.data.items.findIndex(t => t.id === track.id);
+                            if (currentIndex !== -1 && currentIndex < searchData.data.items.length - 1) {
+                                const nextSongs = searchData.data.items.slice(currentIndex + 1, currentIndex + 6);
+                                if (nextSongs.length > 0) {
+                                    state.queue.push(...nextSongs);
+                                    updateQueueUI();
+                                    state.mixLoaded = true;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Search-based mix failed", e);
+                    }
                 }
-                // If mixes is null, do nothing
             } catch (e) {
                 console.error("Mix load failed", e);
             }
         }
 
-        async function playTrack(track, fromQueue = false) {
+        async function playTrack(track, fromQueue = false, fromSearch = false, playlistIndex = -1) {
             addToHistory(track);
+            state.mixLoaded = false;
+            
             if (!fromQueue) {
                 state.queue = [track];
                 state.currentIndex = 0;
-                loadMix(track);
+                state.currentPlaylistIndex = playlistIndex;
+                if (typeof loadMix === 'function') loadMix(track, fromSearch).catch(e => console.error(e));
             }
 
             const currentTrack = state.queue[state.currentIndex];
-            
-            // UI Updates
             updatePlayerUI(currentTrack);
             fetchLyrics(currentTrack);
             updateMediaSession(currentTrack);
             document.getElementById('miniPlayer').classList.add('visible');
 
-            // Reset Players
             nativeAudio.pause();
+            universalPlayer.reset();
             dashPlayer.reset();
 
-            // Check if Hi-Res (Simulation based on request context)
-            // In a real app, we check track.quality or similar
-            // The prompt gave a specific XML string. We will simulate this trigger.
-            // Let's assume if track has a specific flag or we fetch stream data.
-            
             try {
-                // Fetch Stream Data
-                const res = await fetch(`${API_URL}/track/?id=${currentTrack.id}`);
-                const data = await res.json();
+                // Step 1: Fetch the initial JSON manifest from the API
+                const manifestRes = await fetch(`${API_URL}/track/?id=${currentTrack.id}&quality=LOSSLESS`);
+                if (!manifestRes.ok) throw new Error(`Manifest fetch failed with status: ${manifestRes.status}`);
+                const manifestData = await manifestRes.json();
 
-                // Check for MSE support (not available on iOS Safari)
-                const supportsMSE = 'MediaSource' in window;
-
-                // Logic: Check manifest type and MSE support
-                if (data.data.manifestMimeType === 'application/dash+xml' && supportsMSE) {
-                    // It's the XML format provided in the prompt
-                    const xml = atob(data.data.manifest);
-                    state.isHiRes = true;
-                    await dashPlayer.loadFromXML(xml);
-                    try {
-                        dashPlayer.play();
-                    } catch (playError) {
-                        console.error("DASH Playback failed:", playError);
-                        alert("Playback blocked by browser. Please tap play again or check your browser settings.");
-                        state.isPlaying = false;
-                        updatePlayIcons();
-                        return;
-                    }
-                } else if (data.data.manifestMimeType === 'application/dash+xml' && !supportsMSE) {
-                    // Hi-res on iOS: not supported
-                    alert("High-resolution audio is not supported on this device. Please try a standard quality track.");
-                    state.isPlaying = false;
-                    updatePlayIcons();
-                    return;
-                } else {
-                    // Fallback to standard playback (for iOS or non-DASH streams)
-                    state.isHiRes = false;
-
-                    const decoded = atob(data.data.manifest);
-                    let streamUrl = decoded;
-
-                    try {
-                        const json = JSON.parse(decoded);
-                        if (json.urls) streamUrl = json.urls[0];
-                    } catch (e) {}
-
-                    nativeAudio.src = streamUrl;
-                    try {
-                        await nativeAudio.play();
-                    } catch (playError) {
-                        console.error("Playback failed:", playError);
-                        alert("Playback blocked by browser. Please tap play again or check your browser settings.");
-                        state.isPlaying = false;
-                        updatePlayIcons();
-                        return;
-                    }
+                // Step 2: Decode the Base64 manifest string to get the second manifest
+                if (!manifestData.data || !manifestData.data.manifest) {
+                    throw new Error("Initial manifest format is incorrect.");
                 }
+                const streamManifestStr = atob(manifestData.data.manifest);
+                const streamManifest = JSON.parse(streamManifestStr);
+
+                // Step 3: Extract the final playable URL from the second manifest
+                if (!streamManifest.urls || streamManifest.urls.length === 0) {
+                    throw new Error("No stream URL found in the final manifest.");
+                }
+                const streamUrl = streamManifest.urls[0];
+
+                // Step 4: Set the source and play the audio
+                nativeAudio.src = streamUrl;
+                await nativeAudio.play();
+
                 state.isPlaying = true;
                 updatePlayIcons();
+
             } catch (e) {
-                console.error("Playback failed", e);
-                alert("Playback failed. Please try again.");
+                console.error("Playback failed with error:", e);
+                alert(`Playback failed: ${e.message}. Please try again.`);
+                state.isPlaying = false;
+                updatePlayIcons();
             }
         }
 
         function togglePlay() {
             state.isPlaying = !state.isPlaying;
-            if (state.isHiRes) {
+            
+            if (universalPlayer.isInit) {
+                state.isPlaying ? universalPlayer.play() : universalPlayer.pause();
+            } else if (state.isHiRes && dashPlayer.isInit) {
                 state.isPlaying ? dashPlayer.play() : dashPlayer.pause();
             } else {
                 state.isPlaying ? nativeAudio.play() : nativeAudio.pause();
@@ -1301,7 +1515,16 @@
 
         function prevTrack() {
             if (state.queue.length === 0) return;
-            const player = state.isHiRes ? dashPlayer.audioElement : nativeAudio;
+            let player;
+            
+            if (universalPlayer.isInit) {
+                player = universalPlayer.audioElement;
+            } else if (state.isHiRes && dashPlayer.isInit) {
+                player = dashPlayer.audioElement;
+            } else {
+                player = nativeAudio;
+            }
+            
             if (player.currentTime > 3) {
                 player.currentTime = 0;
                 return;
@@ -1356,7 +1579,16 @@
         // --- 5. Timeline & Volume Events ---
         
         function updateProgress() {
-            const player = state.isHiRes ? dashPlayer.audioElement : nativeAudio;
+            let player;
+            
+            if (universalPlayer.isInit) {
+                player = universalPlayer.audioElement;
+            } else if (state.isHiRes && dashPlayer.isInit) {
+                player = dashPlayer.audioElement;
+            } else {
+                player = nativeAudio;
+            }
+            
             if (!player.duration) return;
 
             const percent = (player.currentTime / player.duration) * 100;
@@ -1376,7 +1608,16 @@
         }
 
         function seek(e) {
-            const player = state.isHiRes ? dashPlayer.audioElement : nativeAudio;
+            let player;
+            
+            if (universalPlayer.isInit) {
+                player = universalPlayer.audioElement;
+            } else if (state.isHiRes && dashPlayer.isInit) {
+                player = dashPlayer.audioElement;
+            } else {
+                player = nativeAudio;
+            }
+            
             const bar = e.currentTarget;
             const percent = e.offsetX / bar.offsetWidth;
             player.currentTime = percent * player.duration;
@@ -1385,6 +1626,7 @@
 
         function setVolume(val) {
             state.volume = val;
+            universalPlayer.setVolume(val);
             dashPlayer.setVolume(val);
             nativeAudio.volume = val;
         }
@@ -1403,21 +1645,21 @@
                 const grid = container.querySelector('.grid');
 
                 if(data.data && data.data.items) {
-                    grid.innerHTML = data.data.items.slice(0, 10).map((track, i) => createCard(track, i)).join('');
+                    grid.innerHTML = data.data.items.slice(0, 10).map((track, i) => createCard(track, i, true)).join('');
                 }
             }
         });
 
-        function createCard(track, index = 0) {
+        function createCard(track, index = 0, isSearchResult = false) {
             const artUrl = track.album?.cover 
                 ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg`
                 : '';
             
             // Serialize track object for onclick
-            const trackStr = JSON.stringify(track).replace(/"/g, '&quot;');
+            const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
             
             return `
-                <div class="card animate-in" style="animation-delay: ${index * 50}ms" onclick='playTrack(${trackStr})'>
+                <div class="card animate-in" style="animation-delay: ${index * 50}ms" onclick='playTrack(${trackStr}, false, ${isSearchResult})'>
                     <div class="artwork">
                         <img src="${artUrl}" loading="lazy">
                     </div>
@@ -1462,6 +1704,12 @@
 
             const title = encodeURIComponent(track.title);
             const artist = encodeURIComponent(track.artist?.name || '');
+            
+            if (!track.artist?.name) {
+                container.innerHTML = '<p style="text-align:center; color:var(--text-secondary)">No lyrics found.</p>';
+                return;
+            }
+
             const album = encodeURIComponent(track.album?.title || '');
             const duration = track.duration || 0;
 
@@ -1885,8 +2133,8 @@
                 const trackDiv = document.getElementById(`track-${i}`);
                 trackDiv.style.color = 'yellow'; // Processing
 
-                // Search Query: Title + Artist + Album for best candidates
-                let query = `${row.title} ${row.artist} ${row.album}`;
+                // Search Query: Title + Artist only (ignore Album)
+                let query = `${row.title} ${row.artist}`;
 
                 try {
                     logMsg(`Searching: "${query}"...`);
@@ -2006,7 +2254,73 @@
 
         function openPlaylist(index) {
             const pl = state.playlists[index];
-            openCollection(pl.name, pl.songs);
+            openPlaylistPage(pl.name, pl.songs, index);
+        }
+
+        function openPlaylistPage(title, songs, playlistIndex) {
+            // Show playlist page instead of collection view
+            document.getElementById('tab-library').classList.add('hidden');
+            document.getElementById('tab-collection').classList.add('hidden');
+            document.getElementById('tab-playlist-page').classList.remove('hidden');
+            
+            document.getElementById('playlistPageTitle').textContent = title;
+            document.getElementById('playlistPageCount').textContent = `${songs.length} songs`;
+            
+            // Get first song artwork for playlist cover
+            const coverArt = songs.length > 0 && songs[0].album?.cover 
+                ? `https://resources.tidal.com/images/${songs[0].album.cover.replace(/-/g, '/')}/640x640.jpg`
+                : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/><circle cx="50" cy="50" r="30" fill="%23666"/></svg>';
+            
+            document.getElementById('playlistPageCover').src = coverArt;
+            
+            // Setup play button
+            const playBtn = document.getElementById('playlistPlayBtn');
+            playBtn.onclick = () => {
+                if (songs.length > 0) {
+                    // Load all songs in queue and start playing
+                    state.queue = [...songs];
+                    state.currentIndex = 0;
+                    state.currentPlaylistIndex = playlistIndex;
+                    playTrack(songs[0], true, false, playlistIndex);
+                    openFullPlayer();
+                }
+            };
+            
+            // Render songs list
+            const container = document.getElementById('playlistSongsList');
+            container.innerHTML = '';
+            
+            if (songs.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-secondary); text-align:center; margin-top:50px;">No songs in this playlist.</p>';
+                return;
+            }
+
+            container.innerHTML = songs.map((track, i) => {
+                const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
+                const artUrl = track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : '';
+                
+                return `
+                    <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick='handlePlaylistSongClick(${trackStr}, ${playlistIndex})'>
+                        <div class="list-artwork"><img src="${artUrl}"></div>
+                        <div class="list-info"><div class="card-title">${track.title}</div><div class="card-subtitle">${track.artist?.name}</div></div>
+                    </div>`;
+            }).join('');
+        }
+
+        function handlePlaylistSongClick(track, playlistIndex) {
+            // When clicking a song in playlist, load whole playlist as queue starting from that song
+            const pl = state.playlists[playlistIndex];
+            const songIndex = pl.songs.findIndex(t => t.id === track.id);
+            
+            state.queue = [...pl.songs];
+            state.currentIndex = songIndex >= 0 ? songIndex : 0;
+            state.currentPlaylistIndex = playlistIndex;
+            playTrack(state.queue[state.currentIndex], true, false, playlistIndex);
+        }
+
+        function closePlaylistPage() {
+            document.getElementById('tab-playlist-page').classList.add('hidden');
+            document.getElementById('tab-library').classList.remove('hidden');
         }
 
         function openCollection(title, songs) {
@@ -2024,7 +2338,7 @@
 
             container.innerHTML = songs.map((track, i) => {
                 // We use createCard style but as list item
-                const trackStr = JSON.stringify(track).replace(/"/g, '&quot;');
+                const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
                 const artUrl = track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : '';
                 
                 return `
