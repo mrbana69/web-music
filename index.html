@@ -1366,7 +1366,7 @@
 
                 if (infoData.data && infoData.data.mixes && infoData.data.mixes.TRACK_MIX) {
                     const mixId = infoData.data.mixes.TRACK_MIX;
-                    const mixRes = await fetch(`${API_URL}/mix?id=${mixId}`);
+                    const mixRes = await fetch(`${API_URL}/mix/?id=${mixId}`);
                     const mixData = await mixRes.json();
 
                     const items = mixData.items || (mixData.data && mixData.data.items);
@@ -2443,3 +2443,4 @@
 </body>
 
 </html>
+
