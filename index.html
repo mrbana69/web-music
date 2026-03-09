@@ -445,6 +445,10 @@
             border-top: 1px solid var(--divider);
         }
 
+        .lyrics-view::-webkit-scrollbar,
+        .queue-view::-webkit-scrollbar {
+            display: none;                /* Chrome, Safari, Opera */
+        }
         .lyrics-view, .queue-view {
             position: absolute; top: 0; left: 0;
             width: 100%; height: 100%;
@@ -454,6 +458,8 @@
             background: #000;
             mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
             -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%);
+            scrollbar-width: none;        /* Firefox */
+            -ms-overflow-style: none;     /* IE/Edge */
         }
         .lyrics-view.active, .queue-view.active { display: block; }
 
@@ -1335,22 +1341,25 @@
 }
 
         function updateLyricsScroll(time) {
-            if (!state.syncedLyrics.length || !document.getElementById('lyricsView').classList.contains('active')) return;
-            const lines = state.syncedLyrics; let activeIndex = -1;
-            for (let i = 0; i < lines.length; i++) { if (time >= lines[i].time) { activeIndex = i; } else { break; } }
-            const divs = document.querySelectorAll('.lyrics-line');
-            divs.forEach(d => d.classList.remove('active'));
-            if (activeIndex !== -1 && divs[activeIndex]) {
-                const activeLine = divs[activeIndex]; activeLine.classList.add('active');
-                const words = activeLine.querySelectorAll('.lyric-word');
-                if (words.length > 0) {
-                    let activeWord = null;
-                    words.forEach(w => { w.classList.remove('active'); if (time >= parseFloat(w.dataset.time)) activeWord = w; });
-                    if (activeWord) activeWord.classList.add('active');
-                }
-                activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+    if (!state.syncedLyrics.length || !document.getElementById('lyricsView').classList.contains('active')) return;
+
+    const lines = state.syncedLyrics;
+    let activeIndex = -1;
+
+    for (let i = 0; i < lines.length; i++) {
+        if (time >= lines[i].time) {
+            activeIndex = i; // keep updating — don't break early
         }
+    }
+
+    const divs = document.querySelectorAll('.lyrics-line');
+    divs.forEach(d => d.classList.remove('active'));
+
+    if (activeIndex !== -1 && divs[activeIndex]) {
+        divs[activeIndex].classList.add('active');
+        divs[activeIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
 
         function togglePlayerView(view) {
             const art = document.getElementById('artContainer');
@@ -1641,4 +1650,5 @@
     </script>
 </body>
 </html>
+
 
