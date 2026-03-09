@@ -954,7 +954,7 @@
         }
 
         // --- 2. App State & Logic ---
-        const API_URL = 'https://wolf.qqdl.site';
+        const API_URL = 'https://triton.squid.wtf';
         const universalPlayer = new UniversalPlayer();
         const dashPlayer = new DashPlayer();
         const nativeAudio = document.getElementById('nativeAudio');
@@ -1209,7 +1209,7 @@
         }
 
         // --- 7. Lyrics ---
-        async function fetchLyrics(track) {
+        /*async function fetchLyrics(track) {
             const container = document.getElementById('lyricsContent');
             container.innerHTML = '<div class="spinner"></div>';
             state.lyrics = null; state.syncedLyrics = [];
@@ -1225,7 +1225,56 @@
                 if (data && data.lyrics) { state.lyrics = data; renderLyrics(data); }
                 else { container.innerHTML = '<p style="text-align:center;color:var(--text-secondary)">No lyrics found.</p>'; }
             } catch (e) { container.innerHTML = '<p style="text-align:center;color:var(--text-secondary)">Could not load lyrics.</p>'; }
+        }*/
+        async function fetchLyrics(track) {
+    const container = document.getElementById('lyricsContent');
+    container.innerHTML = '<div class="spinner"></div>';
+    state.lyrics = null;
+    state.syncedLyrics = [];
+    document.getElementById('translateBtn').classList.add('hidden');
+
+    const title = encodeURIComponent(track.title);
+    const artist = encodeURIComponent(track.artist?.name || '');
+    const album = encodeURIComponent(track.album?.title || '');
+    const duration = track.duration || 0;
+
+    if (!track.artist?.name) {
+        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary)">No lyrics found.</p>';
+        return;
+    }
+
+    try {
+        const url = `https://lrclib.net/api/get?track_name=${title}&artist_name=${artist}&album_name=${album}&duration=${duration}`;
+        const res = await fetch(url, { headers: { 'Lrclib-Client': 'ReApple Music (https://github.com/)' } });
+
+        if (!res.ok) {
+            container.innerHTML = '<p style="text-align:center;color:var(--text-secondary)">No lyrics found.</p>';
+            return;
         }
+
+        const data = await res.json();
+
+        // Prefer synced lyrics (LRC format), fall back to plain text
+        if (data.syncedLyrics) {
+            state.lyrics = { lyrics: data.syncedLyrics, plain: data.plainLyrics };
+            state.syncedLyrics = parseLRC(data.syncedLyrics);
+            renderLyrics({ lyrics: data.syncedLyrics });
+        } else if (data.plainLyrics) {
+            state.lyrics = { lyrics: data.plainLyrics };
+            state.syncedLyrics = [];
+            renderLyrics({ lyrics: data.plainLyrics });
+        } else {
+            container.innerHTML = '<p style="text-align:center;color:var(--text-secondary)">No lyrics found.</p>';
+            return;
+        }
+
+        document.getElementById('translateBtn').classList.remove('hidden');
+
+    } catch (e) {
+        console.error('Lyrics fetch failed:', e);
+        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary)">Could not load lyrics.</p>';
+    }
+}
 
         function renderLyrics(data) {
             const container = document.getElementById('lyricsContent');
@@ -1252,7 +1301,7 @@
             document.getElementById('translateBtn').classList.remove('hidden');
         }
 
-        function parseLRC(lrc) {
+        /*function parseLRC(lrc) {
             const regex = /^\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
             const lines = lrc.split('\n'); const result = [];
             for (const line of lines) {
@@ -1264,7 +1313,26 @@
                 }
             }
             return result;
+        }*/
+
+        function parseLRC(lrc) {
+    const lines = lrc.split('\n');
+    const result = [];
+    const regex = /^\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/;
+
+    for (const line of lines) {
+        const match = line.match(regex);
+        if (match) {
+            const min = parseInt(match[1]);
+            const sec = parseInt(match[2]);
+            const ms = parseInt(match[3]);
+            const time = min * 60 + sec + (ms / 1000);
+            const text = match[4].trim();
+            if (text) result.push({ time, text });
         }
+    }
+    return result;
+}
 
         function updateLyricsScroll(time) {
             if (!state.syncedLyrics.length || !document.getElementById('lyricsView').classList.contains('active')) return;
@@ -1573,3 +1641,4 @@
     </script>
 </body>
 </html>
+
