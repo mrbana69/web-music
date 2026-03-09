@@ -1376,34 +1376,56 @@
         }
 
         async function toggleTranslation() {
-            if (!state.lyrics || !state.lyrics.lyrics) { alert("No lyrics available to translate."); return; }
-            let lyricsText = '';
-            if (Array.isArray(state.lyrics.lyrics)) { lyricsText = state.lyrics.lyrics.map(line => line.text).join('\n'); }
-            else if (typeof state.lyrics.lyrics === 'string') { lyricsText = state.lyrics.lyrics; }
-            else { alert("Lyrics format not supported for translation."); return; }
-            state.showTranslation = !state.showTranslation;
-            if (state.showTranslation) {
-                const container = document.getElementById('lyricsContent');
-                container.innerHTML = '<div class="spinner"></div>';
-                try {
-                    const encodedText = encodeURIComponent(lyricsText);
-                    const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q=${encodedText}`);
-                    const data = await response.json();
-                    let translatedText = '';
-                    if (data && data[0]) { translatedText = data[0].map(item => item[0]).join(''); }
-                    container.innerHTML = '';
-                    const translatedLines = translatedText.split('\n');
-                    const useSync = state.syncedLyrics && translatedLines.length === state.syncedLyrics.length;
-                    translatedLines.forEach((line, index) => {
-                        const div = document.createElement('div');
-                        div.className = 'lyrics-line'; div.textContent = line;
-                        if (useSync) div.dataset.time = state.syncedLyrics[index].time;
-                        container.appendChild(div);
-                    });
-                } catch (error) { console.error("Translation failed:", error); alert("Translation failed."); state.showTranslation = false; renderLyrics(state.lyrics); }
-            } else { renderLyrics(state.lyrics); }
-        }
+    if (!state.lyrics || !state.lyrics.lyrics) { alert("No lyrics available to translate."); return; }
 
+    let lyricsText = '';
+    if (Array.isArray(state.lyrics.lyrics)) {
+        lyricsText = state.lyrics.lyrics.map(line => line.text).join('\n');
+    } else if (typeof state.lyrics.lyrics === 'string') {
+        lyricsText = state.lyrics.lyrics
+            .split('\n')
+            .map(line => line.replace(/^\[\d{2}:\d{2}\.\d{2,3}\]/, '').trim())
+            .filter(line => line.length > 0)
+            .join('\n');
+    } else {
+        alert("Lyrics format not supported for translation."); return;
+    }
+
+    state.showTranslation = !state.showTranslation;
+
+    if (state.showTranslation) {
+        const container = document.getElementById('lyricsContent');
+        container.innerHTML = '<div class="spinner"></div>';
+        try {
+            const encodedText = encodeURIComponent(lyricsText);
+            const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=it&dt=t&q=${encodedText}`);
+            const data = await response.json();
+
+            let translatedText = '';
+            if (data && data[0]) { translatedText = data[0].map(item => item[0]).join(''); }
+
+            container.innerHTML = '';
+            const translatedLines = translatedText.split('\n').filter(line => line.trim().length > 0);
+            const useSync = state.syncedLyrics && translatedLines.length === state.syncedLyrics.length;
+
+            translatedLines.forEach((line, index) => {
+                const div = document.createElement('div');
+                div.className = 'lyrics-line';
+                div.textContent = line;
+                if (useSync) div.dataset.time = state.syncedLyrics[index].time;
+                container.appendChild(div);
+            });
+
+        } catch (error) {
+            console.error("Translation failed:", error);
+            alert("Translation failed.");
+            state.showTranslation = false;
+            renderLyrics(state.lyrics);
+        }
+    } else {
+        renderLyrics(state.lyrics);
+    }
+}
         // --- 8. Queue & Library ---
         function updateQueueUI() {
             const container = document.getElementById('queueList');
@@ -1650,5 +1672,6 @@
     </script>
 </body>
 </html>
+
 
 
