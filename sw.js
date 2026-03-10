@@ -16,12 +16,33 @@ self.addEventListener('install', (event) => {
 });
 
 // Fetch Event: Serve from cache if available, otherwise network
+// Note: avoid rejecting respondWith to prevent console errors when cross-origin requests fail.
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
-    })
-  );
+  const requestUrl = new URL(event.request.url);
+
+  // Only handle same-origin requests via cache.
+  // Cross-origin requests should be passed through (and errors handled gracefully).
+  if (requestUrl.origin === self.location.origin) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        return cachedResponse || fetch(event.request).catch((err) => {
+          console.warn('SW fetch failed for same-origin request:', event.request.url, err);
+          return Response.error();
+        });
+      }).catch((err) => {
+        console.warn('SW cache match failed:', err);
+        return fetch(event.request).catch(() => Response.error());
+      })
+    );
+  } else {
+    // For cross-origin requests, just forward and handle failures silently.
+    event.respondWith(
+      fetch(event.request).catch((err) => {
+        console.warn('SW cross-origin fetch failed:', event.request.url, err);
+        return Response.error();
+      })
+    );
+  }
 });
 
 // Activate Event: Clean up old caches, claim clients, and notify about updates
