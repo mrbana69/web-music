@@ -24,6 +24,7 @@
     <link rel="manifest" href="manifest.json">
     <!-- dash.js - Official DASH library for progressive chunk streaming -->
     <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Syne:wght@600;700;800&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Overpass:ital,wght@0,100..900;1,100..900&display=swap');
@@ -204,6 +205,17 @@ h1 { font-size: 34px; font-weight: 800; }
 .btn-text:active { transform: scale(0.92); }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 24px 16px; }
+
+.horizontal-scroll {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding: 4px 0 16px 0;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.horizontal-scroll::-webkit-scrollbar { display: none; }
+.horizontal-scroll .card { flex-shrink: 0; width: 160px; }
 
 .card { cursor: pointer; transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1); background: transparent; }
 .card:active { transform: scale(0.95); }
@@ -695,7 +707,6 @@ h1 { font-size: 34px; font-weight: 800; }
         <div class="container" id="albumPageContent">
             <div id="albumHeader" style="display:flex; gap:16px; align-items:center; margin-bottom:24px;"></div>
             <div id="albumTracks"></div>
-            <div id="albumSimilar" style="margin-top: 30px;"></div>
         </div>
     </div>
 
@@ -861,6 +872,9 @@ h1 { font-size: 34px; font-weight: 800; }
                     </button>
                     <button class="control-btn" onclick="shareCurrentTrack()" title="Condividi">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.03-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.17c-.05.21-.08.43-.08.64 0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3z"/></svg>
+                    </button>
+                    <button class="control-btn" onclick="downloadCurrentTrack()" title="Scarica">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
                     </button>
                 </div>
             </div>
@@ -1364,6 +1378,8 @@ h1 { font-size: 34px; font-weight: 800; }
                     throw new Error("No stream URL found in the final manifest.");
                 }
                 const streamUrl = streamManifest.urls[0];
+
+                state.currentStreamUrl = streamUrl;
 
                 // Step 4: Set the source and play the audio
                 nativeAudio.src = streamUrl;
@@ -2611,6 +2627,11 @@ h1 { font-size: 34px; font-weight: 800; }
             const discographyContainer = document.getElementById('artistDiscography');
             const similarContainer = document.getElementById('artistSimilar');
 
+            // Resetta il pulsante "indietro" della pagina collection al suo comportamento predefinito
+            const collectionBackButton = document.querySelector('#tab-collection .header-actions button');
+            if (collectionBackButton) collectionBackButton.setAttribute('onclick', 'closeCollection()');
+
+
             showGlobalSpinner('Caricamento artista...');
             document.getElementById('artistPageTitle').textContent = artistName || 'Artist';
             header.innerHTML = `<div class="spinner"></div>`;
@@ -2629,6 +2650,9 @@ h1 { font-size: 34px; font-weight: 800; }
                 const name = artistMeta.name || artistName || 'Artist';
                 const picture = artistMeta.picture || artistPicture || '';
                 const imageUrl = picture ? `https://resources.tidal.com/images/${picture.replace(/-/g, '/')}/750x750.jpg` : '';
+
+                const artistForBackNav = { id: artistId, name: name, picture: picture };
+                const artistJson = JSON.stringify(artistForBackNav).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
                 document.getElementById('artistPageTitle').textContent = name;
                 header.innerHTML = `
@@ -2660,69 +2684,74 @@ h1 { font-size: 34px; font-weight: 800; }
                     return acc;
                 }, {});
 
+                const allAlbums = albums;
+
                 if (albums.length > 0) {
                     let discographyHtml = '';
                     const order = ['Album', 'EP', 'Singoli'];
                     order.forEach(section => {
                         const group = groupedAlbums[section];
                         if (!group || group.length === 0) return;
+                        const itemsToShow = group.slice(0, 6);
                         discographyHtml += `
                             <div style="margin-bottom: 22px;">
                                 <h3 class="section-title" style="font-size:18px; margin-bottom:10px;">${section}</h3>
-                                <div class="grid">
-                                    ${group.map((album, i) => {
+                                <div class="horizontal-scroll">
+                                    ${itemsToShow.map((album, i) => {
                                         const cover = album.cover ? `https://resources.tidal.com/images/${album.cover.replace(/-/g, '/')}/320x320.jpg` : '';
                                         const albumName = album.title || album.name || 'Album';
                                         const year = album.releaseDate ? ` · ${album.releaseDate.split('-')[0]}` : '';
                                         const artistLabel = album.artist?.name ? album.artist.name : '';
                                         const albumId = album.id || album.albumId || (album.item && album.item.id) || '';
                                         const albumIdArg = albumId ? albumId : 'null';
-                                        return `
-                                            <div class="card animate-in" style="animation-delay:${i * 30}ms" ${albumId ? `onclick='openAlbumPage(${albumIdArg})'` : ''}>
+                                        return `<div class="card animate-in" style="animation-delay:${i * 30}ms" ${albumId ? `onclick='openAlbumPage(${albumIdArg})'` : ''}>
                                                 <div class="artwork"><img src="${cover}" loading="lazy"></div>
                                                 <div class="card-title">${albumName}</div>
                                                 <div class="card-subtitle">${artistLabel}${year}</div>
-                                            </div>
-                                        `;
+                                            </div>`;
                                     }).join('')}
                                 </div>
                             </div>
                         `;
                     });
 
+                    const allAlbumsStr = JSON.stringify(allAlbums).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                     discographyContainer.innerHTML = `
-                        <h2 class="section-title">Discografia</h2>
+                        <div class="section-title">
+                            <span>Discografia</span>
+                            ${allAlbums.length > 6 ? `<button class="btn-text" onclick='openFullDiscography(${allAlbumsStr}, ${artistJson})'>Mostra tutto</button>` : ''}
+                        </div>
                         ${discographyHtml}
                     `;
+
+                    discographyContainer.querySelectorAll('.horizontal-scroll').forEach(initAutoScroll);
                 } else {
-                    discographyContainer.innerHTML = `
-                        <h2 class="section-title">Discografia</h2>
-                        <p style="color:var(--text-secondary)">Nessun album trovato.</p>
-                    `;
+                    discographyContainer.innerHTML = '<h2 class="section-title">Discografia</h2><p style="color:var(--text-secondary)">Nessun album trovato.</p>';
                 }
 
                 if (similarArtists.length > 0) {
+                    const allSimilarStr = JSON.stringify(similarArtists).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                     similarContainer.innerHTML = `
-                        <h2 class="section-title">Artisti simili</h2>
-                        <div class="grid">
-                            ${similarArtists.slice(0, 10).map((a, i) => {
+                        <div class="section-title">
+                            <span>Artisti simili</span>
+                            ${similarArtists.length > 6 ? `<button class="btn-text" onclick='openFullSimilarArtists(${allSimilarStr}, ${artistJson})'>Mostra tutto</button>` : ''}
+                        </div>
+                        <div class="horizontal-scroll">
+                            ${similarArtists.slice(0, 6).map((a, i) => {
                                 const pic = a.picture ? `https://resources.tidal.com/images/${a.picture.replace(/-/g, '/')}/320x320.jpg` : '';
                                 const artistName = a.name || '';
                                 const artistStr = JSON.stringify(a).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                                return `
-                                    <div class="card animate-in" style="animation-delay:${i * 30}ms" onclick='openArtistPage(${artistStr})'>
+                                return `<div class="card animate-in" style="animation-delay:${i * 30}ms" onclick='openArtistPage(${artistStr})'>
                                         <div class="artwork"><img src="${pic}" loading="lazy"></div>
                                         <div class="card-title">${artistName}</div>
-                                    </div>
-                                `;
+                                    </div>`;
                             }).join('')}
                         </div>
                     `;
+
+                    similarContainer.querySelectorAll('.horizontal-scroll').forEach(initAutoScroll);
                 } else {
-                    similarContainer.innerHTML = `
-                        <h2 class="section-title">Artisti simili</h2>
-                        <p style="color:var(--text-secondary)">Nessun artista simile trovato.</p>
-                    `;
+                    similarContainer.innerHTML = '<h2 class="section-title">Artisti simili</h2><p style="color:var(--text-secondary)">Nessun artista simile trovato.</p>';
                 }
             } catch (err) {
                 console.error('Artist page failed', err);
@@ -2732,6 +2761,102 @@ h1 { font-size: 34px; font-weight: 800; }
             } finally {
                 hideGlobalSpinner();
             }
+        }
+
+        function openFullDiscography(albums, artist) {
+            // Riutilizza la tab della collezione per mostrare la lista completa
+            document.getElementById('tab-artist').classList.add('hidden');
+            document.getElementById('tab-collection').classList.remove('hidden');
+            document.getElementById('collectionTitle').textContent = 'Discografia Completa';
+            
+            const container = document.getElementById('collectionList');
+            container.innerHTML = `<div class="grid">${albums.map((album, i) => {
+                const cover = album.cover ? `https://resources.tidal.com/images/${album.cover.replace(/-/g, '/')}/320x320.jpg` : '';
+                const albumName = album.title || album.name || 'Album';
+                const year = album.releaseDate ? ` · ${album.releaseDate.split('-')[0]}` : '';
+                const artistLabel = album.artist?.name ? album.artist.name : '';
+                const albumId = album.id || album.albumId || '';
+                return `
+                    <div class="card animate-in" style="animation-delay:${i * 30}ms" ${albumId ? `onclick='openAlbumPage(${albumId})'` : ''}>
+                        <div class="artwork"><img src="${cover}" loading="lazy"></div>
+                        <div class="card-title">${albumName}</div>
+                        <div class="card-subtitle">${artistLabel}${year}</div>
+                    </div>
+                `;
+            }).join('')}</div>`;
+
+            // Cambia temporaneamente il comportamento del pulsante "indietro" per tornare all'artista
+            const backButton = document.querySelector('#tab-collection .header-actions button');
+            const artistJson = JSON.stringify(artist).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            backButton.setAttribute('onclick', `openArtistPage(${artistJson})`);
+        }
+
+        function openFullSimilarArtists(artists, artistForBack) {
+            document.getElementById('tab-artist').classList.add('hidden');
+            document.getElementById('tab-collection').classList.remove('hidden');
+            document.getElementById('collectionTitle').textContent = 'Artisti Simili';
+            
+            const container = document.getElementById('collectionList');
+            container.innerHTML = `<div class="grid">${artists.map((a, i) => {
+                const pic = a.picture ? `https://resources.tidal.com/images/${a.picture.replace(/-/g, '/')}/320x320.jpg` : '';
+                const artistName = a.name || '';
+                const artistStr = JSON.stringify(a).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                return `
+                    <div class="card animate-in" style="animation-delay:${i * 30}ms" onclick='openArtistPage(${artistStr})'>
+                        <div class="artwork"><img src="${pic}" loading="lazy"></div>
+                        <div class="card-title">${artistName}</div>
+                    </div>
+                `;
+            }).join('')}</div>`;
+
+            const backButton = document.querySelector('#tab-collection .header-actions button');
+            const artistJson = JSON.stringify(artistForBack).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            backButton.setAttribute('onclick', `openArtistPage(${artistJson})`);
+        }
+
+        function initAutoScroll(carousel) {
+            // Non scorrere se il contenuto non è più grande della vista o se l'utente preferisce movimento ridotto
+            if (carousel.scrollWidth <= carousel.clientWidth || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                return;
+            }
+
+            // Duplica il contenuto per un loop infinito
+            const originalContent = Array.from(carousel.children);
+            originalContent.forEach(child => {
+                const clone = child.cloneNode(true);
+                clone.style.animation = 'none'; // Disabilita animazioni sui cloni
+                clone.setAttribute('aria-hidden', 'true'); // Nascondi i cloni agli screen reader
+                carousel.appendChild(clone);
+            });
+
+            let scrollInterval;
+            const scrollSpeed = 0.4; // Regola per la velocità desiderata
+
+            const startScrolling = () => {
+                clearInterval(scrollInterval);
+                scrollInterval = setInterval(() => {
+                    carousel.scrollLeft += scrollSpeed;
+                    const originalScrollWidth = carousel.scrollWidth / 2;
+                    if (carousel.scrollLeft >= originalScrollWidth) {
+                        carousel.scrollLeft -= originalScrollWidth;
+                    }
+                }, 16); // ~60fps
+            };
+
+            const pauseScrolling = () => clearInterval(scrollInterval);
+            
+            const permanentStop = () => {
+                clearInterval(scrollInterval);
+                carousel.removeEventListener('mouseleave', startScrolling);
+                carousel.removeEventListener('mouseenter', pauseScrolling);
+            };
+
+            carousel.addEventListener('mouseenter', pauseScrolling);
+            carousel.addEventListener('mouseleave', startScrolling);
+            carousel.addEventListener('wheel', permanentStop, { once: true });
+            carousel.addEventListener('touchstart', permanentStop, { passive: true, once: true });
+
+            startScrolling();
         }
 
         async function openAlbumPage(albumOrId) {
@@ -2762,25 +2887,14 @@ h1 { font-size: 34px; font-weight: 800; }
                 el.classList.add('hidden');
                 el.classList.remove('active-tab-content');
             });
-            document.getElementById('tab-playlist-page').classList.remove('hidden');
+            document.getElementById('tab-album').classList.remove('hidden');
 
-            // We'll reuse playlist page layout for album view
-            const coverEl = document.getElementById('playlistPageCover');
-            const titleEl = document.getElementById('playlistPageTitle');
-            const countEl = document.getElementById('playlistPageCount');
-            const playBtn = document.getElementById('playlistPlayBtn');
-            const tracksContainer = document.getElementById('playlistSongsList');
-
-            // Also keep references to album-specific sections in case the album tab layout is used in the future
+            // Usa gli elementi corretti della tab Album
             const header = document.getElementById('albumHeader');
-            const similarContainer = document.getElementById('albumSimilar');
+            const tracksContainer = document.getElementById('albumTracks');
 
             if (header) header.innerHTML = `<div class="spinner"></div>`;
-            if (similarContainer) similarContainer.innerHTML = '<h2 class="section-title">Album simili</h2><div class="grid"><div class="spinner"></div></div>';
-
-            titleEl.textContent = albumName || 'Album';
-            countEl.textContent = 'Loading...';
-            if (coverEl) coverEl.src = '';
+            if (tracksContainer) tracksContainer.innerHTML = `<div class="spinner"></div>`;
 
             showGlobalSpinner('Caricamento album...');
 
@@ -2798,75 +2912,61 @@ h1 { font-size: 34px; font-weight: 800; }
                 const artistName = album.artist?.name || (album.artists?.[0]?.name) || '';
                 const year = album.releaseDate ? ` · ${album.releaseDate.split('-')[0]}` : '';
 
-                // Album cover / title / artist in playlist style
-                coverEl.src = coverUrl;
-                titleEl.textContent = album.title || albumName;
-                countEl.textContent = `${items.length} tracce`;
+                // Renderizza Header Album con layout specifico
+                if (header) {
+                    header.innerHTML = `
+                        <div style="flex-shrink:0;">
+                            <img src="${coverUrl}" style="width:150px; height:150px; border-radius:12px; object-fit:cover; box-shadow: 0 8px 30px rgba(0,0,0,0.3);">
+                        </div>
+                        <div style="flex:1; min-width:0;">
+                            <h1 style="font-size:22px; margin-bottom:8px; line-height:1.2; word-wrap:break-word;">${album.title || albumName}</h1>
+                            <div style="font-size:15px; color:var(--text-secondary); margin-bottom:12px;">${artistName}${year}</div>
+                            <div style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">${items.length} brani</div>
+                            <button id="albumPlayBtn" class="btn-primary" style="padding:10px 24px; background:var(--accent); color:#000; border:none; border-radius:25px; font-weight:600; cursor:pointer; font-size:14px; display:inline-flex; align-items:center;">
+                                <svg class="icon" viewBox="0 0 24 24" style="margin-right:6px; width:20px; height:20px;"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                                Play
+                            </button>
+                        </div>
+                    `;
 
-                // Play button behavior
-                playBtn.onclick = () => {
-                    if (state.currentAlbumSongs.length > 0) {
-                        state.queue = [...state.currentAlbumSongs];
-                        state.currentIndex = 0;
-                        state.currentPlaylistIndex = -1;
-                        playTrack(state.queue[0], true, false, -1);
-                        openFullPlayer();
-                    }
-                };
+                    document.getElementById('albumPlayBtn').onclick = () => {
+                        if (state.currentAlbumSongs.length > 0) {
+                            state.queue = [...state.currentAlbumSongs];
+                            state.currentIndex = 0;
+                            state.currentPlaylistIndex = -1;
+                            playTrack(state.queue[0], true, false, -1);
+                            openFullPlayer();
+                        }
+                    };
+                }
 
                 const tracks = items.map(item => item.item || item);
                 state.currentAlbumSongs = tracks;
 
-                tracksContainer.innerHTML = tracks.map((track, i) => {
-                    const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                    const artUrl = track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : coverUrl;
-                    return `
-                        <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick="playAlbumSong(${i})">
-                            <div class="list-artwork"><img src="${artUrl}"></div>
-                            <div class="list-info">
-                                <div class="card-title">${track.title}</div>
-                                <div class="card-subtitle">
-                                    <button class="btn-text" style="padding:0; font-size:12px; line-height:1.2;" onclick="event.stopPropagation(); openArtistPage(${JSON.stringify({id: track.artist?.id, name: track.artist?.name, picture: track.artist?.picture}).replace(/\"/g,'&quot;').replace(/'/g,'&#39;')})">
-                                        ${track.artist?.name || 'Unknown'}
-                                    </button>
+                if (tracksContainer) {
+                    tracksContainer.innerHTML = tracks.map((track, i) => {
+                        const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                        const artUrl = track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : coverUrl;
+                        return `
+                            <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick="playAlbumSong(${i})">
+                                <div class="list-artwork"><img src="${artUrl}"></div>
+                                <div class="list-info">
+                                    <div class="card-title">${track.title}</div>
+                                    <div class="card-subtitle">
+                                        <button class="btn-text" style="padding:0; font-size:12px; line-height:1.2;" onclick="event.stopPropagation(); openArtistPage(${JSON.stringify({id: track.artist?.id, name: track.artist?.name, picture: track.artist?.picture}).replace(/\"/g,'&quot;').replace(/'/g,'&#39;')})">
+                                            ${track.artist?.name || 'Unknown'}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    `;
-                }).join('');
-
-                // Similar albums (this endpoint isn't guaranteed; fallback to empty)
-                const similarRes = await fetch(withCorsProxy(`${API_URL}/album/similar/?id=${albumId}`));
-                const similarData = await similarRes.json();
-                const similarAlbums = similarData.albums || similarData.data?.albums || [];
-
-                if (similarAlbums.length > 0) {
-                    similarContainer.innerHTML = `
-                        <h2 class="section-title">Album simili</h2>
-                        <div class="grid">
-                            ${similarAlbums.slice(0, 12).map((alb, i) => {
-                                const cover = alb.cover ? `https://resources.tidal.com/images/${alb.cover.replace(/-/g, '/')}/320x320.jpg` : '';
-                                const title = alb.title || alb.name || 'Album';
-                                const artistName = alb.artist?.name || (alb.artists?.[0]?.name) || '';
-                                const albumId = alb.id || alb.albumId || '';
-                                return `
-                                    <div class="card animate-in" style="animation-delay:${i * 30}ms" ${albumId ? `onclick='openAlbumPage(${albumId})'` : ''}>
-                                        <div class="artwork"><img src="${cover}" loading="lazy"></div>
-                                        <div class="card-title">${title}</div>
-                                        <div class="card-subtitle">${artistName}</div>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                    `;
-                } else {
-                    similarContainer.innerHTML = '<h2 class="section-title">Album simili</h2><p style="color:var(--text-secondary)">Nessun album simile trovato.</p>';
+                        `;
+                    }).join('');
                 }
+
             } catch (err) {
                 console.error('Album page failed', err);
                 if (header) header.innerHTML = '';
                 if (tracksContainer) tracksContainer.innerHTML = '<p style="color:var(--text-secondary)">Impossibile caricare le tracce.</p>';
-                if (similarContainer) similarContainer.innerHTML = '<p style="color:var(--text-secondary)">Impossibile caricare gli album simili.</p>';
             } finally {
                 hideGlobalSpinner();
             }
@@ -2980,6 +3080,121 @@ h1 { font-size: 34px; font-weight: 800; }
             `;
             document.head.appendChild(style);
         }
+
+        // --- Download & Tagging Logic (FFmpeg.wasm) ---
+        let ffmpeg = null;
+
+        async function initFFmpeg() {
+            if (ffmpeg) return;
+            const { createFFmpeg } = FFmpeg;
+            // Log attivo per debug
+            ffmpeg = createFFmpeg({ log: true });
+            await ffmpeg.load();
+        }
+
+        async function downloadCurrentTrack() {
+            const track = state.queue[state.currentIndex];
+            if (!track || !state.currentStreamUrl) {
+                alert('Nessuna traccia da scaricare o URL non disponibile.');
+                return;
+            }
+
+            showGlobalSpinner('Preparazione download...');
+
+            try {
+                // Tenta di caricare FFmpeg. Se fallisce (es. mancano header SharedArrayBuffer), va in fallback.
+                if (!ffmpeg) {
+                    try {
+                        await initFFmpeg();
+                    } catch (e) {
+                        console.warn('FFmpeg load failed, falling back to raw download', e);
+                        downloadRaw(track);
+                        return;
+                    }
+                }
+
+                showGlobalSpinner('Scaricamento audio...');
+                
+                // 1. Scarica Audio
+                const audioRes = await fetch(state.currentStreamUrl);
+                const audioBlob = await audioRes.blob();
+                // Rileva estensione (Tidal Lossless è FLAC, High è MP4/M4A)
+                const isM4a = audioBlob.type.includes('mp4') || state.currentStreamUrl.includes('.m4a');
+                const audioExt = isM4a ? 'm4a' : 'flac';
+                const inputName = `input.${audioExt}`;
+                const outputName = `${track.artist?.name || 'Artist'} - ${track.title || 'Song'}.${audioExt}`;
+
+                ffmpeg.FS('writeFile', inputName, new Uint8Array(await audioBlob.arrayBuffer()));
+
+                // 2. Scarica Cover (Alta risoluzione)
+                let hasCover = false;
+                if (track.album?.cover) {
+                    try {
+                        const coverUrl = `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/1280x1280.jpg`;
+                        const coverRes = await fetch(coverUrl);
+                        if (coverRes.ok) {
+                            const coverBlob = await coverRes.blob();
+                            ffmpeg.FS('writeFile', 'cover.jpg', new Uint8Array(await coverBlob.arrayBuffer()));
+                            hasCover = true;
+                        }
+                    } catch (e) { console.warn('Cover download failed', e); }
+                }
+
+                showGlobalSpinner('Scrittura tag...');
+
+                // 3. Costruisci comando FFmpeg per i metadati
+                const args = ['-i', inputName];
+                if (hasCover) {
+                    args.push('-i', 'cover.jpg');
+                    args.push('-map', '0', '-map', '1');
+                }
+                args.push('-c', 'copy'); // Copia stream audio senza ricodifica (veloce)
+                
+                // Metadati standard
+                args.push('-metadata', `title=${track.title}`);
+                args.push('-metadata', `artist=${track.artist?.name || ''}`);
+                args.push('-metadata', `album=${track.album?.title || ''}`);
+                if (hasCover) args.push('-disposition:v:0', 'attached_pic'); // Embed cover
+
+                args.push('output.' + audioExt);
+
+                // Esegui
+                await ffmpeg.run(...args);
+
+                // 4. Leggi file e scarica
+                const data = ffmpeg.FS('readFile', 'output.' + audioExt);
+                const url = URL.createObjectURL(new Blob([data.buffer], { type: audioBlob.type }));
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = outputName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                // Pulizia memoria
+                ffmpeg.FS('unlink', inputName);
+                if (hasCover) ffmpeg.FS('unlink', 'cover.jpg');
+                ffmpeg.FS('unlink', 'output.' + audioExt);
+
+            } catch (e) {
+                console.error('Download con tag fallito', e);
+                alert('Errore durante il tagging. Provo il download diretto...');
+                downloadRaw(track);
+            } finally {
+                hideGlobalSpinner();
+            }
+        }
+
+        function downloadRaw(track) {
+             const a = document.createElement('a');
+             a.href = state.currentStreamUrl;
+             a.download = `${track.artist?.name} - ${track.title}.flac`;
+             document.body.appendChild(a);
+             a.click();
+             document.body.removeChild(a);
+             hideGlobalSpinner();
+        }
     </script>
     <div id="globalSpinner" class="global-spinner hidden">
         <div class="global-spinner-inner">
@@ -2990,4 +3205,3 @@ h1 { font-size: 34px; font-weight: 800; }
 </body>
 
 </html>
-
