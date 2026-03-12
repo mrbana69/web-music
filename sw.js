@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ReApple Music-v6';
+const CACHE_NAME = 'ReApple Music-v11';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
