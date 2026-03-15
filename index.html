@@ -648,7 +648,37 @@ h1 { font-size: 34px; font-weight: 800; }
     .grid { gap: 20px 14px; }
 }
 
-/* Modali e Overlay */
+        /* Toast notifications */
+.toast {
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 12px 20px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    max-width: 300px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+    transform: translateX(400px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    z-index: 1500;
+}
+.toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+.toast.error {
+    border-color: #ff3b30;
+    background: rgba(255, 59, 48, 0.15);
+}
+
+        /* Modali e Overlay */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -690,6 +720,7 @@ h1 { font-size: 34px; font-weight: 800; }
 #importOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 300; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; backdrop-filter: blur(20px); }
 #importLog { width: 100%; max-width: 400px; height: 300px; overflow-y: auto; background: var(--bg-tertiary); border-radius: 12px; border: 1px solid var(--glass-border); padding: 15px; font-family: monospace; font-size: 12px; margin-top: 20px; color: #ccc; }
     </style>
+
 </head>
 <body>
 
@@ -1319,6 +1350,37 @@ h1 { font-size: 34px; font-weight: 800; }
         let currentApiIndex = localStorage.getItem('currentApiIndex') || 0;
         let workingApiUrl = localStorage.getItem('workingApiUrl') || API_ENDPOINTS[currentApiIndex];
 
+        async function getWorkingApiUrl() {
+            // Rotate through API endpoints to find working one
+            for (let i = 0; i < API_ENDPOINTS.length; i++) {
+                const testIndex = (currentApiIndex + i) % API_ENDPOINTS.length;
+                const testUrl = API_ENDPOINTS[testIndex];
+                
+                try {
+                    const testRes = await fetch(`${testUrl}/ping`, { 
+                        signal: AbortSignal.timeout(3000),
+                        cache: 'no-cache'
+                    });
+                    if (testRes.ok) {
+                        currentApiIndex = testIndex;
+                        workingApiUrl = testUrl;
+                        localStorage.setItem('currentApiIndex', currentApiIndex);
+                        localStorage.setItem('workingApiUrl', workingApiUrl);
+                        showToast('Connected to fast server', 1500);
+                        return testUrl;
+                    }
+                } catch (e) {
+                    // Try next
+                }
+            }
+            // Fallback to first endpoint
+            currentApiIndex = 0;
+            workingApiUrl = API_ENDPOINTS[0];
+            localStorage.setItem('currentApiIndex', '0');
+            localStorage.setItem('workingApiUrl', workingApiUrl);
+            return workingApiUrl;
+        }
+
         // Function to make API requests with automatic fallback
         async function apiFetch(endpoint, options = {}) {
             let apiUrl = workingApiUrl;
@@ -1331,8 +1393,12 @@ h1 { font-size: 34px; font-weight: 800; }
                 });
                 
                 // If rate limited (429) or server error (5xx), try next API
-                if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
-                    throw new Error(`API ${apiUrl} returned ${response.status}`);
+                if (response.status === 429) {
+                    showToast('Server busy, switching API...', 2000);
+                    throw new Error(`Rate limited (429)`);
+                } else if (response.status >= 500 && response.status < 600) {
+                    showToast('Server error, trying backup...', 2000);
+                    throw new Error(`Server error ${response.status}`);
                 }
                 
                 return response;
@@ -1348,13 +1414,16 @@ h1 { font-size: 34px; font-weight: 800; }
                         ...options,
                         signal: options.signal || AbortSignal.timeout(10000)
                     });
+                    showToast('Search restored! 🔍', 2000, 'success');
                     return response;
                 } catch (retryError) {
                     console.error(`Retry also failed for ${apiUrl}${endpoint}:`, retryError.message);
+                    showToast('Network error. Check connection.', 4000, 'error');
                     throw retryError;
                 }
             }
         }
+
 
         // No CORS proxy is used in production; the API must accept direct browser requests.
         // If you require a local proxy for debugging, add it here.
@@ -1383,7 +1452,7 @@ h1 { font-size: 34px; font-weight: 800; }
             mixLoaded: false, // Track if mix has been loaded for current song
             deepLinkTrack: null, // Track being played via deep link
             sleepTimer: null, // Sleep timer timeout ID
-            crossfadeDuration: 3, // Crossfade duration in seconds
+            crossfadeDuration: 0.8, // Crossfade duration in seconds (shorter fade-out)
             searchType: 'track' // Search filter: 'track', 'album', 'artist'
         };
 
@@ -1430,7 +1499,17 @@ h1 { font-size: 34px; font-weight: 800; }
         // Auto-advance logic (Handles Shuffle/Mix when song ends)
         universalPlayer.audioElement.addEventListener('ended', () => { nextTrack(); releaseWakeLock(); });
         dashPlayer.audioElement.addEventListener('ended', () => { nextTrack(); releaseWakeLock(); });
-        nativeAudio.addEventListener('ended', () => { nextTrack(); releaseWakeLock(); });
+        nativeAudio.addEventListener('ended', async () => { 
+            await nextTrack(); 
+            releaseWakeLock(); 
+        });
+        
+        // Add error handler for failed streams
+        nativeAudio.addEventListener('error', (e) => {
+            console.error('Native audio error:', e);
+            showToast('Stream failed. Skipping...', 3000, 'error');
+            setTimeout(nextTrack, 1000);
+        });
 
         // Release wake lock when playback is paused
         universalPlayer.audioElement.addEventListener('pause', () => { if (!state.isPlaying) releaseWakeLock(); });
@@ -1640,16 +1719,27 @@ h1 { font-size: 34px; font-weight: 800; }
 
                 state.currentStreamUrl = streamUrl;
 
-                // Step 4: Set the source and play the audio
+// Step 4: Clean reset + load + play the audio (FIXED CROSSFADE ISSUE)
+                // Clean reset before new source
+                nativeAudio.pause();
+                nativeAudio.currentTime = 0;
+                
                 nativeAudio.src = streamUrl;
-
+                nativeAudio.load(); // CRITICAL: Load after src change
+                
+                // Small delay for load to settle
+                await new Promise(resolve => setTimeout(resolve, 150));
+                
                 let started = false;
                 try {
-                    await nativeAudio.play();
-                    started = true;
+                    const playPromise = nativeAudio.play();
+                    if (playPromise !== undefined) {
+                        await playPromise;
+                    }
+                    started = !nativeAudio.paused;
                 } catch (playError) {
-                    console.warn('Playback blocked:', playError);
-                    alert('Playback bloccato dal browser (autoplay/user gesture richiesta). Premi play per avviare.');
+                    console.error('Audio play failed:', playError);
+                    showToast('Autoplay blocked. Tap play button.', 4000, 'error');
                 }
 
                 state.isPlaying = started;
@@ -1725,23 +1815,25 @@ h1 { font-size: 34px; font-weight: 800; }
         async function nextTrack() {
             if (state.queue.length === 0) return;
             
-            // Fade out current track if playing
+            // Fade out current track if playing (ensures completion)
             const currentPlayer = getActiveAudioPlayer();
             if (currentPlayer && !currentPlayer.paused) {
                 await fadeOut(currentPlayer, state.crossfadeDuration);
             }
             
-            // Normal mode: advance to next track
+            // Load mix if needed (before advancing)
             if (state.currentIndex >= state.queue.length - 1) {
                 await loadMix(state.queue[state.currentIndex]);
             }
             
             let nextIndex = state.currentIndex + 1;
             if (nextIndex >= state.queue.length) {
-                // If no more tracks, stop
+                state.isPlaying = false;
+                updatePlayIcons();
                 return;
             }
             
+            // Advance and play new track
             playTrackFromQueue(nextIndex);
         }
 
@@ -2026,62 +2118,93 @@ h1 { font-size: 34px; font-weight: 800; }
 
         // --- 6. Search & Data Population ---
         
+        function showToast(message, duration = 3000, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('show'), 100);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
         const searchInput = document.getElementById('searchInput');
         searchInput.addEventListener('keypress', async (e) => {
             if(e.key === 'Enter') {
-                const query = e.target.value;
-                
-                // Map search type to API parameter
-                let paramName;
-                switch(state.searchType) {
-                    case 'track': paramName = 's'; break;
-                    case 'album': paramName = 'al'; break;
-                    case 'artist': paramName = 'a'; break;
-                    default: paramName = 's';
-                }
-                
-                const res = await apiFetch(`/search/?${paramName}=${encodeURIComponent(query)}`);
-                const data = await res.json();
-                
+                const query = e.target.value.trim();
+                if (!query) return;
+
                 const container = document.getElementById('searchResults');
-                container.innerHTML = `<h2 class="section-title">Results for "${query}"</h2><div class="grid"></div>`;
-                const grid = container.querySelector('.grid');
+                container.innerHTML = `
+                    <h2 class="section-title" style="opacity: 0.7;">Searching for "${query}"...</h2>
+                    <div class="grid" style="justify-items: center; padding: 60px 20px;">
+                        <div class="spinner" style="width: 48px; height: 48px;"></div>
+                    </div>
+                `;
 
-                let items = [];
-                if (data.data) {
-                    if (state.searchType === 'track' && data.data.tracks) {
-                        items = data.data.tracks.items || [];
-                    } else if (state.searchType === 'album' && data.data.albums) {
-                        items = data.data.albums.items || [];
-                    } else if (state.searchType === 'artist' && data.data.artists) {
-                        items = data.data.artists.items || [];
-                        // Filter out collaboration artists (containing " & ", " and ", " feat.", " ft.", " featuring ", " with ", "/", ",")
-                        items = items.filter(artist => {
-                            const name = artist.name || '';
-                            const lowerName = name.toLowerCase();
-                            return !lowerName.includes(' & ') && 
-                                   !lowerName.includes(' and ') && 
-                                   !lowerName.includes(' feat.') && 
-                                   !lowerName.includes(' ft.') && 
-                                   !lowerName.includes(' featuring ') && 
-                                   !lowerName.includes(' with ') &&
-                                   !lowerName.includes('/') &&
-                                   !lowerName.includes(',');
-                        });
+                try {
+                    // Map search type to API parameter
+                    let paramName;
+                    switch(state.searchType) {
+                        case 'track': paramName = 's'; break;
+                        case 'album': paramName = 'al'; break;
+                        case 'artist': paramName = 'a'; break;
+                        default: paramName = 's';
                     }
-                }
+                    
+                    const res = await apiFetch(`/search/?${paramName}=${encodeURIComponent(query)}`);
+                    const data = await res.json();
+                    
+                    // Robust item extraction - handles varying API structures
+                    let items = data.data?.items || data.data?.tracks?.items || data.data?.albums?.items || data.data?.artists?.items || 
+                               data.data?.tracks?.items || 
+                               data.data?.albums?.items || 
+                               data.data?.artists?.items || 
+                               [];
 
-                if (items.length > 0) {
+                    container.innerHTML = `<h2 class="section-title">Results for "${query}"</h2><div class="grid" id="searchGrid"></div>`;
+                    const grid = document.getElementById('searchGrid');
+
+                    if (items.length === 0) {
+                        const filterNames = { 'track': 'singoli', 'album': 'album', 'artist': 'artisti' };
+                        const filterLabel = filterNames[state.searchType] || 'risultati';
+                        grid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px 20px; font-size: 16px;">Nessun ${filterLabel} trovato. Prova con parole chiave diverse.</p>`;
+                        return;
+                    }
+
+                    // Limit results and render based on type
+                    const limitedItems = items.slice(0, 20); // Show more results
                     if (state.searchType === 'track') {
-                        grid.innerHTML = items.slice(0, 10).map((track, i) => createCard(track, i, true)).join('');
+                        grid.innerHTML = limitedItems.map((track, i) => createCard(track, i, true)).join('');
                     } else if (state.searchType === 'album') {
-                        grid.innerHTML = items.slice(0, 10).map((album, i) => createAlbumCard(album, i)).join('');
+                        grid.innerHTML = limitedItems.map((album, i) => createAlbumCard(album, i)).join('');
                     } else if (state.searchType === 'artist') {
-                        grid.innerHTML = items.slice(0, 10).map((artist, i) => createArtistCard(artist, i)).join('');
+                        // Filter collaborations for artist search
+                        const cleanArtists = limitedItems.filter(artist => {
+                            const name = (artist.name || '').toLowerCase();
+                            return !name.includes(' & ') && !name.includes(' feat.') && !name.includes(' ft.') && 
+                                   !name.includes(' featuring ') && !name.includes(' with ') && !name.includes('/');
+                        });
+                        grid.innerHTML = cleanArtists.map((artist, i) => createArtistCard(artist, i)).join('');
                     }
+
+                } catch (error) {
+                    console.error('Search failed:', error);
+                    const container = document.getElementById('searchResults');
+                    container.innerHTML = `
+                        <h2 class="section-title">Search Error</h2>
+                        <div class="grid" style="justify-items: center; padding: 60px 20px;">
+                            <p style="grid-column: 1/-1; text-align: center; color: var(--text-secondary);">Search failed. Please check your connection and try again.</p>
+                            <button class="btn-text" style="margin-top: 20px;" onclick="switchTab('search')">Retry Search</button>
+                        </div>
+                    `;
                 }
             }
         });
+
 
         // Search filter buttons
         document.addEventListener('click', function(e) {
