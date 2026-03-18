@@ -804,8 +804,8 @@ h1 { font-size: 34px; font-weight: 800; }
                 <img id="playlistPageCover" src="" alt="Playlist Cover" style="width:200px; height:200px; border-radius:12px; object-fit:cover; margin-bottom:20px; box-shadow: 0 8px 30px rgba(0,0,0,0.3);">
                 <h1 id="playlistPageTitle" style="margin-bottom:10px;">Playlist Name</h1>
                 <p id="playlistPageCount" style="color:var(--text-secondary); margin-bottom:30px;">0 songs</p>
-                <button id="playlistPlayBtn" class="btn-primary" style="padding:12px 30px; background:var(--accent); color:#000; border:none; border-radius:25px; font-weight:600; cursor:pointer; font-size:16px;">
-                    <svg class="icon" viewBox="0 0 24 24" style="display:inline; margin-right:8px;"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                <button id="playlistPlayBtn" class="btn-primary" style="padding:16px 30px; background:var(--accent); color:#000; border:none; border-radius:25px; font-weight:600; cursor:pointer; font-size:16px; display:flex !important; align-items:center !important; justify-content:center !important; gap:8px !important; min-width:200px !important; line-height:1.2 !important; height:52px !important;">
+                    <svg class="icon" viewBox="0 0 24 24" style="width:20px; height:20px; flex-shrink:0;"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
                     Play
                 </button>
             </div>
@@ -987,7 +987,7 @@ h1 { font-size: 34px; font-weight: 800; }
 
                 <div class="vol-container">
                     <svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
-                    <input type="range" class="vol-slider" min="0" max="1" step="0.01" value="1" oninput="setVolume(this.value)">
+                    <input type="range" id="volumeSlider" class="vol-slider" min="0" max="1" step="0.01" value="1" oninput="setVolume(this.value)">
                     <svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
                 </div>
 
@@ -1334,17 +1334,17 @@ h1 { font-size: 34px; font-weight: 800; }
         // --- 2. App State & Logic ---
         // API endpoints with fallback system for rate limiting and server errors
         const API_ENDPOINTS = [
-            'https://triton.squid.wtf',        // v2.6
-            'https://eu-central.monochrome.tf', // v2.6
-            'https://us-west.monochrome.tf',    // v2.6
-            'https://api.monochrome.tf',        // v2.5
-            'https://monochrome-api.samidy.com', // v2.3
-            'https://wolf.qqdl.site',           // v2.2 (current)
-            'https://maus.qqdl.site',           // v2.2
-            'https://vogel.qqdl.site',          // v2.2
-            'https://katze.qqdl.site',          // v2.2
-            'https://hund.qqdl.site',           // v2.2
-            'https://tidal.kinoplus.online'     // fallback
+                'https://hifi.p1nkhamster.xyz',
+                'https://tidal-api.binimum.org',
+                'https://eu-central.monochrome.tf',
+                'https://us-west.monochrome.tf',
+                'https://triton.squid.wtf',
+                'https://api.monochrome.tf',
+                'https://hifi-one.spotisaver.net',
+                'https://hifi-two.spotisaver.net',
+                'https://streamex.sh/api/music',
+                'https://monochrome-api.samidy.com',
+                'https://tidal.kinoplus.online',
         ];
 
         let currentApiIndex = localStorage.getItem('currentApiIndex') || 0;
@@ -2158,38 +2158,127 @@ h1 { font-size: 34px; font-weight: 800; }
                     const res = await apiFetch(`/search/?${paramName}=${encodeURIComponent(query)}`);
                     const data = await res.json();
                     
-                    // Robust item extraction - handles varying API structures
-                    let items = data.data?.items || data.data?.tracks?.items || data.data?.albums?.items || data.data?.artists?.items || 
-                               data.data?.tracks?.items || 
-                               data.data?.albums?.items || 
-                               data.data?.artists?.items || 
-                               [];
+                    // 🐛 STEP 3: COMPREHENSIVE SEARCH DEBUG + ROBUST PARSING
+                    console.log('🔍 SEARCH DEBUG - Query:', query, 'Type:', state.searchType);
+                    console.log('🔍 Raw API Response:', JSON.stringify(data, null, 2));
+                    console.log('🔍 API Keys:', Object.keys(data));
+                    
+                    if (data.data) {
+                        console.log('🔍 data.data Keys:', Object.keys(data.data));
+                        console.log('🔍 data.data.items?', !!data.data.items, Array.isArray(data.data.items) ? data.data.items.length : 0);
+                    }
+                    
+                    // ULTRA-ROBUST item extraction - handles ALL API response variations
+                    let items = [];
+                    if (data.data?.items) items = data.data.items;
+                    else if (data.data?.tracks?.items) items = data.data.tracks.items;
+                    else if (data.data?.albums?.items) items = data.data.albums.items;
+                    else if (data.data?.artists?.items) items = data.data.artists.items;
+                    else if (data.items) items = data.items;
+                    else if (Array.isArray(data)) items = data;
+                    
+                    // Flatten nested arrays
+                    if (Array.isArray(items) && items.length > 0 && Array.isArray(items[0])) {
+                        console.log('🔍 Flattening nested items array');
+                        items = items.flat();
+                    }
+                    
+                    // ULTRA-COMPREHENSIVE API response parsing for v2.6 structure
+                    console.log('🔍 API v2.6 detected - checking type-specific arrays');
+                    
+                    // v2.6 structure: data.albums.items, data.artists.items, data.tracks.items
+                    let typeKey = '';
+                    switch(state.searchType) {
+                        case 'track': typeKey = 'tracks'; break;
+                        case 'album': typeKey = 'albums'; break;
+                        case 'artist': typeKey = 'artists'; break;
+                    }
+                    
+                    if (data.data && data.data[typeKey] && data.data[typeKey].items) {
+                        console.log(`🔍 Found ${typeKey}.items:`, data.data[typeKey].items.length);
+                        items = data.data[typeKey].items;
+                    } else {
+                        // Fallback to existing logic
+                        console.log('🔍 Falling back to generic items extraction');
+                        if (data.data?.items) items = data.data.items;
+                        else if (data.items) items = data.items;
+                        else if (Array.isArray(data)) items = data;
+                    }
+                    
+                    console.log(`🔍 Final items count:`, items.length);
+                    console.log('🔍 First item:', items[0]);
 
-                    container.innerHTML = `<h2 class="section-title">Results for "${query}"</h2><div class="grid" id="searchGrid"></div>`;
-                    const grid = document.getElementById('searchGrid');
+                    // ✅ FIXED: Use correct search results container + create grid
+                    const container = document.getElementById('searchResults');
+                    const sectionTitle = container.querySelector('.section-title');
+                    if (sectionTitle) {
+                        sectionTitle.textContent = `Risultati per "${query}"`;
+                    }
 
                     if (items.length === 0) {
                         const filterNames = { 'track': 'singoli', 'album': 'album', 'artist': 'artisti' };
                         const filterLabel = filterNames[state.searchType] || 'risultati';
-                        grid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px 20px; font-size: 16px;">Nessun ${filterLabel} trovato. Prova con parole chiave diverse.</p>`;
+                        container.innerHTML = `
+                            <h2 class="section-title">Nessun ${filterLabel} trovato</h2>
+                            <div class="grid" style="justify-items: center; padding: 60px 20px;">
+                                <p style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px 20px; font-size: 16px;">
+                                    Nessun ${filterLabel} trovato per "${query}". Prova con altre parole chiave.
+                                </p>
+                                <button class="btn-text" onclick="switchTab('search')">Nuova ricerca</button>
+                            </div>
+                        `;
                         return;
                     }
 
                     // Limit results and render based on type
-                    const limitedItems = items.slice(0, 20); // Show more results
+                    const limitedItems = items.slice(0, 25);
+                    
+                    let htmlContent = `
+                        <h2 class="section-title">
+                            <span>Risultati (${limitedItems.length})</span>
+                            <button class="btn-text" onclick="switchTab('search')">Nuova ricerca</button>
+                        </h2>
+                        <div class="grid" id="searchGrid">
+                    `;
+
                     if (state.searchType === 'track') {
-                        grid.innerHTML = limitedItems.map((track, i) => createCard(track, i, true)).join('');
+                        htmlContent += limitedItems.map((track, i) => createCard(track, i, true)).join('');
                     } else if (state.searchType === 'album') {
-                        grid.innerHTML = limitedItems.map((album, i) => createAlbumCard(album, i)).join('');
+                        htmlContent += limitedItems.map((album, i) => createAlbumCard(album, i)).join('');
                     } else if (state.searchType === 'artist') {
-                        // Filter collaborations for artist search
-                        const cleanArtists = limitedItems.filter(artist => {
-                            const name = (artist.name || '').toLowerCase();
-                            return !name.includes(' & ') && !name.includes(' feat.') && !name.includes(' ft.') && 
-                                   !name.includes(' featuring ') && !name.includes(' with ') && !name.includes('/');
-                        });
-                        grid.innerHTML = cleanArtists.map((artist, i) => createArtistCard(artist, i)).join('');
+                        // Advanced artist filtering + 90% similarity matching
+                        const queryLower = query.toLowerCase().trim();
+                        
+                        const cleanArtists = limitedItems
+                            // 1. Remove collaborations
+                            .filter(artist => {
+                                const nameLower = (artist.name || '').toLowerCase().trim();
+                                return ![
+                                    ' & ', ' and ', ', ', ' / ', ' - ', ' feat.', ' ft.', ' featuring ', ' with ', ' x '
+                                ].some(sep => nameLower.includes(sep));
+                            })
+                            // 2. Exact match OR 90%+ similarity
+                            .filter(artist => {
+                                const artistName = (artist.name || '').toLowerCase().trim();
+                                
+                                // Exact match
+                                if (artistName === queryLower) return true;
+                                
+                                // High similarity (90%+ threshold)
+                                const similarity = levenshteinSimilarity(artistName, queryLower);
+                                return similarity >= 0.9;
+                            })
+                            .sort((a, b) => {
+                                const aSim = levenshteinSimilarity((a.name || '').toLowerCase(), queryLower);
+                                const bSim = levenshteinSimilarity((b.name || '').toLowerCase(), queryLower);
+                                return bSim - aSim; // Best matches first
+                            });
+                        
+                        htmlContent += cleanArtists.slice(0, 20).map((artist, i) => createArtistCard(artist, i)).join('');
                     }
+
+                    htmlContent += `</div>`;
+                    container.innerHTML = htmlContent;
 
                 } catch (error) {
                     console.error('Search failed:', error);
@@ -2638,6 +2727,13 @@ h1 { font-size: 34px; font-weight: 800; }
         }
         
         // --- CSV Import Helpers (Based on provided mechanism) ---
+        // Enhanced Levenshtein similarity (0-1 score)
+        function levenshteinSimilarity(a, b) {
+            const distance = levenshtein(a, b);
+            const maxLength = Math.max(a.length, b.length);
+            return 1 - (distance / maxLength);
+        }
+        
         function levenshtein(a, b) {
             if (a.length === 0) return b.length;
             if (b.length === 0) return a.length;
