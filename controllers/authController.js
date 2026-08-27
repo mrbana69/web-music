@@ -139,6 +139,22 @@ class AuthController {
     }
   }
 
+  async googleLibrary(req, res, next) {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '') || req.query.token || req.query.access_token;
+
+      if (!token) {
+        return res.status(200).json({ playlists: [], likedSongs: [] });
+      }
+
+      const library = await authService.getUserLibrary(token);
+      return res.status(200).json(library);
+    } catch (err) {
+      next(err);
+    }
+  }
+
   // ==========================================
   // YouTube Device Code Flow (TV / CLI Fallback)
   // ==========================================

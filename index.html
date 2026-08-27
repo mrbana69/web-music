@@ -2508,65 +2508,137 @@ h1 { font-size: 34px; font-weight: 800; }
             } catch (e) { console.error(e); }
         }
 
-        // Initial Dummy Data for "Listen Now"
-        function loadRecommendations() {
-            const history = JSON.parse(localStorage.getItem('listening_history') || '[]');
-            const grid = document.getElementById('recommendations');
-            grid.innerHTML = '';
-            
-            if (history.length === 0) {
-                grid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Recently played songs will appear here.</p>';
-                return;
-            }
+        // Synchronize personalized user library from connected account
+        async function syncUserGoogleLibrary() {
+            const token = localStorage.getItem('google_token');
+            if (!token) return;
 
-            // Add Daily Mix card
-            const dailyMixCard = `
-                <div class="card animate-in" onclick="loadDailyMix()">
-                    <div class="artwork" style="background: linear-gradient(45deg, #ff6b6b, #4ecdc4); display:flex; align-items:center; justify-content:center;">
-                        <svg class="icon icon-xl" style="color:white;" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            try {
+                const res = await apiFetch(`/auth/google/library?token=${encodeURIComponent(token)}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                let updated = false;
+
+                // Sync playlists
+                if (data.playlists && Array.isArray(data.playlists) && data.playlists.length > 0) {
+                    const existingIds = new Set(state.playlists.map(p => p.id));
+                    const newPlaylists = data.playlists.filter(p => !existingIds.has(p.id));
+                    if (newPlaylists.length > 0) {
+                        state.playlists = [...state.playlists, ...newPlaylists];
+                        localStorage.setItem('playlists', JSON.stringify(state.playlists));
+                        renderPlaylists();
+                        updated = true;
+                    }
+                }
+
+                // Sync liked songs
+                if (data.likedSongs && Array.isArray(data.likedSongs) && data.likedSongs.length > 0) {
+                    const existingLiked = new Set(state.likedSongs.map(s => s.id));
+                    const newLiked = data.likedSongs.filter(s => !existingLiked.has(s.id));
+                    if (newLiked.length > 0) {
+                        state.likedSongs = [...state.likedSongs, ...newLiked];
+                        localStorage.setItem('likedSongs', JSON.stringify(state.likedSongs));
+                        updated = true;
+                    }
+
+                    // If listening history is empty, populate with liked songs
+                    const history = JSON.parse(localStorage.getItem('listening_history') || '[]');
+                    if (history.length === 0) {
+                        localStorage.setItem('listening_history', JSON.stringify(data.likedSongs.slice(0, 10)));
+                        loadRecommendations();
+                    }
+                }
+
+                if (updated) {
+                    console.log('Successfully synced user library from Google account');
+                }
+            } catch (e) {
+                console.warn('Syncing user library failed:', e);
+            }
+        }
+
+        // Home "Listen Now" Personal Recommendations & Trending
+        async function loadRecommendations() {
+            const history = JSON.parse(localStorage.getItem('listening_history') || '[]');
+            const liked = state.likedSongs || [];
+            const grid = document.getElementById('recommendations');
+            if (!grid) return;
+            
+            grid.innerHTML = '<div class="spinner" style="grid-column:1/-1;"></div>';
+
+            const userTracks = [...history, ...liked];
+
+            if (userTracks.length > 0) {
+                // Deduplicate tracks by ID
+                const uniqueTracks = [];
+                const seenIds = new Set();
+                for (const t of userTracks) {
+                    if (t && t.id && !seenIds.has(t.id)) {
+                        seenIds.add(t.id);
+                        uniqueTracks.push(t);
+                    }
+                }
+
+                // Add Daily Mix card
+                const dailyMixCard = `
+                    <div class="card animate-in" onclick="loadDailyMix()">
+                        <div class="artwork" style="background: linear-gradient(45deg, #ff6b6b, #4ecdc4); display:flex; align-items:center; justify-content:center;">
+                            <svg class="icon icon-xl" style="color:white;" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        </div>
+                        <div class="card-title">Daily Mix</div>
+                        <div class="card-subtitle">Personalizzato per te</div>
                     </div>
-                    <div class="card-title">Daily Mix</div>
-                    <div class="card-subtitle">Personalized for you</div>
-                </div>
-            `;
-            grid.innerHTML = dailyMixCard + history.map((track, i) => createCard(track, i + 1)).join('');
+                `;
+                grid.innerHTML = dailyMixCard + uniqueTracks.slice(0, 15).map((track, i) => createCard(track, i + 1)).join('');
+            } else {
+                // Load trending hits on initial start
+                try {
+                    const res = await apiFetch('/search/?s=Top+Hits+2025');
+                    const data = await res.json();
+                    const tracks = data?.data?.items || data?.data?.tracks?.items || [];
+                    if (tracks.length > 0) {
+                        grid.innerHTML = tracks.slice(0, 12).map((track, i) => createCard(track, i)).join('');
+                    } else {
+                        grid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Inizia ad ascoltare brani per ricevere consigli personalizzati.</p>';
+                    }
+                } catch (e) {
+                    grid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Inizia ad ascoltare brani per ricevere consigli personalizzati.</p>';
+                }
+            }
         }
 
         async function loadDailyMix() {
             const history = JSON.parse(localStorage.getItem('listening_history') || '[]');
-            if (history.length === 0) return;
+            const liked = state.likedSongs || [];
+            const allTracks = [...history, ...liked];
+            if (allTracks.length === 0) return;
             
-            // Use the most recent track to get a mix
-            const track = history[0];
+            const seedTrack = allTracks[0];
             try {
-                const infoRes = await apiFetch(`/info/?id=${track.id}`);
-                const infoData = await infoRes.json();
+                showGlobalSpinner('Caricamento mix personalizzato...');
+                const mixRes = await apiFetch(`/mix/?id=${encodeURIComponent(seedTrack.id)}`);
+                const mixData = await mixRes.json();
                 
-                if (infoData.data && infoData.data.mixes && infoData.data.mixes.TRACK_MIX) {
-                    const mixId = infoData.data.mixes.TRACK_MIX;
-                    const mixRes = await apiFetch(`/mix/?id=${mixId}`);
-                    const mixData = await mixRes.json();
-                    
-                    const items = mixData.items || (mixData.data && mixData.data.items);
-                    if (items) {
-                        const mixTracks = items.map(entry => entry.item || entry).filter(t => t && t.title).map(t => {
-                            if (t.artists && !t.artist) {
-                                t.artist = t.artists[0];
-                            }
-                            if (!t.artist) t.artist = { name: 'Unknown' };
-                            return t;
-                        });
-                        if (mixTracks.length > 0) {
-                            // Play the first track of the mix
-                            playTrack(mixTracks[0], false, false);
-                            // Add the rest to queue
-                            state.queue.push(...mixTracks.slice(1));
-                            updateQueueUI();
+                const items = mixData.items || (mixData.data && mixData.data.items);
+                if (items && items.length > 0) {
+                    const mixTracks = items.map(entry => entry.item || entry).filter(t => t && t.title).map(t => {
+                        if (t.artists && !t.artist) {
+                            t.artist = t.artists[0];
                         }
+                        if (!t.artist) t.artist = { name: 'Unknown' };
+                        return t;
+                    });
+                    if (mixTracks.length > 0) {
+                        playTrack(mixTracks[0], false, false);
+                        state.queue = [...mixTracks];
+                        updateQueueUI();
                     }
                 }
             } catch (e) {
                 console.error("Daily mix failed", e);
+            } finally {
+                hideGlobalSpinner();
             }
         }
 
@@ -3355,15 +3427,17 @@ h1 { font-size: 34px; font-weight: 800; }
             window.location.href = '/api/auth/google/login?redirect=true';
         }
 
-        function checkAuthOnStartup() {
+        async function checkAuthOnStartup() {
             const user = localStorage.getItem('google_user');
             const authModal = document.getElementById('authModal');
             if (!user) {
                 if (authModal) authModal.classList.remove('hidden');
             } else {
                 if (authModal) authModal.classList.add('hidden');
+                await syncUserGoogleLibrary();
             }
             updateAccountUI();
+            loadRecommendations();
         }
 
         loadRecommendations();

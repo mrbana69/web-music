@@ -11,6 +11,7 @@ router.get('/spotify/refresh', (req, res, next) => authController.spotifyRefresh
 // Google Auth
 router.get('/google/login', (req, res, next) => authController.googleLogin(req, res, next));
 router.get('/google/callback', (req, res, next) => authController.googleCallback(req, res, next));
+router.get('/google/library', (req, res, next) => authController.googleLibrary(req, res, next));
 
 // YouTube TV Device Code Flow
 router.get('/yt/get-code', (req, res, next) => authController.ytGetCode(req, res, next));

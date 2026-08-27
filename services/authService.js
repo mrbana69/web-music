@@ -153,6 +153,70 @@ class AuthService {
     };
   }
 
+  async getUserLibrary(accessToken) {
+    if (!accessToken || accessToken === 'demo_google_access_token') {
+      return {
+        playlists: [],
+        likedSongs: []
+      };
+    }
+
+    const headers = {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/json'
+    };
+
+    let playlists = [];
+    let likedSongs = [];
+
+    // 1. Fetch user's YouTube playlists
+    try {
+      const plData = await fetchJson('https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&mine=true&maxResults=25', { headers, timeout: 5000 });
+      if (plData && plData.items) {
+        playlists = plData.items.map(p => ({
+          id: p.id,
+          name: p.snippet?.title || 'Playlist',
+          title: p.snippet?.title || 'Playlist',
+          cover: p.snippet?.thumbnails?.high?.url || p.snippet?.thumbnails?.medium?.url || '',
+          itemCount: p.contentDetails?.itemCount || 0,
+          songs: []
+        }));
+      }
+    } catch (e) {
+      console.warn('[AuthService] Fetching YouTube playlists failed:', e.message);
+    }
+
+    // 2. Fetch user's Liked videos
+    try {
+      const likedData = await fetchJson('https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&myRating=like&maxResults=30', { headers, timeout: 5000 });
+      if (likedData && likedData.items) {
+        likedSongs = likedData.items.map(v => {
+          const title = v.snippet?.title || '';
+          const channelTitle = v.snippet?.channelTitle || 'Artist';
+          const thumb = v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.medium?.url || '';
+          return {
+            id: v.id,
+            videoId: v.id,
+            title,
+            artist: { id: `art_${v.id}`, name: channelTitle, picture: thumb },
+            artists: [{ name: channelTitle }],
+            album: { id: `alb_${v.id}`, title, cover: thumb },
+            duration: 210,
+            duration_ms: 210000,
+            source: 'youtube-liked'
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('[AuthService] Fetching YouTube liked videos failed:', e.message);
+    }
+
+    return {
+      playlists,
+      likedSongs
+    };
+  }
+
   // ==========================================
   // YouTube TV / Device Code Flow (Fallback)
   // ==========================================
