@@ -1,4 +1,5 @@
 const spotifyService = require('../services/spotifyService');
+const youtubeMusicService = require('../services/youtubeMusicService');
 const trackResolverService = require('../services/trackResolverService');
 const streamResolutionService = require('../services/streamResolutionService');
 const { createTrackManifest } = require('../lib/manifestGenerator');
@@ -42,7 +43,7 @@ class MusicController {
           title: 'Track ' + id,
           duration: 220,
           duration_ms: 220000,
-          artist: { id: 'artist-1', name: 'Various Artists', picture: '/icons/192x192.png' },
+          artist: { id: 'artist-1', name: 'Artist', picture: '/icons/192x192.png' },
           album: { id: 'album-1', title: 'Single', cover: '/icons/512x512.png' }
         };
       }
@@ -114,7 +115,12 @@ class MusicController {
         recTracks = await spotifyService.getRecommendations(cleanId, 15);
       }
 
-      // 2. Fallback to catalog mix
+      // 2. Try YouTube Music recommendations
+      if ((!recTracks || recTracks.length === 0) && cleanId) {
+        recTracks = await youtubeMusicService.getRecommendations(cleanId, 15);
+      }
+
+      // 3. Fallback to catalog mix
       if (!recTracks || recTracks.length === 0) {
         const catalogMix = getMixById(id);
         return res.status(200).json(catalogMix);
@@ -155,7 +161,17 @@ class MusicController {
         }
       }
 
-      // 2. Fallback to local catalog
+      // 2. Try YouTube Music artist search
+      if (!artist) {
+        const ytArtistData = await youtubeMusicService.getArtist(artistId);
+        if (ytArtistData && ytArtistData.tracks && ytArtistData.tracks.length > 0) {
+          artist = ytArtistData.artist;
+          tracks = ytArtistData.tracks;
+          albums = ytArtistData.albums;
+        }
+      }
+
+      // 3. Fallback to local catalog
       if (!artist) {
         artist = getArtistById(artistId) || DEMO_ARTISTS[0];
         tracks = DEMO_TRACKS.filter((t) => t.artist.id === artist.id);
@@ -245,4 +261,3 @@ class MusicController {
 }
 
 module.exports = new MusicController();
-

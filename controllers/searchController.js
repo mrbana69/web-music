@@ -21,7 +21,7 @@ class SearchController {
         });
       }
 
-      // 1. Try Spotify search if configured
+      // 1. Try Spotify if configured
       if (spotifyService.isConfigured()) {
         const spotifyResults = await spotifyService.search(query, type, 25);
         if (spotifyResults && spotifyResults.items && spotifyResults.items.length > 0) {
@@ -31,42 +31,15 @@ class SearchController {
         }
       }
 
-      // 2. Try YouTube Music search
-      const ytCandidates = await youtubeMusicService.searchCandidates(query);
-      if (ytCandidates && ytCandidates.length > 0) {
-        const tracks = ytCandidates.map((c) => ({
-          id: c.videoId || c.id,
-          title: c.title,
-          duration: c.duration,
-          duration_ms: c.duration_ms,
-          artist: { id: 'yt_artist', name: c.artist, picture: c.thumbnail },
-          artists: [{ id: 'yt_artist', name: c.artist }],
-          album: { id: 'yt_album', title: c.title, cover: c.thumbnail },
-          source: 'youtube'
-        }));
-
-        const artists = [
-          ...new Set(ytCandidates.map((c) => c.artist).filter(Boolean))
-        ].map((name, i) => ({
-          id: `yt_art_${i}`,
-          name,
-          picture: ytCandidates.find((c) => c.artist === name)?.thumbnail || '',
-          source: 'youtube'
-        }));
-
-        const items = type === 'artist' ? artists : tracks;
-
+      // 2. Primary Engine: YouTube Music (Live & Free worldwide)
+      const ytResults = await youtubeMusicService.search(query, type, 25);
+      if (ytResults && ytResults.items && ytResults.items.length > 0) {
         return res.status(200).json({
-          data: {
-            items,
-            tracks: { items: tracks },
-            artists: { items: artists },
-            albums: { items: [] }
-          }
+          data: ytResults
         });
       }
 
-      // 3. Fallback to rich catalog search
+      // 3. Fallback to rich local catalog search
       const qNorm = cleanText(query);
       const trackMatches = DEMO_TRACKS.filter((t) => {
         const haystack = `${cleanText(t.title)} ${cleanText(t.artist.name)} ${cleanText(t.album.title)}`;
@@ -93,4 +66,3 @@ class SearchController {
 }
 
 module.exports = new SearchController();
-
