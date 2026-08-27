@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ReApple Music-v11';
+const CACHE_NAME = 'Preluded-Music-v12';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -12,62 +12,53 @@ self.addEventListener('install', (event) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  self.skipWaiting(); // Force activation of new SW
+  self.skipWaiting();
 });
 
-// Fetch Event: Serve from cache if available, otherwise network
-// Note: avoid rejecting respondWith to prevent console errors when cross-origin requests fail.
+// Fetch Event: Only cache same-origin static assets
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
 
-  // Direct network-only for dynamic API endpoints
-  if (requestUrl.pathname.startsWith('/api') || requestUrl.pathname.startsWith('/health')) {
-    event.respondWith(
-      fetch(event.request).catch(() => Response.error())
-    );
+  // 1. Bypass Service Worker entirely for media (audio/video) or cross-origin requests
+  if (
+    event.request.destination === 'audio' ||
+    event.request.destination === 'video' ||
+    requestUrl.origin !== self.location.origin ||
+    requestUrl.pathname.startsWith('/api') ||
+    requestUrl.pathname.startsWith('/health')
+  ) {
+    // Let browser handle media and API requests natively
     return;
   }
 
-  // Only handle same-origin requests via cache.
-  // Cross-origin requests should be passed through (and errors handled gracefully).
-  if (requestUrl.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        return cachedResponse || fetch(event.request).catch((err) => {
+  // 2. Same-origin app shell caching
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      return (
+        cachedResponse ||
+        fetch(event.request).catch((err) => {
           console.warn('SW fetch failed for same-origin request:', event.request.url, err);
           return Response.error();
-        });
-      }).catch((err) => {
-        console.warn('SW cache match failed:', err);
-        return fetch(event.request).catch(() => Response.error());
-      })
-    );
-  } else {
-    // For cross-origin requests, just forward and handle failures silently.
-    event.respondWith(
-      fetch(event.request).catch((err) => {
-        console.warn('SW cross-origin fetch failed:', event.request.url, err);
-        return Response.error();
-      })
-    );
-  }
+        })
+      );
+    }).catch(() => fetch(event.request))
+  );
 });
 
-// Activate Event: Clean up old caches, claim clients, and notify about updates
+// Activate Event: Clean up old caches, claim clients
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
-      // Take control of all clients
       self.clients.claim(),
-      // Clean up old caches
       caches.keys().then((keyList) => {
-        return Promise.all(keyList.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        }));
+        return Promise.all(
+          keyList.map((key) => {
+            if (key !== CACHE_NAME) {
+              return caches.delete(key);
+            }
+          })
+        );
       }),
-      // Notify all clients that update is available
       self.clients.matchAll().then((clients) => {
         clients.forEach((client) => {
           client.postMessage({ type: 'UPDATE_AVAILABLE' });
@@ -77,7 +68,6 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Update detection: Handle messages from clients
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();

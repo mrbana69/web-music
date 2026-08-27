@@ -26,6 +26,20 @@ class TrackResolverService {
       duration_ms: targetDurationMs
     };
 
+    // If id itself is a valid 11-character YouTube video ID (e.g. dQw4w9WgXcQ)
+    if (id && /^[a-zA-Z0-9_-]{11}$/.test(id)) {
+      const result = {
+        videoId: id,
+        title: title || 'Track',
+        artist: typeof artist === 'string' ? artist : artist?.name || 'Artist',
+        duration_ms: targetDurationMs || 220000,
+        score: 100,
+        source: 'youtube-direct'
+      };
+      cacheService.set(queryKey, result, config.cache.resolverTtl);
+      return result;
+    }
+
     // If it's a known demo track ID
     const demoMatch = getTrackById(id);
     if (demoMatch && (!title || demoMatch.title.toLowerCase() === title.toLowerCase())) {

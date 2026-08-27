@@ -5,6 +5,14 @@ const { getTrackById } = require('../lib/catalogData');
 
 class StreamResolutionService {
   constructor() {
+    this.invidiousInstances = [
+      'https://invidious.flokinet.to',
+      'https://invidious.projectsegfau.lt',
+      'https://inv.tux.pizza',
+      'https://invidious.nerdvpn.de',
+      'https://vid.puffyan.us'
+    ];
+
     this.pipedInstances = [
       'https://pipedapi.kavin.rocks',
       'https://api.piped.yt',
@@ -29,7 +37,7 @@ class StreamResolutionService {
 
     // 1. Check if it's a known catalog/demo ID
     const demoTrack = getTrackById(videoId);
-    if (demoTrack && demoTrack.streamUrl) {
+    if (demoTrack && demoTrack.streamUrl && !demoTrack.streamUrl.includes('soundhelix')) {
       const result = {
         videoId,
         directUrl: demoTrack.streamUrl,
@@ -41,34 +49,54 @@ class StreamResolutionService {
       return result;
     }
 
-    // 2. Try Piped / Innertube instances for direct stream extraction
     let directUrl = null;
     let mimeType = 'audio/mp4';
 
-    for (const instance of this.pipedInstances) {
+    // 2. Try Invidious instances
+    for (const instance of this.invidiousInstances) {
       try {
-        const streamData = await fetchJson(`${instance}/streams/${videoId}`, { timeout: 4000 });
-        if (streamData && streamData.audioStreams && streamData.audioStreams.length > 0) {
-          // Sort by bitrate descending to get best quality audio
-          const sorted = streamData.audioStreams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-          const bestAudio = sorted[0];
-          if (bestAudio && bestAudio.url) {
-            directUrl = bestAudio.url;
-            mimeType = bestAudio.mimeType || 'audio/mp4';
+        const streamData = await fetchJson(`${instance}/api/v1/videos/${videoId}`, { timeout: 3500 });
+        const audioFormats = streamData?.adaptiveFormats?.filter(f => f.type && f.type.startsWith('audio/')) || [];
+        if (audioFormats.length > 0) {
+          // Sort by bitrate descending
+          const sorted = audioFormats.sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
+          const best = sorted[0];
+          if (best && best.url) {
+            directUrl = best.url;
+            mimeType = best.type ? best.type.split(';')[0] : 'audio/mp4';
             break;
           }
         }
       } catch (err) {
-        // Try next instance
         continue;
       }
     }
 
-    // 3. Fallback audio source for development / testing if external extractors are restricted
+    // 3. Try Piped instances if Invidious didn't return
     if (!directUrl) {
-      const baseNum = Number(String(videoId).replace(/\D/g, '')) || 1;
-      directUrl = `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${(baseNum % 5) + 1}.mp3`;
-      mimeType = 'audio/mp3';
+      for (const instance of this.pipedInstances) {
+        try {
+          const streamData = await fetchJson(`${instance}/streams/${videoId}`, { timeout: 3500 });
+          if (streamData && streamData.audioStreams && streamData.audioStreams.length > 0) {
+            const sorted = streamData.audioStreams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+            const bestAudio = sorted[0];
+            if (bestAudio && bestAudio.url) {
+              directUrl = bestAudio.url;
+              mimeType = bestAudio.mimeType || 'audio/mp4';
+              break;
+            }
+          }
+        } catch (err) {
+          continue;
+        }
+      }
+    }
+
+    // 4. Invidious direct fallback proxy stream
+    if (!directUrl) {
+      // Direct stream endpoint from reliable public invidious mirror
+      directUrl = `https://invidious.flokinet.to/latest_version?id=${videoId}&itag=140`;
+      mimeType = 'audio/mp4';
     }
 
     const result = {
@@ -76,7 +104,7 @@ class StreamResolutionService {
       directUrl,
       mimeType,
       expiresInSeconds: config.cache.streamTtl,
-      source: directUrl.includes('soundhelix') ? 'catalog-stream' : 'youtube-stream'
+      source: 'youtube-stream'
     };
 
     cacheService.set(cacheKey, result, config.cache.streamTtl);
@@ -86,4 +114,3 @@ class StreamResolutionService {
 
 const streamResolutionService = new StreamResolutionService();
 module.exports = streamResolutionService;
-
