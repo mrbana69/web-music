@@ -3930,24 +3930,20 @@ h1 { font-size: 34px; font-weight: 800; }
 
         async function openAlbumPage(albumOrId) {
             let albumId = null;
-            let albumName = '';
+            let albumTitle = '';
+            let artistName = '';
             let albumCover = '';
 
-            if (typeof albumOrId === 'number') {
-                albumId = albumOrId;
-            } else if (typeof albumOrId === 'string') {
-                if (/^\d+$/.test(albumOrId)) {
-                    albumId = Number(albumOrId);
-                } else {
-                    albumName = albumOrId;
-                }
+            if (typeof albumOrId === 'string') {
+                albumTitle = albumOrId;
             } else if (typeof albumOrId === 'object' && albumOrId !== null) {
-                albumId = albumOrId.id || albumOrId.album?.id;
-                albumName = albumOrId.title || albumOrId.name || albumOrId.album?.title || '';
-                albumCover = albumOrId.cover || albumOrId.album?.cover || '';
+                albumId = albumOrId.id || albumOrId.browseId || albumOrId.album?.id;
+                albumTitle = albumOrId.title || albumOrId.name || albumOrId.album?.title || '';
+                artistName = albumOrId.artist?.name || albumOrId.artists?.[0]?.name || (typeof albumOrId.artist === 'string' ? albumOrId.artist : '');
+                albumCover = albumOrId.cover || albumOrId.album?.cover || albumOrId.picture || '';
             }
 
-            if (!albumId && !albumName) return;
+            if (!albumId && !albumTitle) return;
 
             // Hide other views
             ['home', 'search', 'library', 'collection', 'playlist-page', 'artist', 'album'].forEach(tab => {
@@ -3958,7 +3954,6 @@ h1 { font-size: 34px; font-weight: 800; }
             });
             document.getElementById('tab-album').classList.remove('hidden');
 
-            // Usa gli elementi corretti della tab Album
             const header = document.getElementById('albumHeader');
             const tracksContainer = document.getElementById('albumTracks');
 
@@ -3967,29 +3962,31 @@ h1 { font-size: 34px; font-weight: 800; }
 
             showGlobalSpinner('Caricamento album...');
 
-            // Clear any previous album song state
             state.currentAlbumSongs = [];
             state.currentAlbumIndex = -1;
 
             try {
-                const res = await apiFetch(`/album/?id=${albumId}`);
+                const queryParams = new URLSearchParams();
+                if (albumId) queryParams.set('id', albumId);
+                if (albumTitle) queryParams.set('title', albumTitle);
+                if (artistName) queryParams.set('artist', artistName);
+
+                const res = await apiFetch(`/album/?${queryParams.toString()}`);
                 const data = await res.json();
-                const album = data.album || data.data || {};
-                const items = data.items || data.data?.items || [];
-                const albumCoverId = album.cover || albumCover || '';
-                const coverUrl = formatArtworkUrl(albumCoverId, '640x640');
-                const artistName = album.artist?.name || (album.artists?.[0]?.name) || '';
+                const album = data.album || data.data?.album || data.data || {};
+                const items = data.items || data.data?.items || data.tracks || [];
+                const coverUrl = formatArtworkUrl(album.cover || albumCover, '640x640');
+                const resolvedArtist = album.artist?.name || (album.artists?.[0]?.name) || artistName || '';
                 const year = album.releaseDate ? ` · ${album.releaseDate.split('-')[0]}` : '';
 
-                // Renderizza Header Album con layout specifico
                 if (header) {
                     header.innerHTML = `
                         <div style="flex-shrink:0;">
                             <img src="${coverUrl}" style="width:150px; height:150px; border-radius:12px; object-fit:cover; box-shadow: 0 8px 30px rgba(0,0,0,0.3);">
                         </div>
                         <div style="flex:1; min-width:0;">
-                            <h1 style="font-size:22px; margin-bottom:8px; line-height:1.2; word-wrap:break-word;">${album.title || albumName}</h1>
-                            <div style="font-size:15px; color:var(--text-secondary); margin-bottom:12px;">${artistName}${year}</div>
+                            <h1 style="font-size:22px; margin-bottom:8px; line-height:1.2; word-wrap:break-word;">${album.title || albumTitle}</h1>
+                            <div style="font-size:15px; color:var(--text-secondary); margin-bottom:12px;">${resolvedArtist}${year}</div>
                             <div style="font-size:13px; color:var(--text-secondary); margin-bottom:16px;">${items.length} brani</div>
                             <button id="albumPlayBtn" class="btn-primary" style="padding:10px 24px; background:var(--accent); color:#000; border:none; border-radius:25px; font-weight:600; cursor:pointer; font-size:14px; display:inline-flex; align-items:center;">
                                 <svg class="icon" viewBox="0 0 24 24" style="margin-right:6px; width:20px; height:20px;"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
@@ -4013,23 +4010,28 @@ h1 { font-size: 34px; font-weight: 800; }
                 state.currentAlbumSongs = tracks;
 
                 if (tracksContainer) {
-                    tracksContainer.innerHTML = tracks.map((track, i) => {
-                        const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                        const artUrl = formatArtworkUrl(track.album?.cover, '320x320') || coverUrl;
-                        return `
-                            <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick="playAlbumSong(${i})">
-                                <div class="list-artwork"><img src="${artUrl}"></div>
-                                <div class="list-info">
-                                    <div class="card-title">${track.title}</div>
-                                    <div class="card-subtitle">
-                                        <button class="btn-text" style="padding:0; font-size:12px; line-height:1.2;" onclick="event.stopPropagation(); openArtistPage(${JSON.stringify({id: track.artist?.id, name: track.artist?.name, picture: track.artist?.picture}).replace(/\"/g,'&quot;').replace(/'/g,'&#39;')})">
-                                            ${track.artist?.name || 'Unknown'}
-                                        </button>
+                    if (tracks.length === 0) {
+                        tracksContainer.innerHTML = '<p style="color:var(--text-secondary); padding:20px;">Nessun brano trovato per questo album.</p>';
+                    } else {
+                        tracksContainer.innerHTML = tracks.map((track, i) => {
+                            const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                            const artUrl = formatArtworkUrl(track.album?.cover, '320x320') || coverUrl;
+                            const artistDisplayName = track.artist?.name || resolvedArtist || 'Unknown';
+                            return `
+                                <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick="playAlbumSong(${i})">
+                                    <div class="list-artwork"><img src="${artUrl}"></div>
+                                    <div class="list-info">
+                                        <div class="card-title">${track.title}</div>
+                                        <div class="card-subtitle">
+                                            <button class="btn-text" style="padding:0; font-size:12px; line-height:1.2;" onclick="event.stopPropagation(); openArtistPage(${JSON.stringify({name: artistDisplayName, picture: artUrl}).replace(/\"/g,'&quot;').replace(/'/g,'&#39;')})">
+                                                ${artistDisplayName}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        `;
-                    }).join('');
+                            `;
+                        }).join('');
+                    }
                 }
 
             } catch (err) {

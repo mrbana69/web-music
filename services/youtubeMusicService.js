@@ -364,6 +364,188 @@ class YouTubeMusicService {
   }
 
   /**
+   * Get album details and full tracklist from YouTube Music
+   */
+  async getAlbum(albumQuery, artistName = '') {
+    if (!albumQuery) return null;
+    let cleanTitle = String(albumQuery).trim().replace(/^alb_/, '');
+
+    // If cleanTitle is an 11-char video ID, resolve track info first
+    if (/^[a-zA-Z0-9_-]{11}$/.test(cleanTitle)) {
+      const info = await this.getTrackInfo(cleanTitle);
+      if (info) {
+        cleanTitle = info.album?.title || info.title;
+        if (!artistName && info.artist?.name) artistName = info.artist.name;
+      }
+    }
+
+    const cacheKey = `yt_album_${encodeURIComponent(cleanTitle)}_${encodeURIComponent(artistName || '')}`;
+    const cached = cacheService.get(cacheKey);
+    if (cached) return cached;
+
+    let browseId = cleanTitle.startsWith('MPREb_') || cleanTitle.startsWith('OLAK5uy_') ? cleanTitle : null;
+    let albumCover = '';
+    let resolvedTitle = cleanTitle;
+    let resolvedArtist = artistName || 'Artist';
+
+    // If we don't have a direct browseId, search for the album
+    if (!browseId) {
+      try {
+        const query = `${cleanTitle} ${artistName}`.trim();
+        const payload = {
+          context: {
+            client: {
+              clientName: 'WEB_REMIX',
+              clientVersion: '1.20240101.01.00',
+              hl: 'it',
+              gl: 'IT'
+            }
+          },
+          query,
+          params: 'EgWKAQIYAWoMEAMQBBAJEA4QChAF'
+        };
+
+        const searchData = await fetchJson('https://music.youtube.com/youtubei/v1/search', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': 'https://music.youtube.com',
+            'Referer': 'https://music.youtube.com/'
+          },
+          body: JSON.stringify(payload),
+          timeout: 5000
+        });
+
+        const traverse = (node) => {
+          if (!node || typeof node !== 'object' || browseId) return;
+          if (node.musicResponsiveListItemRenderer) {
+            const item = node.musicResponsiveListItemRenderer;
+            const flex = item.flexColumns || [];
+            const t = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+            const a = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+            const bId = item.navigationEndpoint?.browseEndpoint?.browseId;
+            const rawThumb = item.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url;
+            if (t && bId) {
+              browseId = bId;
+              resolvedTitle = t;
+              if (a) resolvedArtist = a;
+              if (rawThumb) albumCover = rawThumb.replace(/=w\d+-h\d+/, '=w544-h544');
+            }
+          }
+          for (const k of Object.keys(node)) traverse(node[k]);
+        };
+
+        traverse(searchData);
+      } catch (e) {
+        console.warn('[YouTubeMusicService] Album search failed:', e.message);
+      }
+    }
+
+    let tracks = [];
+
+    // If we found a browseId, fetch the full official tracklist
+    if (browseId) {
+      try {
+        const browsePayload = {
+          context: {
+            client: {
+              clientName: 'WEB_REMIX',
+              clientVersion: '1.20240101.01.00',
+              hl: 'it',
+              gl: 'IT'
+            }
+          },
+          browseId
+        };
+
+        const browseRes = await fetchJson('https://music.youtube.com/youtubei/v1/browse', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': 'https://music.youtube.com',
+            'Referer': 'https://music.youtube.com/'
+          },
+          body: JSON.stringify(browsePayload),
+          timeout: 5000
+        });
+
+        const traverseHeader = (node) => {
+          if (!node || typeof node !== 'object') return;
+          if (node.musicDetailHeaderRenderer) {
+            const h = node.musicDetailHeaderRenderer;
+            const title = h.title?.runs?.[0]?.text;
+            const artist = h.subtitle?.runs?.[0]?.text;
+            const rawThumb = h.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url;
+            if (title) resolvedTitle = title;
+            if (artist) resolvedArtist = artist;
+            if (rawThumb) albumCover = rawThumb.replace(/=w\d+-h\d+/, '=w544-h544');
+          }
+          for (const k of Object.keys(node)) traverseHeader(node[k]);
+        };
+        traverseHeader(browseRes);
+
+        const traverseTracks = (node) => {
+          if (!node || typeof node !== 'object') return;
+          if (node.musicResponsiveListItemRenderer) {
+            const item = node.musicResponsiveListItemRenderer;
+            const flex = item.flexColumns || [];
+            const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+            const tArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || resolvedArtist;
+            const vId = item.playlistItemData?.videoId || flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId;
+            if (tTitle && vId) {
+              tracks.push({
+                id: vId,
+                videoId: vId,
+                title: tTitle,
+                artist: { id: `art_${encodeURIComponent(tArtist)}`, name: tArtist, picture: albumCover },
+                artists: [{ id: `art_${encodeURIComponent(tArtist)}`, name: tArtist }],
+                album: { id: browseId, title: resolvedTitle, cover: albumCover },
+                duration: 210,
+                duration_ms: 210000,
+                source: 'youtube-album'
+              });
+            }
+          }
+          for (const k of Object.keys(node)) traverseTracks(node[k]);
+        };
+        traverseTracks(browseRes);
+      } catch (e) {
+        console.warn('[YouTubeMusicService] Browse album failed:', e.message);
+      }
+    }
+
+    // Fallback to track search if browse had 0 tracks
+    if (tracks.length === 0) {
+      const searchRes = await this.search(`${resolvedTitle} ${resolvedArtist}`, 'track', 15);
+      tracks = searchRes?.tracks?.items || [];
+      if (!albumCover && tracks[0]?.album?.cover) {
+        albumCover = tracks[0].album.cover;
+      }
+    }
+
+    const album = {
+      id: browseId || `alb_${encodeURIComponent(resolvedTitle)}`,
+      title: resolvedTitle,
+      name: resolvedTitle,
+      cover: albumCover,
+      releaseDate: '2024',
+      artist: { id: `art_${encodeURIComponent(resolvedArtist)}`, name: resolvedArtist, picture: albumCover },
+      artists: [{ id: `art_${encodeURIComponent(resolvedArtist)}`, name: resolvedArtist }],
+      itemCount: tracks.length,
+      source: 'youtube'
+    };
+
+    const result = {
+      album,
+      tracks,
+      items: tracks.map(t => ({ item: t }))
+    };
+
+    cacheService.set(cacheKey, result, 3600);
+    return result;
+  }
+
+  /**
    * Get real similar artists based on YouTube Music recommendations
    */
   async getSimilarArtists(artistNameOrId) {

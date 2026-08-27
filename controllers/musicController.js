@@ -232,19 +232,27 @@ class MusicController {
    */
   async album(req, res, next) {
     try {
-      const { id } = req.query || {};
-      if (!id) {
-        return res.status(400).json({ error: 'Missing album id' });
+      const { id, title, name, artist } = req.query || {};
+      const albumQuery = title || name || id;
+      if (!albumQuery) {
+        return res.status(400).json({ error: 'Missing album query' });
       }
 
       let albumData = null;
 
+      // 1. Try Spotify if configured
       if (spotifyService.isConfigured()) {
-        albumData = await spotifyService.getAlbum(id);
+        albumData = await spotifyService.getAlbum(albumQuery);
       }
 
+      // 2. Try YouTube Music Album resolution
       if (!albumData) {
-        const localAlbum = getAlbumById(id) || DEMO_ALBUMS[0];
+        albumData = await youtubeMusicService.getAlbum(albumQuery, artist || '');
+      }
+
+      // 3. Fallback to local catalog
+      if (!albumData) {
+        const localAlbum = getAlbumById(albumQuery) || DEMO_ALBUMS[0];
         const albumTracks = DEMO_TRACKS.filter((t) => t.album.id === localAlbum.id);
         albumData = {
           album: localAlbum,
