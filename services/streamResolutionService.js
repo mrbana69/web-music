@@ -5,20 +5,66 @@ const { getTrackById } = require('../lib/catalogData');
 
 class StreamResolutionService {
   constructor() {
-    this.invidiousInstances = [
-      'https://invidious.flokinet.to',
-      'https://invidious.projectsegfau.lt',
-      'https://inv.tux.pizza',
-      'https://invidious.nerdvpn.de',
-      'https://vid.puffyan.us'
+    this.innertubeEndpoint = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+  }
+
+  /**
+   * Extract direct YouTube audio stream directly from Google's YouTube CDN
+   */
+  async extractDirectYouTubeStream(videoId) {
+    const clients = [
+      {
+        clientName: 'ANDROID_VR',
+        clientVersion: '1.50.28',
+        androidSdkVersion: 30,
+        hl: 'en',
+        gl: 'US'
+      },
+      {
+        clientName: 'WEB_REMIX',
+        clientVersion: '1.20240101.01.00',
+        hl: 'en',
+        gl: 'US'
+      }
     ];
 
-    this.pipedInstances = [
-      'https://pipedapi.kavin.rocks',
-      'https://api.piped.yt',
-      'https://pipedapi.tokhmi.xyz',
-      'https://piped-api.garudalinux.org'
-    ];
+    for (const client of clients) {
+      try {
+        const payload = {
+          context: { client },
+          videoId
+        };
+
+        const res = await fetchJson(this.innertubeEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Origin': 'https://music.youtube.com'
+          },
+          body: JSON.stringify(payload),
+          timeout: 4500
+        });
+
+        const formats = res?.streamingData?.adaptiveFormats || [];
+        const audioFormats = formats.filter((f) => f.mimeType && f.mimeType.startsWith('audio/'));
+
+        // Sort by bitrate descending for highest audio quality
+        const sorted = audioFormats.sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
+        const withUrl = sorted.find((f) => Boolean(f.url));
+
+        if (withUrl && withUrl.url) {
+          return {
+            url: withUrl.url,
+            mimeType: withUrl.mimeType ? withUrl.mimeType.split(';')[0] : 'audio/webm'
+          };
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -35,7 +81,7 @@ class StreamResolutionService {
       return cached;
     }
 
-    // 1. Check if it's a known catalog/demo ID
+    // 1. Check local catalog
     const demoTrack = getTrackById(videoId);
     if (demoTrack && demoTrack.streamUrl && !demoTrack.streamUrl.includes('soundhelix')) {
       const result = {
@@ -49,62 +95,27 @@ class StreamResolutionService {
       return result;
     }
 
-    let directUrl = null;
-    let mimeType = 'audio/mp4';
-
-    // 2. Try Invidious instances
-    for (const instance of this.invidiousInstances) {
-      try {
-        const streamData = await fetchJson(`${instance}/api/v1/videos/${videoId}`, { timeout: 3500 });
-        const audioFormats = streamData?.adaptiveFormats?.filter(f => f.type && f.type.startsWith('audio/')) || [];
-        if (audioFormats.length > 0) {
-          // Sort by bitrate descending
-          const sorted = audioFormats.sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
-          const best = sorted[0];
-          if (best && best.url) {
-            directUrl = best.url;
-            mimeType = best.type ? best.type.split(';')[0] : 'audio/mp4';
-            break;
-          }
-        }
-      } catch (err) {
-        continue;
-      }
+    // 2. Extract directly from YouTube Google CDN (zero third-party mirrors)
+    const directStream = await this.extractDirectYouTubeStream(videoId);
+    if (directStream && directStream.url) {
+      const result = {
+        videoId,
+        directUrl: directStream.url,
+        mimeType: directStream.mimeType,
+        expiresInSeconds: config.cache.streamTtl,
+        source: 'youtube-cdn'
+      };
+      cacheService.set(cacheKey, result, config.cache.streamTtl);
+      return result;
     }
 
-    // 3. Try Piped instances if Invidious didn't return
-    if (!directUrl) {
-      for (const instance of this.pipedInstances) {
-        try {
-          const streamData = await fetchJson(`${instance}/streams/${videoId}`, { timeout: 3500 });
-          if (streamData && streamData.audioStreams && streamData.audioStreams.length > 0) {
-            const sorted = streamData.audioStreams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-            const bestAudio = sorted[0];
-            if (bestAudio && bestAudio.url) {
-              directUrl = bestAudio.url;
-              mimeType = bestAudio.mimeType || 'audio/mp4';
-              break;
-            }
-          }
-        } catch (err) {
-          continue;
-        }
-      }
-    }
-
-    // 4. Invidious direct fallback proxy stream
-    if (!directUrl) {
-      // Direct stream endpoint from reliable public invidious mirror
-      directUrl = `https://invidious.flokinet.to/latest_version?id=${videoId}&itag=140`;
-      mimeType = 'audio/mp4';
-    }
-
+    // 3. If direct stream URL requires embedded player bridge, return clean videoId pointer
     const result = {
       videoId,
-      directUrl,
-      mimeType,
+      directUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      mimeType: 'audio/mp4',
       expiresInSeconds: config.cache.streamTtl,
-      source: 'youtube-stream'
+      source: 'youtube-embed-bridge'
     };
 
     cacheService.set(cacheKey, result, config.cache.streamTtl);

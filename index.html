@@ -1057,6 +1057,7 @@ h1 { font-size: 34px; font-weight: 800; }
     </div>
 
     <audio id="nativeAudio"></audio>
+    <div id="ytAudioBridge" style="position:fixed; bottom:-999px; left:-999px; width:1px; height:1px; opacity:0; pointer-events:none;"></div>
 
     <script>
         // --- 1. Universal Player using dash.js (Official DASH Library) ---
@@ -1422,13 +1423,169 @@ h1 { font-size: 34px; font-weight: 800; }
             } catch (e) {}
         })();
 
-        // No CORS proxy is used in production; the API must accept direct browser requests.
-        // If you require a local proxy for debugging, add it here.
+        // --- YouTube Audio Bridge Player ---
+        class YouTubeAudioPlayer {
+            constructor() {
+                this.isInit = false;
+                this.player = null;
+                this.ready = false;
+                this.pendingVideoId = null;
+                this.paused = true;
+                this.ended = false;
+                this.audioElement = {
+                    get duration() { return ytAudioPlayer.getDuration(); },
+                    get currentTime() { return ytAudioPlayer.getCurrentTime(); },
+                    set currentTime(val) { ytAudioPlayer.seekTo(val); },
+                    get paused() { return ytAudioPlayer.paused; },
+                    get ended() { return ytAudioPlayer.ended; },
+                    play: () => ytAudioPlayer.play(),
+                    pause: () => ytAudioPlayer.pause(),
+                    load: () => {},
+                    addEventListener: (event, handler) => {}
+                };
+                this.initAPI();
+            }
+
+            initAPI() {
+                if (window.YT && window.YT.Player) {
+                    this.createPlayer();
+                    return;
+                }
+                const tag = document.createElement('script');
+                tag.src = "https://www.youtube.com/iframe_api";
+                const firstScriptTag = document.getElementsByTagName('script')[0];
+                firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+                window.onYouTubeIframeAPIReady = () => {
+                    this.createPlayer();
+                };
+            }
+
+            createPlayer() {
+                const container = document.getElementById('ytAudioBridge');
+                if (!container) return;
+                try {
+                    this.player = new YT.Player('ytAudioBridge', {
+                        height: '1',
+                        width: '1',
+                        playerVars: {
+                            'autoplay': 1,
+                            'controls': 0,
+                            'playsinline': 1,
+                            'disablekb': 1,
+                            'fs': 0,
+                            'rel': 0,
+                            'origin': window.location.origin
+                        },
+                        events: {
+                            'onReady': () => {
+                                this.ready = true;
+                                if (this.player && this.player.setVolume) {
+                                    this.player.setVolume(state.volume * 100);
+                                }
+                                if (this.pendingVideoId) {
+                                    this.loadVideo(this.pendingVideoId);
+                                    this.pendingVideoId = null;
+                                }
+                            },
+                            'onStateChange': (e) => {
+                                if (e.data === 1) { // PLAYING
+                                    this.paused = false;
+                                    this.ended = false;
+                                    state.isPlaying = true;
+                                    updatePlayIcons();
+                                    requestWakeLock();
+                                } else if (e.data === 2) { // PAUSED
+                                    this.paused = true;
+                                    state.isPlaying = false;
+                                    updatePlayIcons();
+                                } else if (e.data === 0) { // ENDED
+                                    this.ended = true;
+                                    this.paused = true;
+                                    state.isPlaying = false;
+                                    nextTrack();
+                                }
+                            },
+                            'onError': (e) => {
+                                console.warn('YouTube player error:', e);
+                            }
+                        }
+                    });
+                } catch (e) {
+                    console.warn('YT Player init error:', e);
+                }
+            }
+
+            loadVideo(videoId) {
+                this.isInit = true;
+                this.ended = false;
+                this.paused = false;
+                if (!this.ready || !this.player || !this.player.loadVideoById) {
+                    this.pendingVideoId = videoId;
+                    return;
+                }
+                this.player.loadVideoById({ videoId: videoId });
+                this.player.playVideo();
+            }
+
+            play() {
+                if (this.player && this.player.playVideo) {
+                    this.player.playVideo();
+                    this.paused = false;
+                }
+            }
+
+            pause() {
+                if (this.player && this.player.pauseVideo) {
+                    this.player.pauseVideo();
+                    this.paused = true;
+                }
+            }
+
+            seekTo(seconds) {
+                if (this.player && this.player.seekTo) {
+                    this.player.seekTo(seconds, true);
+                }
+            }
+
+            getDuration() {
+                if (this.player && this.player.getDuration) {
+                    return this.player.getDuration() || 0;
+                }
+                return 0;
+            }
+
+            getCurrentTime() {
+                if (this.player && this.player.getCurrentTime) {
+                    return this.player.getCurrentTime() || 0;
+                }
+                return 0;
+            }
+
+            setVolume(val) {
+                if (this.player && this.player.setVolume) {
+                    this.player.setVolume(val * 100);
+                }
+            }
+
+            setPlaybackRate(rate) {
+                if (this.player && this.player.setPlaybackRate) {
+                    this.player.setPlaybackRate(rate);
+                }
+            }
+
+            reset() {
+                this.isInit = false;
+                this.paused = true;
+                if (this.player && this.player.stopVideo) {
+                    this.player.stopVideo();
+                }
+            }
+        }
 
         const universalPlayer = new UniversalPlayer();
         const dashPlayer = new DashPlayer();
+        const ytAudioPlayer = new YouTubeAudioPlayer();
         const nativeAudio = document.getElementById('nativeAudio');
-        nativeAudio.crossOrigin = 'anonymous';
 
         // --- State ---
         let wakeLock = null;
@@ -1445,12 +1602,12 @@ h1 { font-size: 34px; font-weight: 800; }
             showTranslation: false,
             likedSongs: JSON.parse(localStorage.getItem('likedSongs') || '[]'),
             playlists: JSON.parse(localStorage.getItem('playlists') || '[]'),
-            currentPlaylistIndex: -1, // Track current playlist being played
-            mixLoaded: false, // Track if mix has been loaded for current song
-            deepLinkTrack: null, // Track being played via deep link
-            sleepTimer: null, // Sleep timer timeout ID
-            crossfadeDuration: 0.8, // Crossfade duration in seconds (shorter fade-out)
-            searchType: 'track' // Search filter: 'track', 'album', 'artist'
+            currentPlaylistIndex: -1,
+            mixLoaded: false,
+            deepLinkTrack: null,
+            sleepTimer: null,
+            crossfadeDuration: 0.8,
+            searchType: 'track'
         };
 
         // --- Wake Lock Helpers ---
@@ -1459,14 +1616,11 @@ h1 { font-size: 34px; font-weight: 800; }
                 try {
                     wakeLock = await navigator.wakeLock.request('screen');
                     wakeLock.addEventListener('release', () => {
-                        console.log('Wake lock released by system');
                         wakeLock = null;
-                        // Re-acquire if still playing
                         if (state.isPlaying) {
                             setTimeout(requestWakeLock, 1000);
                         }
                     });
-                    console.log('Wake lock acquired');
                 } catch (err) {
                     console.error('Failed to acquire wake lock:', err);
                 }
@@ -1481,6 +1635,7 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function getActiveAudioPlayer() {
+            if (ytAudioPlayer.isInit) return ytAudioPlayer.audioElement;
             if (universalPlayer.isInit) return universalPlayer.audioElement;
             if (state.isHiRes && dashPlayer.isInit) return dashPlayer.audioElement;
             return nativeAudio;
@@ -1493,7 +1648,7 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         }
 
-        // Auto-advance logic (Handles Shuffle/Mix when song ends)
+        // Auto-advance logic
         universalPlayer.audioElement.addEventListener('ended', () => { nextTrack(); releaseWakeLock(); });
         dashPlayer.audioElement.addEventListener('ended', () => { nextTrack(); releaseWakeLock(); });
         nativeAudio.addEventListener('ended', async () => { 
@@ -1501,14 +1656,16 @@ h1 { font-size: 34px; font-weight: 800; }
             releaseWakeLock(); 
         });
         
-        // Add error handler for failed streams
+        // Error handler: fallback to YouTube Audio Bridge
         nativeAudio.addEventListener('error', (e) => {
-            console.error('Native audio error:', e);
-            showToast('Stream failed. Skipping...', 3000, 'error');
-            setTimeout(nextTrack, 1000);
+            console.warn('Native audio stream error, delegating to YouTube player bridge:', e);
+            const currentTrack = state.queue[state.currentIndex];
+            if (currentTrack) {
+                const videoId = currentTrack.videoId || currentTrack.id;
+                ytAudioPlayer.loadVideo(videoId);
+            }
         });
 
-        // Release wake lock when playback is paused
         universalPlayer.audioElement.addEventListener('pause', () => { if (!state.isPlaying) releaseWakeLock(); });
         dashPlayer.audioElement.addEventListener('pause', () => { if (!state.isPlaying) releaseWakeLock(); });
         nativeAudio.addEventListener('pause', () => { if (!state.isPlaying) releaseWakeLock(); });
@@ -1692,6 +1849,7 @@ h1 { font-size: 34px; font-weight: 800; }
             document.getElementById('miniPlayer').classList.add('visible');
 
             nativeAudio.pause();
+            ytAudioPlayer.reset();
             universalPlayer.reset();
             dashPlayer.reset();
 
@@ -1713,30 +1871,36 @@ h1 { font-size: 34px; font-weight: 800; }
                     throw new Error("No stream URL found in the final manifest.");
                 }
                 const streamUrl = streamManifest.urls[0];
-
                 state.currentStreamUrl = streamUrl;
 
-// Step 4: Clean reset + load + play the audio (FIXED CROSSFADE ISSUE)
-                // Clean reset before new source
-                nativeAudio.pause();
-                nativeAudio.currentTime = 0;
-                
-                nativeAudio.src = streamUrl;
-                nativeAudio.load(); // CRITICAL: Load after src change
-                
-                // Small delay for load to settle
-                await new Promise(resolve => setTimeout(resolve, 150));
-                
                 let started = false;
-                try {
-                    const playPromise = nativeAudio.play();
-                    if (playPromise !== undefined) {
-                        await playPromise;
+
+                // If direct audio stream from Google CDN / mp3 / webm / m4a
+                if (streamUrl && (streamUrl.includes('googlevideo.com') || streamUrl.endsWith('.mp3') || streamUrl.endsWith('.m4a') || streamUrl.endsWith('.webm'))) {
+                    nativeAudio.pause();
+                    nativeAudio.currentTime = 0;
+                    nativeAudio.src = streamUrl;
+                    nativeAudio.load();
+                    
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                    
+                    try {
+                        const playPromise = nativeAudio.play();
+                        if (playPromise !== undefined) {
+                            await playPromise;
+                        }
+                        started = !nativeAudio.paused;
+                    } catch (playError) {
+                        console.warn('Native audio play failed, falling back to YouTube audio bridge:', playError);
+                        const videoId = currentTrack.videoId || currentTrack.id;
+                        ytAudioPlayer.loadVideo(videoId);
+                        started = true;
                     }
-                    started = !nativeAudio.paused;
-                } catch (playError) {
-                    console.error('Audio play failed:', playError);
-                    showToast('Autoplay blocked. Tap play button.', 4000, 'error');
+                } else {
+                    // Use YouTube Audio Player Bridge
+                    const videoId = currentTrack.videoId || currentTrack.id || (streamUrl.match(/v=([a-zA-Z0-9_-]{11})/) || [])[1];
+                    ytAudioPlayer.loadVideo(videoId || currentTrack.id);
+                    started = true;
                 }
 
                 state.isPlaying = started;
@@ -1777,7 +1941,9 @@ h1 { font-size: 34px; font-weight: 800; }
                 releaseWakeLock();
             }
             
-            if (universalPlayer.isInit) {
+            if (ytAudioPlayer.isInit) {
+                state.isPlaying ? ytAudioPlayer.play() : ytAudioPlayer.pause();
+            } else if (universalPlayer.isInit) {
                 state.isPlaying ? universalPlayer.play() : universalPlayer.pause();
             } else if (state.isHiRes && dashPlayer.isInit) {
                 state.isPlaying ? dashPlayer.play() : dashPlayer.pause();
@@ -1812,7 +1978,7 @@ h1 { font-size: 34px; font-weight: 800; }
             
             // Fade out current track if playing (ensures completion)
             const currentPlayer = getActiveAudioPlayer();
-            if (currentPlayer && !currentPlayer.paused) {
+            if (currentPlayer && !currentPlayer.paused && currentPlayer !== ytAudioPlayer.audioElement) {
                 await fadeOut(currentPlayer, state.crossfadeDuration);
             }
             
@@ -1834,15 +2000,7 @@ h1 { font-size: 34px; font-weight: 800; }
 
         function prevTrack() {
             if (state.queue.length === 0) return;
-            let player;
-            
-            if (universalPlayer.isInit) {
-                player = universalPlayer.audioElement;
-            } else if (state.isHiRes && dashPlayer.isInit) {
-                player = dashPlayer.audioElement;
-            } else {
-                player = nativeAudio;
-            }
+            const player = getActiveAudioPlayer();
             
             if (player.currentTime > 3) {
                 player.currentTime = 0;
@@ -1933,17 +2091,8 @@ h1 { font-size: 34px; font-weight: 800; }
         // --- 5. Timeline & Volume Events ---
         
         function updateProgress() {
-            let player;
-            
-            if (universalPlayer.isInit) {
-                player = universalPlayer.audioElement;
-            } else if (state.isHiRes && dashPlayer.isInit) {
-                player = dashPlayer.audioElement;
-            } else {
-                player = nativeAudio;
-            }
-            
-            if (!player.duration) return;
+            const player = getActiveAudioPlayer();
+            if (!player || !player.duration) return;
 
             const percent = (player.currentTime / player.duration) * 100;
             document.getElementById('progressFill').style.width = percent + '%';
@@ -1962,15 +2111,8 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function seek(e) {
-            let player;
-            
-            if (universalPlayer.isInit) {
-                player = universalPlayer.audioElement;
-            } else if (state.isHiRes && dashPlayer.isInit) {
-                player = dashPlayer.audioElement;
-            } else {
-                player = nativeAudio;
-            }
+            const player = getActiveAudioPlayer();
+            if (!player || !player.duration) return;
             
             const bar = e.currentTarget;
             const percent = e.offsetX / bar.offsetWidth;
@@ -1982,6 +2124,7 @@ h1 { font-size: 34px; font-weight: 800; }
             state.volume = val;
             universalPlayer.setVolume(val);
             dashPlayer.setVolume(val);
+            ytAudioPlayer.setVolume(val);
             nativeAudio.volume = val;
         }
 
@@ -1989,7 +2132,9 @@ h1 { font-size: 34px; font-weight: 800; }
             state.playbackRate = parseFloat(val);
             document.querySelector('.speed-display').textContent = val + 'x';
             
-            if (universalPlayer.isInit) {
+            if (ytAudioPlayer.isInit) {
+                ytAudioPlayer.setPlaybackRate(state.playbackRate);
+            } else if (universalPlayer.isInit) {
                 universalPlayer.setPlaybackRate(state.playbackRate);
             } else if (state.isHiRes && dashPlayer.isInit) {
                 dashPlayer.setPlaybackRate(state.playbackRate);
