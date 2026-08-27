@@ -91,14 +91,16 @@ class AuthService {
   // ==========================================
   // Google 1-Click Web OAuth Flow
   // ==========================================
-  getGoogleAuthUrl(state = '') {
+  getGoogleAuthUrl(state = '', customRedirectUri = '') {
     if (!config.google.clientId) {
       return null;
     }
 
+    const redirectUri = customRedirectUri || config.google.redirectUri;
+
     const params = new URLSearchParams({
       client_id: config.google.clientId,
-      redirect_uri: config.google.redirectUri,
+      redirect_uri: redirectUri,
       response_type: 'code',
       scope: config.google.scopes.join(' '),
       access_type: 'offline',
@@ -109,7 +111,7 @@ class AuthService {
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
-  async exchangeGoogleCode(code) {
+  async exchangeGoogleCode(code, customRedirectUri = '') {
     if (!config.google.clientId || !config.google.clientSecret) {
       return {
         access_token: 'demo_google_access_token',
@@ -120,11 +122,13 @@ class AuthService {
       };
     }
 
+    const redirectUri = customRedirectUri || config.google.redirectUri;
+
     const body = new URLSearchParams({
       code,
       client_id: config.google.clientId,
       client_secret: config.google.clientSecret,
-      redirect_uri: config.google.redirectUri,
+      redirect_uri: redirectUri,
       grant_type: 'authorization_code'
     });
 

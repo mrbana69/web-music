@@ -78,7 +78,13 @@ class AuthController {
   googleLogin(req, res, next) {
     try {
       const { redirect } = req.query || {};
-      const authUrl = authService.getGoogleAuthUrl(req.query?.state || '');
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+      const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3000';
+      const dynamicRedirectUri = config.google.redirectUri && !config.google.redirectUri.includes('localhost')
+        ? config.google.redirectUri
+        : `${protocol}://${host}/api/auth/google/callback`;
+
+      const authUrl = authService.getGoogleAuthUrl(req.query?.state || '', dynamicRedirectUri);
 
       if (!authUrl) {
         return res.status(200).json({
@@ -109,7 +115,13 @@ class AuthController {
         return res.status(400).json({ error: 'Missing authorization code' });
       }
 
-      const tokenData = await authService.exchangeGoogleCode(code);
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+      const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3000';
+      const dynamicRedirectUri = config.google.redirectUri && !config.google.redirectUri.includes('localhost')
+        ? config.google.redirectUri
+        : `${protocol}://${host}/api/auth/google/callback`;
+
+      const tokenData = await authService.exchangeGoogleCode(code, dynamicRedirectUri);
 
       const acceptHeader = req.headers.accept || '';
       if (acceptHeader.includes('text/html')) {

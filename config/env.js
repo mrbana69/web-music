@@ -24,15 +24,15 @@ const config = {
     ]
   },
 
-  // Google / YouTube Music Configuration
+  // Google / YouTube Configuration (Standard non-sensitive scopes)
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/google/callback',
     scopes: [
+      'openid',
       'https://www.googleapis.com/auth/userinfo.profile',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/youtube.readonly'
+      'https://www.googleapis.com/auth/userinfo.email'
     ]
   },
 
@@ -54,4 +54,3 @@ const config = {
 };
 
 module.exports = config;
-
