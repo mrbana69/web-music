@@ -2,6 +2,18 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/tos",
+      "destination": "/tos.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/tos.html"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
     },

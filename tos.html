@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Termini di Servizio - Preluded</title>
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/4430/4430494.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #000000;
+            --surface-color: rgba(255, 255, 255, 0.05);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-primary: #FFFFFF;
+            --text-secondary: rgba(255, 255, 255, 0.65);
+            --accent: #FA2D48;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.7;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 48px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .nav-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 32px;
+            transition: opacity 0.2s;
+        }
+
+        .nav-back:hover {
+            opacity: 0.8;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+
+        .last-updated {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 36px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        p, ul {
+            color: var(--text-secondary);
+            font-size: 15px;
+            margin-bottom: 18px;
+        }
+
+        ul {
+            padding-left: 24px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: underline;
+        }
+
+        .highlight-box {
+            background: rgba(250, 45, 72, 0.08);
+            border: 1px solid rgba(250, 45, 72, 0.25);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 24px 0;
+        }
+
+        .highlight-box p {
+            color: #fff;
+            margin-bottom: 0;
+        }
+
+        footer {
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 24px;
+                border-radius: 16px;
+            }
+            h1 {
+                font-size: 26px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="nav-back">← Torna a Preluded</a>
+
+        <h1>Termini di Servizio (Terms of Service)</h1>
+        <div class="last-updated">Ultimo aggiornamento: 27 Agosto 2026</div>
+
+        <p>Benvenuto su <strong>Preluded</strong>. L'accesso e l'utilizzo del sito web <a href="https://preluded.vercel.app">https://preluded.vercel.app</a> e dei servizi associati sono regolati dai presenti Termini di Servizio ("Termini").</p>
+
+        <h2>1. Descrizione del Servizio</h2>
+        <p>Preluded è un'applicazione web di interfaccia musicale progettata per consentire l'esplorazione, l'organizzazione e la riproduzione di contenuti multimediali pubblici resi disponibili tramite le API di Google e YouTube.</p>
+
+        <h2>2. Utilizzo Consentito e Requisiti</h2>
+        <ul>
+            <li>Il servizio è destinato esclusivamente all'<strong>uso personale, privato e non commerciale</strong>.</li>
+            <li>L'utente accetta di non utilizzare Preluded per scopi illeciti, di non effettuare scraping massivo non autorizzato e di non tentare di manomettere l'infrastruttura del servizio.</li>
+            <li>L'autenticazione tramite Google è richiesta per accedere alle funzionalità della piattaforma e sincronizzare le preferenze dell'utente.</li>
+        </ul>
+
+        <h2>3. Proprietà Intellettuale e Diritti d'Autore</h2>
+        <p>Tutti i brani musicali, i testi delle canzoni, le copertine degli album, i loghi e i contenuti video riprodotti o visualizzati tramite Preluded sono di esclusiva proprietà dei rispettivi titolari dei diritti d'autore, artisti, etichette discografiche e creatori su YouTube.</p>
+        <p>Preluded non rivendica alcun diritto di proprietà sui contenuti multimediali di terze parti e funge esclusivamente da client di streaming e interfaccia utente.</p>
+
+        <h2>4. Conformità con i Servizi di Terze Parti (YouTube & Google)</h2>
+        <p>Preluded si interfaccia con i servizi di YouTube. Utilizzando Preluded, accetti esplicitamente di rispettare:</p>
+        <ul>
+            <li>I <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">Termini di Servizio di YouTube</a>.</li>
+            <li>Le <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Norme sulla Privacy di Google</a>.</li>
+        </ul>
+
+        <h2>5. Limitazione di Responsabilità</h2>
+        <p>Il servizio Preluded viene fornito nello stato in cui si trova ("così com'è" / "as is"), senza garanzie esplicite o implicite di continuità ininterrotta o assenza di errori. Non siamo responsabili per eventuali disservizi tecnici temporanei, interruzioni delle API esterne o indisponibilità dei contenuti ospitati da terze parti.</p>
+
+        <h2>6. Modifiche ai Termini</h2>
+        <p>Ci riserviamo il diritto di aggiornare i presenti Termini di Servizio in qualsiasi momento. Le modifiche saranno effettive non appena pubblicate su questa pagina.</p>
+
+        <h2>7. Contatti</h2>
+        <p>Per chiarimenti o comunicazioni relative ai presenti Termini, puoi scriverci a: <a href="mailto:preluded.app@gmail.com">preluded.app@gmail.com</a>.</p>
+
+        <footer>
+            &copy; 2026 Preluded. Tutti i diritti riservati.
+        </footer>
+    </div>
+</body>
+</html>

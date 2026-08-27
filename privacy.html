@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informativa sulla Privacy - Preluded</title>
+    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/4430/4430494.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #000000;
+            --surface-color: rgba(255, 255, 255, 0.05);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-primary: #FFFFFF;
+            --text-secondary: rgba(255, 255, 255, 0.65);
+            --accent: #FA2D48;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.7;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 48px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .nav-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 32px;
+            transition: opacity 0.2s;
+        }
+
+        .nav-back:hover {
+            opacity: 0.8;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+
+        .last-updated {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 36px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        p, ul {
+            color: var(--text-secondary);
+            font-size: 15px;
+            margin-bottom: 18px;
+        }
+
+        ul {
+            padding-left: 24px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: underline;
+        }
+
+        .highlight-box {
+            background: rgba(250, 45, 72, 0.08);
+            border: 1px solid rgba(250, 45, 72, 0.25);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 24px 0;
+        }
+
+        .highlight-box p {
+            color: #fff;
+            margin-bottom: 0;
+        }
+
+        footer {
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 24px;
+                border-radius: 16px;
+            }
+            h1 {
+                font-size: 26px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="nav-back">← Torna a Preluded</a>
+
+        <h1>Informativa sulla Privacy</h1>
+        <div class="last-updated">Ultimo aggiornamento: 27 Agosto 2026</div>
+
+        <p>La presente Informativa sulla Privacy descrive come <strong>Preluded</strong> ("l'Applicazione", "noi", "nostro") raccoglie, utilizza e protegge i dati degli utenti durante l'utilizzo del nostro servizio di streaming e riproduzione musicale accessibile all'indirizzo <a href="https://preluded.vercel.app">https://preluded.vercel.app</a>.</p>
+
+        <h2>1. Quali dati raccogliamo</h2>
+        <p>Preluded adotta un approccio basato sulla minimizzazione dei dati raccolti:</p>
+        <ul>
+            <li><strong>Dati di Autenticazione Google OAuth:</strong> Quando effettui l'accesso con il tuo account Google, riceviamo esclusivamente i dati essenziali di identità di base forniti da Google: nome visualizzato, indirizzo email e ID identificativo univoco dell'account (tramite gli scope <code>openid</code>, <code>profile</code>, <code>email</code>).</li>
+            <li><strong>Dati salvati in Locale nel Browser (LocalStorage):</strong> Le tue preferenze di ascolto, le canzoni aggiunte ai preferiti ("Liked Songs"), la cronologia recente e le playlist create rimangono memorizzate localmente sul tuo dispositivo tramite la memoria interna del browser.</li>
+            <li><strong>Nessun dato bancario o di pagamento:</strong> Preluded non gestisce, non richiede e non memorizza dati di carte di credito o coordinate bancarie.</li>
+        </ul>
+
+        <h2>2. Come utilizziamo i tuoi dati</h2>
+        <p>I dati raccolti vengono utilizzati esclusivamente per i seguenti scopi tecnici e funzionali:</p>
+        <ul>
+            <li>Autenticare l'accesso dell'utente all'applicazione in modo sicuro.</li>
+            <li>Offrire un'esperienza musicale personalizzata (consigli musicali "Daily Mix" e gestione playlist).</li>
+            <li>Garantire il corretto funzionamento dello streaming audio e della sincronizzazione dei testi.</li>
+        </ul>
+
+        <div class="highlight-box">
+            <p><strong>Nessuna vendita di dati:</strong> Non vendiamo, non noleggiamo e non condividiamo mai i dati personali dei nostri utenti a terze parti, agenzie pubblicitarie o broker di dati.</p>
+        </div>
+
+        <h2>3. Integrazione con i Servizi API di Google e YouTube</h2>
+        <p>Preluded utilizza i servizi API di Google e YouTube per la ricerca e la riproduzione dei brani musicali. Utilizzando Preluded, accetti di essere vincolato da:</p>
+        <ul>
+            <li>I <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">Termini di Servizio di YouTube (YouTube Terms of Service)</a>.</li>
+            <li>Le <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Norme sulla Privacy di Google (Google Privacy Policy)</a>.</li>
+        </ul>
+
+        <h2>4. Come revocare l'accesso all'account Google</h2>
+        <p>Puoi revocare in qualsiasi momento l'accesso di Preluded al tuo account Google visitando la pagina ufficiale di gestione dei permessi di Google:</p>
+        <p><a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">https://myaccount.google.com/permissions</a></p>
+
+        <h2>5. Eliminazione dei dati locali</h2>
+        <p>Puoi cancellare tutti i dati memorizzati in locale (cronologia, preferiti e sessione) effettuando la disconnessione (Logout) dalla scheda Libreria o cancellando i dati di navigazione/cookie del browser.</p>
+
+        <h2>6. Contatti</h2>
+        <p>Per qualsiasi domanda o richiesta di chiarimento riguardante questa Informativa sulla Privacy, puoi contattarci all'indirizzo email: <a href="mailto:preluded.app@gmail.com">preluded.app@gmail.com</a>.</p>
+
+        <footer>
+            &copy; 2026 Preluded. Tutti i diritti riservati.
+        </footer>
+    </div>
+</body>
+</html>
