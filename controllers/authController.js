@@ -130,7 +130,7 @@ class AuthController {
           access_token: tokenData.access_token || '',
           user_name: tokenData.user?.name || ''
         });
-        return res.redirect(`/?${tokenParams.toString()}`);
+        return res.redirect(`/app?${tokenParams.toString()}`);
       }
 
       return res.status(200).json(tokenData);

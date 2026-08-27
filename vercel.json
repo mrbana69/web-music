@@ -2,6 +2,14 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/app",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/player",
+      "destination": "/app.html"
+    },
+    {
       "source": "/privacy",
       "destination": "/privacy.html"
     },
