@@ -16,3 +16,4 @@ async function run() {
   await testArtist('Sfera Ebbasta');
 }
 run();
+

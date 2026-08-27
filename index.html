@@ -1056,8 +1056,8 @@ h1 { font-size: 34px; font-weight: 800; }
         </div>
     </div>
 
-    <audio id="nativeAudio"></audio>
-    <div id="ytAudioBridge" style="position:fixed; bottom:-999px; left:-999px; width:1px; height:1px; opacity:0; pointer-events:none;"></div>
+    <audio id="nativeAudio" playsinline preload="auto"></audio>
+    <div id="ytAudioBridge" style="position:fixed; bottom:0; right:0; width:200px; height:200px; opacity:0.001; pointer-events:none; z-index:-1;"></div>
 
     <script>
         // --- 1. Universal Player using dash.js (Official DASH Library) ---

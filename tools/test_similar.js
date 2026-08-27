@@ -21,3 +21,4 @@ async function testSimilar(name) {
 
 testSimilar('The Weeknd');
 testSimilar('Sfera Ebbasta');
+
