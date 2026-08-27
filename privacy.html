@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Informativa sulla Privacy - Preluded</title>
+    <title>Privacy Policy - Preluded</title>
     <meta name="google-site-verification" content="_kimSe9yJG7PDmHzahDbOyxZwAo0AoT6V6-VRi-YKZ0" />
     <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/4430/4430494.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -47,6 +47,13 @@
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
         }
 
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
         .nav-back {
             display: inline-flex;
             align-items: center;
@@ -55,12 +62,34 @@
             text-decoration: none;
             font-weight: 600;
             font-size: 14px;
-            margin-bottom: 32px;
             transition: opacity 0.2s;
         }
 
         .nav-back:hover {
             opacity: 0.8;
+        }
+
+        .lang-switch {
+            display: flex;
+            gap: 8px;
+        }
+
+        .lang-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 4px 12px;
+            border-radius: 99px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .lang-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
         }
 
         h1 {
@@ -118,6 +147,14 @@
             margin-bottom: 0;
         }
 
+        .lang-section {
+            display: none;
+        }
+
+        .lang-section.active {
+            display: block;
+        }
+
         footer {
             margin-top: 48px;
             padding-top: 24px;
@@ -140,54 +177,112 @@
 </head>
 <body>
     <div class="container">
-        <a href="/" class="nav-back">← Torna a Preluded</a>
-
-        <h1>Informativa sulla Privacy</h1>
-        <div class="last-updated">Ultimo aggiornamento: 27 Agosto 2026</div>
-
-        <p>La presente Informativa sulla Privacy descrive come <strong>Preluded</strong> ("l'Applicazione", "noi", "nostro") raccoglie, utilizza e protegge i dati degli utenti durante l'utilizzo del nostro servizio di streaming e riproduzione musicale accessibile all'indirizzo <a href="https://preluded.vercel.app">https://preluded.vercel.app</a>.</p>
-
-        <h2>1. Quali dati raccogliamo</h2>
-        <p>Preluded adotta un approccio basato sulla minimizzazione dei dati raccolti:</p>
-        <ul>
-            <li><strong>Dati di Autenticazione Google OAuth:</strong> Quando effettui l'accesso con il tuo account Google, riceviamo esclusivamente i dati essenziali di identità di base forniti da Google: nome visualizzato, indirizzo email e ID identificativo univoco dell'account (tramite gli scope <code>openid</code>, <code>profile</code>, <code>email</code>).</li>
-            <li><strong>Dati salvati in Locale nel Browser (LocalStorage):</strong> Le tue preferenze di ascolto, le canzoni aggiunte ai preferiti ("Liked Songs"), la cronologia recente e le playlist create rimangono memorizzate localmente sul tuo dispositivo tramite la memoria interna del browser.</li>
-            <li><strong>Nessun dato bancario o di pagamento:</strong> Preluded non gestisce, non richiede e non memorizza dati di carte di credito o coordinate bancarie.</li>
-        </ul>
-
-        <h2>2. Come utilizziamo i tuoi dati</h2>
-        <p>I dati raccolti vengono utilizzati esclusivamente per i seguenti scopi tecnici e funzionali:</p>
-        <ul>
-            <li>Autenticare l'accesso dell'utente all'applicazione in modo sicuro.</li>
-            <li>Offrire un'esperienza musicale personalizzata (consigli musicali "Daily Mix" e gestione playlist).</li>
-            <li>Garantire il corretto funzionamento dello streaming audio e della sincronizzazione dei testi.</li>
-        </ul>
-
-        <div class="highlight-box">
-            <p><strong>Nessuna vendita di dati:</strong> Non vendiamo, non noleggiamo e non condividiamo mai i dati personali dei nostri utenti a terze parti, agenzie pubblicitarie o broker di dati.</p>
+        <div class="top-bar">
+            <a href="/" class="nav-back">← Preluded Home</a>
+            <div class="lang-switch">
+                <button class="lang-btn active" onclick="setLang('en')">English</button>
+                <button class="lang-btn" onclick="setLang('it')">Italiano</button>
+            </div>
         </div>
 
-        <h2>3. Integrazione con i Servizi API di Google e YouTube</h2>
-        <p>Preluded utilizza i servizi API di Google e YouTube per la ricerca e la riproduzione dei brani musicali. Utilizzando Preluded, accetti di essere vincolato da:</p>
-        <ul>
-            <li>I <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">Termini di Servizio di YouTube (YouTube Terms of Service)</a>.</li>
-            <li>Le <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Norme sulla Privacy di Google (Google Privacy Policy)</a>.</li>
-        </ul>
+        <!-- ENGLISH VERSION (Primary for Google Review) -->
+        <div id="section-en" class="lang-section active">
+            <h1>Privacy Policy</h1>
+            <div class="last-updated">Last Updated: August 27, 2026</div>
 
-        <h2>4. Come revocare l'accesso all'account Google</h2>
-        <p>Puoi revocare in qualsiasi momento l'accesso di Preluded al tuo account Google visitando la pagina ufficiale di gestione dei permessi di Google:</p>
-        <p><a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">https://myaccount.google.com/permissions</a></p>
+            <p>This Privacy Policy describes how <strong>Preluded</strong> ("the Application", "we", "us", or "our") collects, uses, and protects your information when you use our web music player accessible at <a href="https://preluded.vercel.app">https://preluded.vercel.app</a>.</p>
 
-        <h2>5. Eliminazione dei dati locali</h2>
-        <p>Puoi cancellare tutti i dati memorizzati in locale (cronologia, preferiti e sessione) effettuando la disconnessione (Logout) dalla scheda Libreria o cancellando i dati di navigazione/cookie del browser.</p>
+            <h2>1. Information We Collect</h2>
+            <p>Preluded practices strict data minimization:</p>
+            <ul>
+                <li><strong>Google OAuth Identity Data:</strong> When you sign in with Google, we receive basic identity profile information (name, email address, profile picture, and user ID) via standard OAuth scopes (<code>openid</code>, <code>profile</code>, <code>email</code>).</li>
+                <li><strong>Local Device Storage (LocalStorage):</strong> Your listening history, customized playlists, and favorite songs ("Liked Songs") are stored locally within your browser's LocalStorage on your own device.</li>
+                <li><strong>No Financial Data:</strong> Preluded does not collect, process, or store credit card numbers, billing information, or payment credentials.</li>
+            </ul>
 
-        <h2>6. Contatti</h2>
-        <p>Per qualsiasi domanda o richiesta di chiarimento riguardante questa Informativa sulla Privacy, puoi contattarci all'indirizzo email: <a href="mailto:preluded.app@gmail.com">preluded.app@gmail.com</a>.</p>
+            <h2>2. How We Use Your Information</h2>
+            <p>We use the minimal information collected solely for the following technical and functional purposes:</p>
+            <ul>
+                <li>To authenticate your session securely via Google Sign-In.</li>
+                <li>To provide personalized music features such as your "Daily Mix" and playlist management.</li>
+                <li>To enable continuous streaming playback and synchronized lyrics.</li>
+            </ul>
+
+            <div class="highlight-box">
+                <p><strong>Zero Data Selling:</strong> We do not sell, rent, monetize, or share user personal data with any third-party advertisers, data brokers, or marketing platforms.</p>
+            </div>
+
+            <h2>3. Third-Party API Services (Google & YouTube)</h2>
+            <p>Preluded utilizes YouTube API Services and Innertube endpoints to search and play publicly available audio content. By using Preluded, you agree to be bound by:</p>
+            <ul>
+                <li><a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">YouTube Terms of Service</a></li>
+                <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google Privacy Policy</a></li>
+            </ul>
+
+            <h2>4. Revoking Google Account Access</h2>
+            <p>You can revoke Preluded's access to your Google account at any time via the official Google Security settings page:</p>
+            <p><a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">https://myaccount.google.com/permissions</a></p>
+
+            <h2>5. Data Deletion</h2>
+            <p>You can instantly delete all locally stored playlists, session tokens, and preferences by signing out through the Library tab or clearing your browser's storage.</p>
+
+            <h2>6. Contact Us</h2>
+            <p>If you have any questions or feedback regarding this Privacy Policy, please contact us at: <a href="mailto:preluded.app@gmail.com">preluded.app@gmail.com</a>.</p>
+        </div>
+
+        <!-- ITALIAN VERSION -->
+        <div id="section-it" class="lang-section">
+            <h1>Informativa sulla Privacy</h1>
+            <div class="last-updated">Ultimo aggiornamento: 27 Agosto 2026</div>
+
+            <p>La presente Informativa descrive come <strong>Preluded</strong> raccoglie, utilizza e protegge i dati degli utenti durante l'utilizzo dell'applicazione all'indirizzo <a href="https://preluded.vercel.app">https://preluded.vercel.app</a>.</p>
+
+            <h2>1. Quali dati raccogliamo</h2>
+            <ul>
+                <li><strong>Dati di Autenticazione Google OAuth:</strong> Nome visualizzato, email e ID account tramite permessi standard (<code>openid</code>, <code>profile</code>, <code>email</code>).</li>
+                <li><strong>Dati salvati in Locale nel Browser (LocalStorage):</strong> Preferiti, cronologia e playlist risiedono direttamente sul tuo dispositivo.</li>
+                <li><strong>Nessun dato di pagamento:</strong> Preluded non raccoglie dati bancari o carte di credito.</li>
+            </ul>
+
+            <h2>2. Come utilizziamo i tuoi dati</h2>
+            <ul>
+                <li>Autenticare l'accesso in sicurezza.</li>
+                <li>Generare playlist personalizzate ("Daily Mix").</li>
+                <li>Garantire lo streaming audio e i testi sincronizzati.</li>
+            </ul>
+
+            <div class="highlight-box">
+                <p><strong>Nessuna vendita di dati:</strong> Non vendiamo né condividiamo mai i dati degli utenti con terze parti o agenzie pubblicitarie.</p>
+            </div>
+
+            <h2>3. Integrazione Servizi YouTube e Google</h2>
+            <ul>
+                <li><a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">Termini di Servizio di YouTube</a></li>
+                <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Norme sulla Privacy di Google</a></li>
+            </ul>
+
+            <h2>4. Revoca dell'accesso</h2>
+            <p>Puoi revocare l'accesso di Preluded in qualsiasi momento da: <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">https://myaccount.google.com/permissions</a></p>
+
+            <h2>5. Contatti</h2>
+            <p>Email di supporto: <a href="mailto:preluded.app@gmail.com">preluded.app@gmail.com</a></p>
+        </div>
 
         <footer>
-            &copy; 2026 Preluded. Tutti i diritti riservati.
+            &copy; 2026 Preluded. All rights reserved.
         </footer>
     </div>
+
+    <script>
+        function setLang(lang) {
+            document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.lang-section').forEach(s => s.classList.remove('active'));
+            
+            const btn = document.querySelector(`.lang-btn[onclick="setLang('${lang}')"]`);
+            const sec = document.getElementById(`section-${lang}`);
+            if (btn) btn.classList.add('active');
+            if (sec) sec.classList.add('active');
+        }
+    </script>
 </body>
 </html>
-

@@ -446,11 +446,15 @@
             <span>Preluded</span>
         </a>
         <div class="nav-links">
-            <a href="/privacy">Privacy</a>
-            <a href="/tos">Termini</a>
+            <div class="lang-switch" style="display:inline-flex; gap:6px;">
+                <button class="lang-btn active" onclick="setLandingLang('en')" style="background:rgba(255,255,255,0.1); border:1px solid var(--border); color:#fff; padding:4px 10px; border-radius:99px; font-size:12px; cursor:pointer;">EN</button>
+                <button class="lang-btn" onclick="setLandingLang('it')" style="background:transparent; border:1px solid var(--border); color:var(--text-secondary); padding:4px 10px; border-radius:99px; font-size:12px; cursor:pointer;">IT</button>
+            </div>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/tos">Terms</a>
             <a href="/app" class="btn-launch">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                Apri Web Player
+                <span>Launch Player</span>
             </a>
         </div>
     </nav>
