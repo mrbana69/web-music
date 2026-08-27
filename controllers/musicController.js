@@ -137,15 +137,15 @@ class MusicController {
   }
 
   /**
-   * GET /api/artist - Artist metadata, top tracks, and discography
+    * GET /api/artist - Artist metadata, top tracks, and discography
    */
   async artist(req, res, next) {
     try {
-      const { id, f } = req.query || {};
-      const artistId = id || f;
+      const { id, f, name, q } = req.query || {};
+      const artistQuery = name || q || id || f;
 
-      if (!artistId) {
-        return res.status(400).json({ error: 'Missing artist id' });
+      if (!artistQuery) {
+        return res.status(400).json({ error: 'Missing artist query' });
       }
 
       let artist = null;
@@ -154,26 +154,26 @@ class MusicController {
 
       // 1. Try Spotify if configured
       if (spotifyService.isConfigured()) {
-        artist = await spotifyService.getArtist(artistId);
+        artist = await spotifyService.getArtist(artistQuery);
         if (artist) {
-          tracks = await spotifyService.getArtistTopTracks(artistId);
-          albums = await spotifyService.getArtistAlbums(artistId);
+          tracks = await spotifyService.getArtistTopTracks(artistQuery);
+          albums = await spotifyService.getArtistAlbums(artistQuery);
         }
       }
 
       // 2. Try YouTube Music artist search
       if (!artist) {
-        const ytArtistData = await youtubeMusicService.getArtist(artistId);
-        if (ytArtistData && ytArtistData.tracks && ytArtistData.tracks.length > 0) {
+        const ytArtistData = await youtubeMusicService.getArtist(artistQuery);
+        if (ytArtistData && ytArtistData.artist) {
           artist = ytArtistData.artist;
-          tracks = ytArtistData.tracks;
-          albums = ytArtistData.albums;
+          tracks = ytArtistData.tracks || [];
+          albums = ytArtistData.albums || [];
         }
       }
 
       // 3. Fallback to local catalog
       if (!artist) {
-        artist = getArtistById(artistId) || DEMO_ARTISTS[0];
+        artist = getArtistById(artistQuery) || DEMO_ARTISTS[0];
         tracks = DEMO_TRACKS.filter((t) => t.artist.id === artist.id);
         albums = DEMO_ALBUMS.filter((al) => al.artist.id === artist.id);
       }
@@ -198,19 +198,24 @@ class MusicController {
    */
   async artistSimilar(req, res, next) {
     try {
-      const { id } = req.query || {};
-      if (!id) {
-        return res.status(400).json({ error: 'Missing artist id' });
+      const { id, name, q } = req.query || {};
+      const artistQuery = name || q || id;
+      if (!artistQuery) {
+        return res.status(400).json({ error: 'Missing artist query' });
       }
 
       let similar = [];
 
       if (spotifyService.isConfigured()) {
-        similar = await spotifyService.getArtistSimilar(id);
+        similar = await spotifyService.getArtistSimilar(artistQuery);
       }
 
       if (!similar || similar.length === 0) {
-        similar = DEMO_ARTISTS.filter((a) => a.id !== id);
+        similar = await youtubeMusicService.getSimilarArtists(artistQuery);
+      }
+
+      if (!similar || similar.length === 0) {
+        similar = DEMO_ARTISTS.filter((a) => a.id !== artistQuery);
       }
 
       return res.status(200).json({

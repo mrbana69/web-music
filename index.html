@@ -3668,45 +3668,22 @@ h1 { font-size: 34px; font-weight: 800; }
 
         // --- Artist Page ---
         async function openArtistPage(artistOrId) {
-            // Accept either an artist object ({ id, name, picture }) or an artist ID / name string.
-            let artistId = null;
             let artistName = '';
             let artistPicture = '';
 
-            if (typeof artistOrId === 'number') {
-                artistId = artistOrId;
-            } else if (typeof artistOrId === 'string') {
-                if (/^\d+$/.test(artistOrId)) {
-                    artistId = Number(artistOrId);
-                } else {
-                    artistName = artistOrId;
-                }
+            if (typeof artistOrId === 'string') {
+                artistName = artistOrId;
             } else if (typeof artistOrId === 'object' && artistOrId !== null) {
-                artistId = artistOrId.id || artistOrId.artist?.id;
-                artistName = artistOrId.name || artistOrId.artist?.name || '';
+                artistName = artistOrId.name || artistOrId.artist?.name || (typeof artistOrId.artist === 'string' ? artistOrId.artist : '');
                 artistPicture = artistOrId.picture || artistOrId.artist?.picture || '';
             }
 
-            // If we have a name but no ID, try to search for the artist to get the ID
-            if (!artistId && artistName) {
-                try {
-                    showGlobalSpinner('Ricerca artista...');
-                    const searchRes = await apiFetch(`/search/?a=${encodeURIComponent(artistName)}`);
-                    const searchData = await searchRes.json();
-                    const artists = searchData.data?.artists?.items || [];
-                    const matchingArtist = artists.find(a => a.name?.toLowerCase() === artistName.toLowerCase());
-                    if (matchingArtist && matchingArtist.id) {
-                        artistId = matchingArtist.id;
-                        artistPicture = matchingArtist.picture || artistPicture;
-                    }
-                } catch (err) {
-                    console.error('Artist search failed', err);
-                } finally {
-                    hideGlobalSpinner();
-                }
+            artistName = String(artistName || '').trim();
+            if (artistName.startsWith('art_')) {
+                artistName = artistName.replace(/^art_/, '');
             }
 
-            if (!artistId && !artistName) return;
+            if (!artistName) return;
 
             // Hide other views
             ['home', 'search', 'library', 'collection', 'playlist-page', 'album'].forEach(tab => {
@@ -3720,31 +3697,29 @@ h1 { font-size: 34px; font-weight: 800; }
             const discographyContainer = document.getElementById('artistDiscography');
             const similarContainer = document.getElementById('artistSimilar');
 
-            // Resetta il pulsante "indietro" della pagina collection al suo comportamento predefinito
+            // Reset collection back button
             const collectionBackButton = document.querySelector('#tab-collection .header-actions button');
             if (collectionBackButton) collectionBackButton.setAttribute('onclick', 'closeCollection()');
 
-
             showGlobalSpinner('Caricamento artista...');
-            document.getElementById('artistPageTitle').textContent = artistName || 'Artist';
+            document.getElementById('artistPageTitle').textContent = artistName;
             header.innerHTML = `<div class="spinner"></div>`;
             topSongsContainer.innerHTML = '<h2 class="section-title">Top Songs</h2><div class="grid"><div class="spinner"></div></div>';
             discographyContainer.innerHTML = '<h2 class="section-title">Discografia</h2><div class="grid"><div class="spinner"></div></div>';
             similarContainer.innerHTML = '<h2 class="section-title">Artisti simili</h2><div class="grid"><div class="spinner"></div></div>';
 
             try {
-                const [metaData, fullData, similarData] = await Promise.all([
-                    artistId ? apiFetch(`/artist/?id=${artistId}`).then(r => r.json()) : Promise.resolve({}),
-                    artistId ? apiFetch(`/artist/?f=${artistId}`).then(r => r.json()) : Promise.resolve({}),
-                    artistId ? apiFetch(`/artist/similar/?id=${artistId}`).then(r => r.json()) : Promise.resolve({}),
+                const [metaData, similarData] = await Promise.all([
+                    apiFetch(`/artist/?name=${encodeURIComponent(artistName)}`).then(r => r.json()).catch(() => ({})),
+                    apiFetch(`/artist/similar/?name=${encodeURIComponent(artistName)}`).then(r => r.json()).catch(() => ({}))
                 ]);
 
                 const artistMeta = metaData.artist || metaData.data?.artist || {};
-                const name = artistMeta.name || artistName || 'Artist';
+                const name = artistMeta.name || artistName;
                 const picture = artistMeta.picture || artistPicture || '';
                 const imageUrl = formatArtworkUrl(picture, '750x750');
 
-                const artistForBackNav = { id: artistId, name: name, picture: picture };
+                const artistForBackNav = { id: artistMeta.id || `art_${name}`, name: name, picture: picture };
                 const artistJson = JSON.stringify(artistForBackNav).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
                 document.getElementById('artistPageTitle').textContent = name;
@@ -3758,11 +3733,11 @@ h1 { font-size: 34px; font-weight: 800; }
                     </div>
                 `;
 
-                const tracks = fullData.tracks || fullData.data?.tracks || [];
-                const albums = fullData.albums?.items || fullData.data?.albums?.items || [];
+                const tracks = metaData.tracks || metaData.data?.tracks || [];
+                const albums = (metaData.albums && Array.isArray(metaData.albums.items)) ? metaData.albums.items : (Array.isArray(metaData.albums) ? metaData.albums : []);
                 const similarArtists = similarData.artists || similarData.data?.artists || [];
 
-                const topSongs = tracks.slice(0, 5);
+                const topSongs = tracks.slice(0, 10);
                 topSongsContainer.innerHTML = `
                     <h2 class="section-title">Top Songs</h2>
                     <div class="grid">

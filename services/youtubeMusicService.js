@@ -277,36 +277,81 @@ class YouTubeMusicService {
    */
   async getArtist(artistNameOrId) {
     if (!artistNameOrId) return null;
-    const cleanName = String(artistNameOrId).replace(/^art_yt_\d+_/, '');
+    let cleanName = String(artistNameOrId).trim();
+    cleanName = cleanName.replace(/^art_yt_\d+_/, '');
+    if (cleanName.startsWith('art_')) {
+      cleanName = cleanName.replace(/^art_/, '');
+    }
 
-    const cacheKey = `yt_artist_${encodeURIComponent(cleanName)}`;
+    // If cleanName is a video ID, extract artist name from track info
+    if (/^[a-zA-Z0-9_-]{11}$/.test(cleanName)) {
+      const info = await this.getTrackInfo(cleanName);
+      if (info && info.artist && info.artist.name) {
+        cleanName = info.artist.name;
+      }
+    }
+
+    const cacheKey = `yt_artist_v2_${encodeURIComponent(cleanName)}`;
     const cached = cacheService.get(cacheKey);
     if (cached) return cached;
 
-    // Search top songs of this artist
-    const songResults = await this.search(`${cleanName} top songs`, 'track', 20);
-    const tracks = songResults?.tracks?.items || [];
+    // 1. Search for the artist profile directly
+    let artistPic = '';
+    try {
+      const artistSearch = await this.search(cleanName, 'artist', 5);
+      const matchedArtist = artistSearch?.artists?.items?.[0];
+      if (matchedArtist) {
+        cleanName = matchedArtist.name || cleanName;
+        artistPic = matchedArtist.picture || '';
+      }
+    } catch (e) {}
 
-    const artistPic = tracks[0]?.album?.cover || tracks[0]?.artist?.picture || '';
+    // 2. Search top songs of this artist
+    const songResults = await this.search(`${cleanName}`, 'track', 25);
+    let tracks = songResults?.tracks?.items || [];
+    
+    // Filter tracks by artist similarity
+    tracks = tracks.filter(t => {
+      const tArtist = (t.artist?.name || '').toLowerCase();
+      const target = cleanName.toLowerCase();
+      return tArtist.includes(target) || target.includes(tArtist) || t.title.toLowerCase().includes(target);
+    });
+
+    if (tracks.length === 0) {
+      tracks = songResults?.tracks?.items || [];
+    }
+
+    if (!artistPic) {
+      artistPic = tracks[0]?.album?.cover || tracks[0]?.artist?.picture || '';
+    }
 
     const artist = {
-      id: artistNameOrId,
+      id: `art_${encodeURIComponent(cleanName)}`,
       name: cleanName,
       picture: artistPic,
       genres: ['Pop', 'Music'],
-      popularity: 88,
+      popularity: 90,
       source: 'youtube'
     };
 
-    const albums = tracks.slice(0, 8).map((t, idx) => ({
-      id: `alb_${t.id}`,
-      title: t.title,
-      cover: t.album?.cover || artistPic,
-      artist,
-      releaseDate: '2024',
-      type: idx % 2 === 0 ? 'ALBUM' : 'SINGLE',
-      source: 'youtube'
-    }));
+    // 3. Search albums of this artist
+    let albums = [];
+    try {
+      const albumSearch = await this.search(`${cleanName}`, 'album', 10);
+      albums = albumSearch?.albums?.items || [];
+    } catch (e) {}
+
+    if (albums.length === 0) {
+      albums = tracks.slice(0, 8).map((t, idx) => ({
+        id: `alb_${t.id}`,
+        title: t.title,
+        cover: t.album?.cover || artistPic,
+        artist,
+        releaseDate: '2024',
+        type: idx % 2 === 0 ? 'ALBUM' : 'SINGLE',
+        source: 'youtube'
+      }));
+    }
 
     const result = {
       artist,
@@ -314,6 +359,43 @@ class YouTubeMusicService {
       albums
     };
 
+    cacheService.set(cacheKey, result, 3600);
+    return result;
+  }
+
+  /**
+   * Get real similar artists based on YouTube Music recommendations
+   */
+  async getSimilarArtists(artistNameOrId) {
+    if (!artistNameOrId) return [];
+    let cleanName = String(artistNameOrId).trim().replace(/^art_/, '');
+    if (/^[a-zA-Z0-9_-]{11}$/.test(cleanName)) {
+      const info = await this.getTrackInfo(cleanName);
+      if (info?.artist?.name) cleanName = info.artist.name;
+    }
+
+    const cacheKey = `yt_similar_${encodeURIComponent(cleanName)}`;
+    const cached = cacheService.get(cacheKey);
+    if (cached) return cached;
+
+    const radioTracks = await this.getRecommendations(cleanName, 30);
+    const seen = new Set([cleanName.toLowerCase()]);
+    const similar = [];
+
+    for (const t of radioTracks) {
+      const aName = t.artist?.name;
+      if (aName && !seen.has(aName.toLowerCase())) {
+        seen.add(aName.toLowerCase());
+        similar.push({
+          id: `art_${encodeURIComponent(aName)}`,
+          name: aName,
+          picture: t.artist?.picture || t.album?.cover || '',
+          genres: ['Pop', 'Music']
+        });
+      }
+    }
+
+    const result = similar.slice(0, 10);
     cacheService.set(cacheKey, result, 3600);
     return result;
   }
