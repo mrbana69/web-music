@@ -20,6 +20,14 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
 
+  // Direct network-only for dynamic API endpoints
+  if (requestUrl.pathname.startsWith('/api') || requestUrl.pathname.startsWith('/health')) {
+    event.respondWith(
+      fetch(event.request).catch(() => Response.error())
+    );
+    return;
+  }
+
   // Only handle same-origin requests via cache.
   // Cross-origin requests should be passed through (and errors handled gracefully).
   if (requestUrl.origin === self.location.origin) {

@@ -12,13 +12,13 @@
     <!-- Open Graph / Link preview metadata -->
     <meta property="og:title" content="Preludedd" id="ogTitle">
     <meta property="og:description" content="Ascolta i tuoi brani preferiti su Preluded" id="ogDescription">
-    <meta property="og:image" content="https://cdn-icons-png.flaticon.com/512/4430/4430494.png" id="ogImage">
+    <meta property="og:image" content="https://raw.githubusercontent.com/mrbana69/web-music/refs/heads/main/icons/512x512.png" id="ogImage">
     <meta property="og:type" content="music.song">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Preluded" id="twitterTitle">
     <meta name="twitter:description" content="Ascolta i tuoi brani preferiti su Preluded" id="twitterDescription">
-    <meta name="twitter:image" content="https://cdn-icons-png.flaticon.com/512/4430/4430494.png" id="twitterImage">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/mrbana69/web-music/refs/heads/main/icons/512x512.png" id="twitterImage">
 
     <link rel="icon" href="data:,">
     <link rel="manifest" href="manifest.json">
@@ -1332,95 +1332,70 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         // --- 2. App State & Logic ---
-        // API endpoints with fallback system for rate limiting and server errors
-        const API_ENDPOINTS = [
-                'https://hifi.geeked.wtf'
-                'https://eu-central.monochrome.tf'
-                'https://us-west.monochrome.tf'
-                'https://hifi-two.spotisaver.net'
-                'https://katze.qqdl.site'
-                'https://hund.qqdl.site'
-                'https://wolf.qqdl.site'
-                'https://api.monochrome.tf'
-        ];
+        // Local Vercel backend: this project now uses its own serverless API instead
+        // of the previous third-party Tidal mirrors.
+        const APP_BACKEND_BASE = '/api';
 
         let currentApiIndex = localStorage.getItem('currentApiIndex') || 0;
-        let workingApiUrl = localStorage.getItem('workingApiUrl') || API_ENDPOINTS[currentApiIndex];
+        let workingApiUrl = localStorage.getItem('workingApiUrl') || APP_BACKEND_BASE;
 
         async function getWorkingApiUrl() {
-            // Rotate through API endpoints to find working one
-            for (let i = 0; i < API_ENDPOINTS.length; i++) {
-                const testIndex = (currentApiIndex + i) % API_ENDPOINTS.length;
-                const testUrl = API_ENDPOINTS[testIndex];
-                
-                try {
-                    const testRes = await fetch(`${testUrl}/ping`, { 
-                        signal: AbortSignal.timeout(3000),
-                        cache: 'no-cache'
-                    });
-                    if (testRes.ok) {
-                        currentApiIndex = testIndex;
-                        workingApiUrl = testUrl;
-                        localStorage.setItem('currentApiIndex', currentApiIndex);
-                        localStorage.setItem('workingApiUrl', workingApiUrl);
-                        showToast('Connected to fast server', 1500);
-                        return testUrl;
-                    }
-                } catch (e) {
-                    // Try next
-                }
-            }
-            // Fallback to first endpoint
+            const base = APP_BACKEND_BASE;
+            workingApiUrl = base;
             currentApiIndex = 0;
-            workingApiUrl = API_ENDPOINTS[0];
-            localStorage.setItem('currentApiIndex', '0');
+            localStorage.setItem('currentApiIndex', String(currentApiIndex));
             localStorage.setItem('workingApiUrl', workingApiUrl);
             return workingApiUrl;
         }
 
-        // Function to make API requests with automatic fallback
         async function apiFetch(endpoint, options = {}) {
-            let apiUrl = workingApiUrl;
-            
-            // Try current working API first
-            try {
-                const response = await fetch(`${apiUrl}${endpoint}`, {
-                    ...options,
-                    signal: options.signal || AbortSignal.timeout(10000) // 10 second timeout
-                });
-                
-                // If rate limited (429) or server error (5xx), try next API
-                if (response.status === 429) {
-                    showToast('Server busy, switching API...', 2000);
-                    throw new Error(`Rate limited (429)`);
-                } else if (response.status >= 500 && response.status < 600) {
-                    showToast('Server error, trying backup...', 2000);
-                    throw new Error(`Server error ${response.status}`);
-                }
-                
-                return response;
-            } catch (error) {
-                console.warn(`API request failed for ${apiUrl}${endpoint}:`, error.message);
-                
-                // Try to get a working API
-                apiUrl = await getWorkingApiUrl();
-                
-                // Retry with the new API
-                try {
-                    const response = await fetch(`${apiUrl}${endpoint}`, {
-                        ...options,
-                        signal: options.signal || AbortSignal.timeout(10000)
-                    });
-                    showToast('Search restored! 🔍', 2000, 'success');
-                    return response;
-                } catch (retryError) {
-                    console.error(`Retry also failed for ${apiUrl}${endpoint}:`, retryError.message);
-                    showToast('Network error. Check connection.', 4000, 'error');
-                    throw retryError;
-                }
+            const apiUrl = await getWorkingApiUrl();
+            const response = await fetch(`${apiUrl}${endpoint}`, {
+                ...options,
+                headers: {
+                    'Accept': 'application/json',
+                    ...(options.headers || {})
+                },
+                signal: options.signal || AbortSignal.timeout(15000)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => '');
+                throw new Error(`${response.status}: ${errorText || 'Backend request failed'}`);
             }
+
+            return response;
         }
 
+        // Format artwork URL supporting standard HTTP/HTTPS URLs, local paths, and legacy hashes
+        function formatArtworkUrl(coverOrPic, size = '320x320') {
+            if (!coverOrPic) return '';
+            const str = String(coverOrPic).trim();
+            if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('data:') || str.startsWith('/')) {
+                return str;
+            }
+            return `https://resources.tidal.com/images/${str.replace(/-/g, '/')}/${size}.jpg`;
+        }
+
+        // Handle OAuth callback parameters in URL (e.g. 1-click Spotify / Google login)
+        (function handleAuthRedirect() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const token = params.get('access_token');
+                const provider = params.get('provider');
+                if (token && provider) {
+                    localStorage.setItem(`${provider}_token`, token);
+                    if (params.get('user_name')) {
+                        localStorage.setItem(`${provider}_user`, params.get('user_name'));
+                    }
+                    params.delete('access_token');
+                    params.delete('provider');
+                    params.delete('user_name');
+                    const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+                    window.history.replaceState({}, document.title, cleanUrl);
+                }
+            } catch (e) {}
+        })();
 
         // No CORS proxy is used in production; the API must accept direct browser requests.
         // If you require a local proxy for debugging, add it here.
@@ -1789,9 +1764,7 @@ h1 { font-size: 34px; font-weight: 800; }
 
         function updateMediaSession(track) {
             if ('mediaSession' in navigator) {
-                const artUrl = track.album?.cover 
-                    ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/640x640.jpg`
-                    : 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+                const artUrl = formatArtworkUrl(track.album?.cover, '640x640') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
 
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: track.title,
@@ -1893,9 +1866,7 @@ h1 { font-size: 34px; font-weight: 800; }
         function updateShareMeta(track) {
             const title = track?.title ? `Ascolta - ${track.title} - su Preluded` : 'Preluded';
             const description = track?.artist?.name ? `Ascolta ${track.title} di ${track.artist.name} su Preluded` : 'Ascolta i tuoi brani preferiti su Preluded';
-            const imageUrl = track?.album?.cover
-                ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/640x640.jpg`
-                : 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+            const imageUrl = formatArtworkUrl(track?.album?.cover, '640x640') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
 
             const setMeta = (selector, value) => {
                 const el = document.querySelector(selector);
@@ -1913,9 +1884,7 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function updatePlayerUI(track) {
-            const artUrl = track.album?.cover 
-                ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/640x640.jpg`
-                : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/></svg>';
+            const artUrl = formatArtworkUrl(track.album?.cover, '640x640') || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/></svg>';
 
             // Mini Player
             document.getElementById('miniTitle').textContent = track.title;
@@ -2305,9 +2274,7 @@ h1 { font-size: 34px; font-weight: 800; }
         });
 
         function createCard(track, index = 0, isSearchResult = false) {
-            const artUrl = track.album?.cover 
-                ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg`
-                : '';
+            const artUrl = formatArtworkUrl(track.album?.cover, '320x320');
             
             // Serialize track object for onclick
             const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
@@ -2329,9 +2296,7 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function createAlbumCard(album, index = 0) {
-            const artUrl = album.cover 
-                ? `https://resources.tidal.com/images/${album.cover.replace(/-/g, '/')}/320x320.jpg`
-                : '';
+            const artUrl = formatArtworkUrl(album.cover, '320x320');
             
             const albumStr = JSON.stringify(album).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
             
@@ -2347,9 +2312,7 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function createArtistCard(artist, index = 0) {
-            const artUrl = artist.picture 
-                ? `https://resources.tidal.com/images/${artist.picture.replace(/-/g, '/')}/320x320.jpg`
-                : '';
+            const artUrl = formatArtworkUrl(artist.picture, '320x320');
             
             const artistStr = JSON.stringify(artist).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
             
@@ -2697,7 +2660,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 return `
                     <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick="playTrackFromQueue(${i})">
                         <div class="list-artwork">
-                            <img src="${track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : ''}">
+                            <img src="${formatArtworkUrl(track.album?.cover, '320x320')}">
                         </div>
                         <div class="list-info" style="${isPlaying ? 'opacity:0.5' : ''}">
                             <div class="card-title" style="${isPlaying ? 'color:var(--accent)' : ''}">${track.title}</div>
@@ -2996,11 +2959,11 @@ h1 { font-size: 34px; font-weight: 800; }
                         ${pl.songs.map((track, i) => `
                             <div class="list-item" draggable="true" data-index="${i}">
                                 <div class="list-artwork">
-                                    <img src="${track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/80x80.jpg` : ''}" style="width:100%; height:100%; object-fit:cover;">
+                                    <img src="${formatArtworkUrl(track.album?.cover, '80x80')}" style="width:100%; height:100%; object-fit:cover;">
                                 </div>
                                 <div class="list-info">
                                     <div class="card-title">${track.title}</div>
-                                    <div class="card-subtitle">${track.artist?.name || 'Unknown'}</div>
+                                    <div class="card-subtitle">${track.artist?.name}</div>
                                 </div>
                                 <button class="delete-btn" onclick="removeTrackFromEdit(${i})">
                                     <svg class="icon" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
@@ -3104,9 +3067,8 @@ h1 { font-size: 34px; font-weight: 800; }
             document.getElementById('playlistPageCount').textContent = `${songs.length} songs`;
             
             // Get first song artwork for playlist cover
-            const coverArt = songs.length > 0 && songs[0].album?.cover 
-                ? `https://resources.tidal.com/images/${songs[0].album.cover.replace(/-/g, '/')}/640x640.jpg`
-                : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/><circle cx="50" cy="50" r="30" fill="%23666"/></svg>';
+            const coverArt = (songs.length > 0 && formatArtworkUrl(songs[0].album?.cover, '640x640'))
+                || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/></svg>';
             
             document.getElementById('playlistPageCover').src = coverArt;
             
@@ -3134,7 +3096,7 @@ h1 { font-size: 34px; font-weight: 800; }
 
             container.innerHTML = songs.map((track, i) => {
                 const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
-                const artUrl = track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : '';
+                const artUrl = formatArtworkUrl(track.album?.cover, '320x320');
                 
                 return `
                     <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick='handlePlaylistSongClick(${trackStr}, ${playlistIndex})'>
@@ -3176,7 +3138,7 @@ h1 { font-size: 34px; font-weight: 800; }
             container.innerHTML = songs.map((track, i) => {
                 // We use createCard style but as list item
                 const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
-                const artUrl = track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : '';
+                const artUrl = formatArtworkUrl(track.album?.cover, '320x320');
                 
                 return `
                     <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick='playTrack(${trackStr})'>
@@ -3209,9 +3171,8 @@ h1 { font-size: 34px; font-weight: 800; }
             document.getElementById('deepLinkTitle').textContent = track.title || 'Titolo sconosciuto';
             document.getElementById('deepLinkArtist').textContent = track.artist?.name || 'Artista sconosciuto';
 
-            const artUrl = track.album?.cover
-                ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/640x640.jpg`
-                : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/></svg>';
+            const artUrl = formatArtworkUrl(track.album?.cover, '640x640')
+                || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/></svg>';
             document.getElementById('deepLinkArt').src = artUrl;
 
             banner.classList.remove('hidden');
@@ -3461,6 +3422,7 @@ h1 { font-size: 34px; font-weight: 800; }
             // Hide other views
             ['home', 'search', 'library', 'collection', 'playlist-page', 'album'].forEach(tab => {
                 document.getElementById('tab-' + tab).classList.add('hidden');
+                document.getElementById('tab-' + tab).classList.remove('active-tab-content');
             });
             document.getElementById('tab-artist').classList.remove('hidden');
 
@@ -3478,7 +3440,7 @@ h1 { font-size: 34px; font-weight: 800; }
             document.getElementById('artistPageTitle').textContent = artistName || 'Artist';
             header.innerHTML = `<div class="spinner"></div>`;
             topSongsContainer.innerHTML = '<h2 class="section-title">Top Songs</h2><div class="grid"><div class="spinner"></div></div>';
-            discographyContainer.innerHTML = '<h2 class="section-title">Discografia</h2><div class="spinner"></div>';
+            discographyContainer.innerHTML = '<h2 class="section-title">Discografia</h2><div class="grid"><div class="spinner"></div></div>';
             similarContainer.innerHTML = '<h2 class="section-title">Artisti simili</h2><div class="grid"><div class="spinner"></div></div>';
 
             try {
@@ -3491,7 +3453,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 const artistMeta = metaData.artist || metaData.data?.artist || {};
                 const name = artistMeta.name || artistName || 'Artist';
                 const picture = artistMeta.picture || artistPicture || '';
-                const imageUrl = picture ? `https://resources.tidal.com/images/${picture.replace(/-/g, '/')}/750x750.jpg` : '';
+                const imageUrl = formatArtworkUrl(picture, '750x750');
 
                 const artistForBackNav = { id: artistId, name: name, picture: picture };
                 const artistJson = JSON.stringify(artistForBackNav).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -3540,12 +3502,12 @@ h1 { font-size: 34px; font-weight: 800; }
                                 <h3 class="section-title" style="font-size:18px; margin-bottom:10px;">${section}</h3>
                                 <div class="horizontal-scroll">
                                     ${itemsToShow.map((album, i) => {
-                                        const cover = album.cover ? `https://resources.tidal.com/images/${album.cover.replace(/-/g, '/')}/320x320.jpg` : '';
+                                        const cover = formatArtworkUrl(album.cover, '320x320');
                                         const albumName = album.title || album.name || 'Album';
                                         const year = album.releaseDate ? ` · ${album.releaseDate.split('-')[0]}` : '';
                                         const artistLabel = album.artist?.name ? album.artist.name : '';
                                         const albumId = album.id || album.albumId || (album.item && album.item.id) || '';
-                                        const albumIdArg = albumId ? albumId : 'null';
+                                        const albumIdArg = albumId ? (typeof albumId === 'string' ? `'${albumId}'` : albumId) : 'null';
                                         return `<div class="card animate-in" style="animation-delay:${i * 30}ms" ${albumId ? `onclick='openAlbumPage(${albumIdArg})'` : ''}>
                                                 <div class="artwork"><img src="${cover}" loading="lazy"></div>
                                                 <div class="card-title">${albumName}</div>
@@ -3580,7 +3542,7 @@ h1 { font-size: 34px; font-weight: 800; }
                         </div>
                         <div class="horizontal-scroll">
                             ${similarArtists.slice(0, 6).map((a, i) => {
-                                const pic = a.picture ? `https://resources.tidal.com/images/${a.picture.replace(/-/g, '/')}/320x320.jpg` : '';
+                                const pic = formatArtworkUrl(a.picture, '320x320');
                                 const artistName = a.name || '';
                                 const artistStr = JSON.stringify(a).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                                 return `<div class="card animate-in" style="animation-delay:${i * 30}ms" onclick='openArtistPage(${artistStr})'>
@@ -3613,13 +3575,14 @@ h1 { font-size: 34px; font-weight: 800; }
             
             const container = document.getElementById('collectionList');
             container.innerHTML = `<div class="grid">${albums.map((album, i) => {
-                const cover = album.cover ? `https://resources.tidal.com/images/${album.cover.replace(/-/g, '/')}/320x320.jpg` : '';
+                const cover = formatArtworkUrl(album.cover, '320x320');
                 const albumName = album.title || album.name || 'Album';
                 const year = album.releaseDate ? ` · ${album.releaseDate.split('-')[0]}` : '';
                 const artistLabel = album.artist?.name ? album.artist.name : '';
                 const albumId = album.id || album.albumId || '';
+                const albumIdArg = albumId ? (typeof albumId === 'string' ? `'${albumId}'` : albumId) : 'null';
                 return `
-                    <div class="card animate-in" style="animation-delay:${i * 30}ms" ${albumId ? `onclick='openAlbumPage(${albumId})'` : ''}>
+                    <div class="card animate-in" style="animation-delay:${i * 30}ms" ${albumId ? `onclick='openAlbumPage(${albumIdArg})'` : ''}>
                         <div class="artwork"><img src="${cover}" loading="lazy"></div>
                         <div class="card-title">${albumName}</div>
                         <div class="card-subtitle">${artistLabel}${year}</div>
@@ -3640,7 +3603,7 @@ h1 { font-size: 34px; font-weight: 800; }
             
             const container = document.getElementById('collectionList');
             container.innerHTML = `<div class="grid">${artists.map((a, i) => {
-                const pic = a.picture ? `https://resources.tidal.com/images/${a.picture.replace(/-/g, '/')}/320x320.jpg` : '';
+                const pic = formatArtworkUrl(a.picture, '320x320');
                 const artistName = a.name || '';
                 const artistStr = JSON.stringify(a).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                 return `
@@ -3750,7 +3713,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 const album = data.album || data.data || {};
                 const items = data.items || data.data?.items || [];
                 const albumCoverId = album.cover || albumCover || '';
-                const coverUrl = albumCoverId ? `https://resources.tidal.com/images/${albumCoverId.replace(/-/g, '/')}/640x640.jpg` : '';
+                const coverUrl = formatArtworkUrl(albumCoverId, '640x640');
                 const artistName = album.artist?.name || (album.artists?.[0]?.name) || '';
                 const year = album.releaseDate ? ` · ${album.releaseDate.split('-')[0]}` : '';
 
@@ -3788,7 +3751,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 if (tracksContainer) {
                     tracksContainer.innerHTML = tracks.map((track, i) => {
                         const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-                        const artUrl = track.album?.cover ? `https://resources.tidal.com/images/${track.album.cover.replace(/-/g, '/')}/320x320.jpg` : coverUrl;
+                        const artUrl = formatArtworkUrl(track.album?.cover, '320x320') || coverUrl;
                         return `
                             <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" onclick="playAlbumSong(${i})">
                                 <div class="list-artwork"><img src="${artUrl}"></div>
