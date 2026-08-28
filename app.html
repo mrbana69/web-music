@@ -1536,12 +1536,28 @@ h1 { font-size: 34px; font-weight: 800; }
                 return str;
             }
             if (str.includes('i.ytimg.com')) {
-                return str.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg');
+                return str.replace(/\/default\.jpg/, '/hqdefault.jpg').replace(/\/mqdefault\.jpg/, '/hqdefault.jpg').replace(/\/maxresdefault\.jpg/, '/hqdefault.jpg');
             }
             if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('data:') || str.startsWith('/')) {
                 return str;
             }
             return `https://resources.tidal.com/images/${str.replace(/-/g, '/')}/${size}.jpg`;
+        }
+
+        // Clean & sanitize artist names from YouTube artifacts (- Topic, VEVO, Official Channel, etc.)
+        function formatArtistName(raw) {
+            const name = typeof raw === 'object' ? (raw?.name || '') : (raw || '');
+            if (!name || typeof name !== 'string') return 'Unknown Artist';
+            let clean = name.trim();
+            clean = clean.replace(/\s*-\s*Topic\b/gi, '');
+            clean = clean.replace(/Topic$/i, '');
+            clean = clean.replace(/\s*VEVO\b/gi, '');
+            clean = clean.replace(/VEVO$/i, '');
+            clean = clean.replace(/\s*Official(?:\s*Channel|\s*Artist\s*Channel)?\b/gi, '');
+            clean = clean.replace(/\s*-\s*Official$/gi, '');
+            clean = clean.replace(/\s*Records\b/gi, '');
+            clean = clean.replace(/\s+/g, ' ').trim();
+            return clean || 'Artist';
         }
 
         // Handle OAuth callback parameters in URL (e.g. 1-click Spotify / Google login)
@@ -1723,6 +1739,17 @@ h1 { font-size: 34px; font-weight: 800; }
                             },
                             'onError': (e) => {
                                 console.warn('YouTube player error:', e);
+                                const errCode = e?.data;
+                                if (errCode === 150 || errCode === 101 || errCode === 100 || errCode === 2) {
+                                    console.warn(`[YouTubePlayer] Video restriction code ${errCode}, falling back to direct stream...`);
+                                    if (state.currentStreamUrl && !state.currentStreamUrl.includes('youtube.com/watch')) {
+                                        nativeAudio.pause();
+                                        nativeAudio.src = state.currentStreamUrl;
+                                        nativeAudio.play().catch(console.warn);
+                                    } else {
+                                        setTimeout(() => { nextTrack(); }, 500);
+                                    }
+                                }
                             }
                         }
                     });
@@ -2193,7 +2220,7 @@ h1 { font-size: 34px; font-weight: 800; }
         function updateMediaSession(track) {
             if ('mediaSession' in navigator && track) {
                 const artUrl = formatArtworkUrl(track.album?.cover, '640x640') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
-                const artistName = track.artist?.name || (typeof track.artist === 'string' ? track.artist : 'Unknown Artist');
+                const artistName = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
                 const albumTitle = track.album?.title || track.title || 'Unknown Album';
 
                 navigator.mediaSession.metadata = new MediaMetadata({
@@ -2273,12 +2300,12 @@ h1 { font-size: 34px; font-weight: 800; }
             const path = state.isPlaying 
                 ? "M6 19h4V5H6v14zm8-14v14h4V5h-4z" // Pause
                 : "M8 5v14l11-7z"; // Play
-            
-            const miniBtn = document.querySelector('#miniPlayBtn svg path');
-            const fullBtn = document.querySelector('#fullPlayBtn svg path');
-            
-            if(miniBtn) miniBtn.setAttribute('d', path);
-            if(fullBtn) fullBtn.setAttribute('d', path);
+
+            const miniBtn = document.getElementById('miniPlayBtn');
+            const fullBtn = document.getElementById('fullPlayBtn');
+
+            if (miniBtn) miniBtn.querySelector('path').setAttribute('d', path);
+            if (fullBtn) fullBtn.querySelector('path').setAttribute('d', path);
         }
 
         async function extractColor(url) {
@@ -2305,36 +2332,43 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function updateShareMeta(track) {
-            const title = track?.title ? `Ascolta - ${track.title} - su Preluded` : 'Preluded';
-            const description = track?.artist?.name ? `Ascolta ${track.title} di ${track.artist.name} su Preluded` : 'Ascolta i tuoi brani preferiti su Preluded';
-            const imageUrl = formatArtworkUrl(track?.album?.cover, '640x640') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+            if (!track) return;
+            const title = `${track.title} • ${formatArtistName(track.artist?.name || track.artist)} | Preluded`;
+            const description = track?.artist?.name ? `Ascolta ${track.title} di ${formatArtistName(track.artist.name)} su Preluded` : 'Ascolta i tuoi brani preferiti su Preluded';
+            const artwork = formatArtworkUrl(track.album?.cover, '640x640') || 'https://preluded.vercel.app/logo.png';
+            const shareUrl = `https://preluded.vercel.app/app?track=${track.id}`;
 
-            const setMeta = (selector, value) => {
-                const el = document.querySelector(selector);
-                if (el) el.setAttribute('content', value);
-            };
+            const ogTitle = document.getElementById('ogTitle');
+            const ogDesc = document.getElementById('ogDesc');
+            const ogImage = document.getElementById('ogImage');
+            const ogUrl = document.getElementById('ogUrl');
+            const twTitle = document.getElementById('twTitle');
+            const twDesc = document.getElementById('twDesc');
+            const twImage = document.getElementById('twImage');
 
-            setMeta('meta[property="og:title"]', title);
-            setMeta('meta[name="twitter:title"]', title);
-            setMeta('meta[property="og:description"]', description);
-            setMeta('meta[name="twitter:description"]', description);
-            setMeta('meta[property="og:image"]', imageUrl);
-            setMeta('meta[name="twitter:image"]', imageUrl);
+            if (ogTitle) ogTitle.content = title;
+            if (ogDesc) ogDesc.content = description;
+            if (ogImage) ogImage.content = artwork;
+            if (ogUrl) ogUrl.content = shareUrl;
+            if (twTitle) twTitle.content = title;
+            if (twDesc) twDesc.content = description;
+            if (twImage) twImage.content = artwork;
 
             document.title = title;
         }
 
         function updatePlayerUI(track) {
             const artUrl = formatArtworkUrl(track.album?.cover, '640x640') || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/></svg>';
+            const cleanArt = formatArtistName(track.artist?.name || track.artist || "Unknown");
 
             // Mini Player
             document.getElementById('miniTitle').textContent = track.title;
-            document.getElementById('miniArtist').textContent = track.artist?.name || "Unknown";
+            document.getElementById('miniArtist').textContent = cleanArt;
             document.getElementById('miniArt').src = artUrl;
 
             // Full Player
             document.getElementById('fullTitle').textContent = track.title;
-            document.getElementById('fullArtist').textContent = track.artist?.name || "Unknown";
+            document.getElementById('fullArtist').textContent = cleanArt;
             document.getElementById('fullArt').src = artUrl;
             
             extractColor(artUrl).then(color => {

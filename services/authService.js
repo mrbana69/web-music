@@ -2,6 +2,20 @@ const config = require('../config/env');
 const { fetchJson } = require('../lib/httpClient');
 const cacheService = require('./cacheService');
 
+function cleanArtistName(raw) {
+  if (!raw || typeof raw !== 'string') return 'Artist';
+  let clean = raw.trim();
+  clean = clean.replace(/\s*-\s*Topic\b/gi, '');
+  clean = clean.replace(/Topic$/i, '');
+  clean = clean.replace(/\s*VEVO\b/gi, '');
+  clean = clean.replace(/VEVO$/i, '');
+  clean = clean.replace(/\s*Official(?:\s*Channel|\s*Artist\s*Channel)?\b/gi, '');
+  clean = clean.replace(/\s*-\s*Official$/gi, '');
+  clean = clean.replace(/\s*Records\b/gi, '');
+  clean = clean.replace(/\s+/g, ' ').trim();
+  return clean || 'Artist';
+}
+
 class AuthService {
   // ==========================================
   // Spotify 1-Click & PKCE Flow
@@ -182,7 +196,7 @@ class AuthService {
             if (itemsData && itemsData.items) {
               songs = itemsData.items.map(item => {
                 const title = item.snippet?.title || '';
-                const channelTitle = item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist';
+                const channelTitle = cleanArtistName(item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist');
                 const vId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
                 const rawThumb = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
                 const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
@@ -226,7 +240,7 @@ class AuthService {
       if (likedData && likedData.items) {
         likedSongs = likedData.items.map(v => {
           const title = v.snippet?.title || '';
-          const channelTitle = v.snippet?.channelTitle || 'Artist';
+          const channelTitle = cleanArtistName(v.snippet?.channelTitle || 'Artist');
           const rawThumb = v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.medium?.url || '';
           const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
           return {
@@ -257,7 +271,7 @@ class AuthService {
           if (llData && llData.items && llData.items.length > 0) {
             likedSongs = llData.items.map(item => {
               const title = item.snippet?.title || '';
-              const channelTitle = item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist';
+              const channelTitle = cleanArtistName(item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist');
               const vId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
               const rawThumb = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
               const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));

@@ -35,9 +35,26 @@ class YouTubeMusicService {
       return str;
     }
     if (str.includes('i.ytimg.com')) {
-      return str.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg');
+      return str.replace(/\/default\.jpg/, '/hqdefault.jpg').replace(/\/mqdefault\.jpg/, '/hqdefault.jpg').replace(/\/maxresdefault\.jpg/, '/hqdefault.jpg');
     }
     return str;
+  }
+
+  /**
+   * Sanitize artist names by stripping YouTube metadata artifacts (- Topic, VEVO, Official Channel, etc.)
+   */
+  formatArtistName(rawName) {
+    if (!rawName || typeof rawName !== 'string') return 'Unknown Artist';
+    let clean = rawName.trim();
+    clean = clean.replace(/\s*-\s*Topic\b/gi, '');
+    clean = clean.replace(/Topic$/i, '');
+    clean = clean.replace(/\s*VEVO\b/gi, '');
+    clean = clean.replace(/VEVO$/i, '');
+    clean = clean.replace(/\s*Official(?:\s*Channel|\s*Artist\s*Channel)?\b/gi, '');
+    clean = clean.replace(/\s*-\s*Official$/gi, '');
+    clean = clean.replace(/\s*Records\b/gi, '');
+    clean = clean.replace(/\s+/g, ' ').trim();
+    return clean || 'Artist';
   }
 
   /**
@@ -105,7 +122,8 @@ class YouTubeMusicService {
 
         // Subtitle runs (Artist, Album, Duration)
         const subRuns = flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
-        const artist = subRuns[0]?.text || 'Unknown Artist';
+        const rawArtist = subRuns[0]?.text || 'Unknown Artist';
+        const artist = this.formatArtistName(rawArtist);
         const durationStr = subRuns[subRuns.length - 1]?.text || '';
         const durationMs = this.parseDuration(durationStr);
 
@@ -201,7 +219,8 @@ class YouTubeMusicService {
           const v = node.videoRenderer;
           const videoId = v.videoId;
           const title = v.title?.runs?.[0]?.text || '';
-          const artist = v.ownerText?.runs?.[0]?.text || 'Unknown Artist';
+          const rawArtist = v.ownerText?.runs?.[0]?.text || 'Unknown Artist';
+          const artist = this.formatArtistName(rawArtist);
           const durationStr = v.lengthText?.simpleText || '';
           const durationMs = this.parseDuration(durationStr);
           const rawThumb = v.thumbnail?.thumbnails?.[0]?.url || '';
@@ -347,7 +366,7 @@ class YouTubeMusicService {
       const details = res?.videoDetails;
       if (details) {
         const title = details.title || '';
-        const author = details.author || 'Artist';
+        const author = this.formatArtistName(details.author || 'Artist');
         const rawThumb = details.thumbnail?.thumbnails?.[details.thumbnail.thumbnails.length - 1]?.url || '';
         const thumb = this.formatThumb(rawThumb);
 
@@ -611,7 +630,8 @@ class YouTubeMusicService {
             const item = node.musicResponsiveListItemRenderer;
             const flex = item.flexColumns || [];
             const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-            const tArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || resolvedArtist;
+            const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || resolvedArtist;
+            const tArtist = this.formatArtistName(rawArtist);
             const vId = item.playlistItemData?.videoId || flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId;
             if (tTitle && vId) {
               tracks.push({
@@ -871,7 +891,8 @@ class YouTubeMusicService {
           const item = node.musicResponsiveListItemRenderer;
           const flex = item.flexColumns || [];
           const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-          const tArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || 'Artist';
+          const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || 'Artist';
+          const tArtist = this.formatArtistName(rawArtist);
           const vId = item.playlistItemData?.videoId || flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId;
           const rawThumb = item.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || playlistCover;
           const thumb = this.formatThumb(rawThumb);
