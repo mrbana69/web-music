@@ -371,7 +371,7 @@ class YouTubeMusicService {
     let cleanTitle = String(albumQuery).trim().replace(/^alb_/, '');
 
     // If cleanTitle is an 11-char video ID, resolve track info first
-    if (/^[a-zA-Z0-9_-]{11}$/.test(cleanTitle)) {
+    if (/^[a-zA-Z0-9_-]{11}$/.test(cleanTitle) && !cleanTitle.startsWith('MPREb_') && !cleanTitle.startsWith('OLAK5uy_')) {
       const info = await this.getTrackInfo(cleanTitle);
       if (info) {
         cleanTitle = info.album?.title || info.title;
@@ -379,7 +379,7 @@ class YouTubeMusicService {
       }
     }
 
-    const cacheKey = `yt_album_${encodeURIComponent(cleanTitle)}_${encodeURIComponent(artistName || '')}`;
+    const cacheKey = `yt_album_v2_${encodeURIComponent(cleanTitle)}_${encodeURIComponent(artistName || '')}`;
     const cached = cacheService.get(cacheKey);
     if (cached) return cached;
 
@@ -416,8 +416,9 @@ class YouTubeMusicService {
           timeout: 5000
         });
 
+        const candidates = [];
         const traverse = (node) => {
-          if (!node || typeof node !== 'object' || browseId) return;
+          if (!node || typeof node !== 'object') return;
           if (node.musicResponsiveListItemRenderer) {
             const item = node.musicResponsiveListItemRenderer;
             const flex = item.flexColumns || [];
@@ -426,16 +427,35 @@ class YouTubeMusicService {
             const bId = item.navigationEndpoint?.browseEndpoint?.browseId;
             const rawThumb = item.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url;
             if (t && bId) {
-              browseId = bId;
-              resolvedTitle = t;
-              if (a) resolvedArtist = a;
-              if (rawThumb) albumCover = rawThumb.replace(/=w\d+-h\d+/, '=w544-h544');
+              candidates.push({ title: t, artist: a, browseId: bId, thumb: rawThumb });
             }
           }
           for (const k of Object.keys(node)) traverse(node[k]);
         };
 
         traverse(searchData);
+
+        if (candidates.length > 0) {
+          const targetTitle = cleanTitle.toLowerCase();
+          let best = candidates.find(c => c.title.toLowerCase() === targetTitle);
+          if (!best) {
+            best = candidates.find(c => c.title.toLowerCase().includes(targetTitle) || targetTitle.includes(c.title.toLowerCase()));
+          }
+          if (!best) {
+            best = candidates[0];
+          }
+
+          if (best) {
+            browseId = best.browseId;
+            resolvedTitle = best.title;
+            if (best.artist && best.artist !== 'Album' && best.artist !== 'Singolo') {
+              resolvedArtist = best.artist;
+            }
+            if (best.thumb) {
+              albumCover = best.thumb.replace(/=w\d+-h\d+/, '=w544-h544');
+            }
+          }
+        }
       } catch (e) {
         console.warn('[YouTubeMusicService] Album search failed:', e.message);
       }
@@ -525,6 +545,7 @@ class YouTubeMusicService {
 
     const album = {
       id: browseId || `alb_${encodeURIComponent(resolvedTitle)}`,
+      browseId,
       title: resolvedTitle,
       name: resolvedTitle,
       cover: albumCover,
@@ -583,11 +604,110 @@ class YouTubeMusicService {
   }
 
   /**
-   * Get related tracks / recommendations from YouTube Music
+   * Get related tracks / recommendations from YouTube Music using official RDAMVM Automix
    */
   async getRecommendations(seedIdOrQuery, limit = 15) {
-    const query = seedIdOrQuery || 'top hits';
-    const searchRes = await this.search(query, 'track', limit);
+    if (!seedIdOrQuery) return [];
+    let videoId = null;
+    let cleanId = String(seedIdOrQuery).trim().replace(/^mix_/, '').replace(/^track_/, '');
+
+    // 1. If cleanId is an 11-char video ID
+    if (/^[a-zA-Z0-9_-]{11}$/.test(cleanId)) {
+      videoId = cleanId;
+    } else {
+      // 2. Resolve query to real video ID
+      try {
+        const searchRes = await this.search(cleanId, 'track', 1);
+        videoId = searchRes?.tracks?.items?.[0]?.videoId || searchRes?.tracks?.items?.[0]?.id;
+      } catch (e) {}
+    }
+
+    if (!videoId) {
+      const searchRes = await this.search(cleanId || 'top hits', 'track', limit);
+      return searchRes?.tracks?.items || [];
+    }
+
+    const cacheKey = `yt_rec_automix_${videoId}_${limit}`;
+    const cached = cacheService.get(cacheKey);
+    if (cached) return cached;
+
+    // 3. Fetch official YouTube Music Automix / Radio queue (RDAMVM)
+    try {
+      const payload = {
+        context: {
+          client: {
+            clientName: 'WEB_REMIX',
+            clientVersion: '1.20240101.01.00',
+            hl: 'it',
+            gl: 'IT'
+          }
+        },
+        videoId,
+        playlistId: `RDAMVM${videoId}`,
+        isAudioOnly: true
+      };
+
+      const data = await fetchJson('https://music.youtube.com/youtubei/v1/next', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'https://music.youtube.com',
+          'Referer': 'https://music.youtube.com/'
+        },
+        body: JSON.stringify(payload),
+        timeout: 6000
+      });
+
+      const radioTracks = [];
+      const traverse = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.playlistPanelVideoRenderer) {
+          const item = node.playlistPanelVideoRenderer;
+          const title = item.title?.runs?.[0]?.text;
+          const artistName = item.longBylineText?.runs?.[0]?.text || item.shortBylineText?.runs?.[0]?.text || 'Artist';
+          const vId = item.videoId;
+          const thumb = item.thumbnail?.thumbnails?.[0]?.url;
+          if (title && vId && vId !== videoId) {
+            radioTracks.push({
+              id: vId,
+              videoId: vId,
+              title,
+              artist: {
+                id: `art_${encodeURIComponent(artistName)}`,
+                name: artistName,
+                picture: thumb
+              },
+              artists: [{
+                id: `art_${encodeURIComponent(artistName)}`,
+                name: artistName
+              }],
+              album: {
+                id: `alb_${vId}`,
+                title,
+                cover: thumb
+              },
+              duration: 210,
+              duration_ms: 210000,
+              source: 'youtube-radio'
+            });
+          }
+        }
+        for (const k of Object.keys(node)) traverse(node[k]);
+      };
+
+      traverse(data);
+
+      if (radioTracks.length > 0) {
+        const result = radioTracks.slice(0, limit);
+        cacheService.set(cacheKey, result, 3600);
+        return result;
+      }
+    } catch (err) {
+      console.warn('[YouTubeMusicService] RDAMVM radio failed:', err.message);
+    }
+
+    // Fallback: search similar tracks
+    const searchRes = await this.search(cleanId || 'top hits', 'track', limit);
     return searchRes?.tracks?.items || [];
   }
 }

@@ -1442,6 +1442,39 @@ h1 { font-size: 34px; font-weight: 800; }
             } catch (e) {}
         })();
 
+        // --- iOS Safari Background Audio Session Manager ---
+        const iOSBackgroundAudio = {
+            audioEl: null,
+            init() {
+                if (!this.audioEl) {
+                    this.audioEl = document.getElementById('nativeAudio');
+                    if (!this.audioEl) {
+                        this.audioEl = new Audio();
+                    }
+                    // Ultra-lightweight silent WAV audio loop to keep iOS WebKit audio pipeline active in background
+                    this.audioEl.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+                    this.audioEl.loop = true;
+                    this.audioEl.playsInline = true;
+                    this.audioEl.volume = 0.01;
+                }
+            },
+            start() {
+                try {
+                    this.init();
+                    if (this.audioEl && this.audioEl.paused) {
+                        this.audioEl.play().catch(() => {});
+                    }
+                } catch (e) {}
+            },
+            stop() {
+                try {
+                    if (this.audioEl && !this.audioEl.paused) {
+                        this.audioEl.pause();
+                    }
+                } catch (e) {}
+            }
+        };
+
         // --- YouTube Audio Bridge Player ---
         class YouTubeAudioPlayer {
             constructor() {
@@ -1511,16 +1544,25 @@ h1 { font-size: 34px; font-weight: 800; }
                                     this.paused = false;
                                     this.ended = false;
                                     state.isPlaying = true;
+                                    iOSBackgroundAudio.start();
+                                    if ('mediaSession' in navigator) {
+                                        navigator.mediaSession.playbackState = 'playing';
+                                    }
                                     updatePlayIcons();
                                     requestWakeLock();
                                 } else if (e.data === 2) { // PAUSED
                                     this.paused = true;
                                     state.isPlaying = false;
+                                    iOSBackgroundAudio.stop();
+                                    if ('mediaSession' in navigator) {
+                                        navigator.mediaSession.playbackState = 'paused';
+                                    }
                                     updatePlayIcons();
                                 } else if (e.data === 0) { // ENDED
                                     this.ended = true;
                                     this.paused = true;
                                     state.isPlaying = false;
+                                    iOSBackgroundAudio.start();
                                     nextTrack();
                                 }
                             },
@@ -1799,34 +1841,31 @@ h1 { font-size: 34px; font-weight: 800; }
         async function loadMix(track, fromSearch = false) {
             try {
                 if (state.mixLoaded) return;
+                const seedId = track.videoId || track.id;
+                const seedTitle = track.title || '';
+                const seedArtist = track.artist?.name || (typeof track.artist === 'string' ? track.artist : '');
 
-                const infoRes = await apiFetch(`/info/?id=${track.id}`);
-                const infoData = await infoRes.json();
+                const mixRes = await apiFetch(`/mix/?id=${encodeURIComponent(seedId)}&title=${encodeURIComponent(seedTitle)}&artist=${encodeURIComponent(seedArtist)}`);
+                const mixData = await mixRes.json();
+                const items = mixData.items || (mixData.data && mixData.data.items);
 
-                if (infoData.data && infoData.data.mixes && infoData.data.mixes.TRACK_MIX) {
-                    const mixId = infoData.data.mixes.TRACK_MIX;
-                    const mixRes = await apiFetch(`/mix/?id=${mixId}`);
-                    const mixData = await mixRes.json();
-
-                    const items = mixData.items || (mixData.data && mixData.data.items);
-                    if (items) {
-                        const newTracks = items.map(entry => entry.item || entry).filter(t => t && t.id !== track.id && t.title).map(t => {
-                            if (t.artists && !t.artist) {
-                                t.artist = t.artists[0];
-                            }
-                            if (!t.artist) t.artist = { name: 'Unknown' };
-                            return t;
-                        });
-                        if (newTracks.length > 0) {
-                            state.queue.push(...newTracks);
-                            updateQueueUI();
-                            state.mixLoaded = true;
+                if (items && items.length > 0) {
+                    const newTracks = items.map(entry => entry.item || entry).filter(t => t && t.id !== track.id && t.title).map(t => {
+                        if (t.artists && !t.artist) {
+                            t.artist = t.artists[0];
                         }
+                        if (!t.artist) t.artist = { name: 'Unknown' };
+                        return t;
+                    });
+                    if (newTracks.length > 0) {
+                        state.queue.push(...newTracks);
+                        updateQueueUI();
+                        state.mixLoaded = true;
                     }
                 } else if (fromSearch) {
                     // Fallback to search-based mix: add next items from search results
                     try {
-                        const query = encodeURIComponent(track.title + ' ' + (track.artist?.name || ''));
+                        const query = encodeURIComponent(track.title + ' ' + seedArtist);
                         const searchRes = await apiFetch(`/search/?s=${query}`);
                         const searchData = await searchRes.json();
 
@@ -1845,8 +1884,8 @@ h1 { font-size: 34px; font-weight: 800; }
                         console.error("Search-based mix failed", e);
                     }
                 }
-            } catch (e) {
-                console.error("Mix load failed", e);
+            } catch (err) {
+                console.error("Failed to load mix:", err);
             }
         }
 
@@ -1953,11 +1992,13 @@ h1 { font-size: 34px; font-weight: 800; }
             state.isPlaying = !state.isPlaying;
             
             if (state.isPlaying && !wasPlaying) {
-                // Starting playback - request wake lock
                 requestWakeLock();
+                iOSBackgroundAudio.start();
+                if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
             } else if (!state.isPlaying && wasPlaying) {
-                // Stopping playback - release wake lock
                 releaseWakeLock();
+                iOSBackgroundAudio.stop();
+                if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
             }
             
             if (ytAudioPlayer.isInit) {
@@ -1973,22 +2014,38 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function updateMediaSession(track) {
-            if ('mediaSession' in navigator) {
+            if ('mediaSession' in navigator && track) {
                 const artUrl = formatArtworkUrl(track.album?.cover, '640x640') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+                const artistName = track.artist?.name || (typeof track.artist === 'string' ? track.artist : 'Unknown Artist');
+                const albumTitle = track.album?.title || track.title || 'Unknown Album';
 
                 navigator.mediaSession.metadata = new MediaMetadata({
-                    title: track.title,
-                    artist: track.artist?.name || "Unknown Artist",
-                    album: track.album?.title || "Unknown Album",
+                    title: track.title || 'Unknown Track',
+                    artist: artistName,
+                    album: albumTitle,
                     artwork: [
+                        { src: artUrl, sizes: '96x96', type: 'image/jpeg' },
+                        { src: artUrl, sizes: '128x128', type: 'image/jpeg' },
+                        { src: artUrl, sizes: '192x192', type: 'image/jpeg' },
+                        { src: artUrl, sizes: '256x256', type: 'image/jpeg' },
+                        { src: artUrl, sizes: '384x384', type: 'image/jpeg' },
                         { src: artUrl, sizes: '512x512', type: 'image/jpeg' }
                     ]
                 });
 
-                navigator.mediaSession.setActionHandler('play', togglePlay);
-                navigator.mediaSession.setActionHandler('pause', togglePlay);
-                navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
-                navigator.mediaSession.setActionHandler('nexttrack', nextTrack);
+                navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
+
+                try {
+                    navigator.mediaSession.setActionHandler('play', () => togglePlay());
+                    navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+                    navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
+                    navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
+                    navigator.mediaSession.setActionHandler('seekto', (details) => {
+                        if (details.seekTime !== undefined) {
+                            seekToSeconds(details.seekTime);
+                        }
+                    });
+                } catch (e) {}
             }
         }
 
@@ -2118,6 +2175,16 @@ h1 { font-size: 34px; font-weight: 800; }
             document.getElementById('currentTime').textContent = formatTime(player.currentTime);
             document.getElementById('totalTime').textContent = formatTime(player.duration);
             updateLyricsScroll(player.currentTime);
+
+            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && player.duration > 0) {
+                try {
+                    navigator.mediaSession.setPositionState({
+                        duration: Math.max(player.duration, 1),
+                        playbackRate: state.playbackRate || 1.0,
+                        position: Math.min(Math.max(player.currentTime, 0), player.duration)
+                    });
+                } catch (e) {}
+            }
         }
 
         setInterval(updateProgress, 500);
@@ -2135,7 +2202,16 @@ h1 { font-size: 34px; font-weight: 800; }
             
             const bar = e.currentTarget;
             const percent = e.offsetX / bar.offsetWidth;
-            player.currentTime = percent * player.duration;
+            seekToSeconds(percent * player.duration);
+        }
+
+        function seekToSeconds(seconds) {
+            const player = getActiveAudioPlayer();
+            if (!player) return;
+            player.currentTime = seconds;
+            if (ytAudioPlayer.isInit && ytAudioPlayer.seekTo) {
+                ytAudioPlayer.seekTo(seconds);
+            }
             updateProgress();
         }
 
@@ -3722,24 +3798,20 @@ h1 { font-size: 34px; font-weight: 800; }
 
             showGlobalSpinner('Caricamento artista...');
             document.getElementById('artistPageTitle').textContent = artistName;
-            header.innerHTML = `<div class="spinner"></div>`;
-            topSongsContainer.innerHTML = '<h2 class="section-title">Top Songs</h2><div class="grid"><div class="spinner"></div></div>';
-            discographyContainer.innerHTML = '<h2 class="section-title">Discografia</h2><div class="grid"><div class="spinner"></div></div>';
-            similarContainer.innerHTML = '<h2 class="section-title">Artisti simili</h2><div class="grid"><div class="spinner"></div></div>';
 
             try {
-                const [metaData, similarData] = await Promise.all([
-                    apiFetch(`/artist/?name=${encodeURIComponent(artistName)}`).then(r => r.json()).catch(() => ({})),
-                    apiFetch(`/artist/similar/?name=${encodeURIComponent(artistName)}`).then(r => r.json()).catch(() => ({}))
+                const queryParam = artistName ? `name=${encodeURIComponent(artistName)}` : `id=${encodeURIComponent(artistId)}`;
+                const [metaRes, similarRes] = await Promise.all([
+                    apiFetch(`/artist/?${queryParam}`).then(r => r.json()).catch(() => ({})),
+                    apiFetch(`/artist/similar/?${queryParam}`).then(r => r.json()).catch(() => ({}))
                 ]);
 
-                const artistMeta = metaData.artist || metaData.data?.artist || {};
+                const metaData = metaRes.data || metaRes;
+                const similarData = similarRes.data || similarRes;
+                const artistMeta = metaData.artist || { name: artistName, picture: artistPic };
                 const name = artistMeta.name || artistName;
-                const picture = artistMeta.picture || artistPicture || '';
-                const imageUrl = formatArtworkUrl(picture, '750x750');
-
-                const artistForBackNav = { id: artistMeta.id || `art_${name}`, name: name, picture: picture };
-                const artistJson = JSON.stringify(artistForBackNav).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                const imageUrl = formatArtworkUrl(artistMeta.picture || artistPic, '640x640');
+                const artistJson = JSON.stringify(artistMeta).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
                 document.getElementById('artistPageTitle').textContent = name;
                 header.innerHTML = `
@@ -3788,10 +3860,17 @@ h1 { font-size: 34px; font-weight: 800; }
                                         const cover = formatArtworkUrl(album.cover, '320x320');
                                         const albumName = album.title || album.name || 'Album';
                                         const year = album.releaseDate ? ` · ${album.releaseDate.split('-')[0]}` : '';
-                                        const artistLabel = album.artist?.name ? album.artist.name : '';
-                                        const albumId = album.id || album.albumId || (album.item && album.item.id) || '';
-                                        const albumIdArg = albumId ? (typeof albumId === 'string' ? `'${albumId}'` : albumId) : 'null';
-                                        return `<div class="card animate-in" style="animation-delay:${i * 30}ms" ${albumId ? `onclick='openAlbumPage(${albumIdArg})'` : ''}>
+                                        const artistLabel = album.artist?.name || (typeof album.artist === 'string' ? album.artist : name);
+                                        const albumObj = {
+                                            id: album.browseId || album.id || album.albumId || '',
+                                            browseId: album.browseId || '',
+                                            title: albumName,
+                                            name: albumName,
+                                            artist: { name: artistLabel },
+                                            cover: album.cover || cover
+                                        };
+                                        const albumStr = JSON.stringify(albumObj).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                                        return `<div class="card animate-in" style="animation-delay:${i * 30}ms; cursor:pointer;" onclick='openAlbumPage(${albumStr})'>
                                                 <div class="artwork"><img src="${cover}" loading="lazy"></div>
                                                 <div class="card-title">${albumName}</div>
                                                 <div class="card-subtitle">${artistLabel}${year}</div>
@@ -3861,11 +3940,18 @@ h1 { font-size: 34px; font-weight: 800; }
                 const cover = formatArtworkUrl(album.cover, '320x320');
                 const albumName = album.title || album.name || 'Album';
                 const year = album.releaseDate ? ` · ${album.releaseDate.split('-')[0]}` : '';
-                const artistLabel = album.artist?.name ? album.artist.name : '';
-                const albumId = album.id || album.albumId || '';
-                const albumIdArg = albumId ? (typeof albumId === 'string' ? `'${albumId}'` : albumId) : 'null';
+                const artistLabel = album.artist?.name || (typeof album.artist === 'string' ? album.artist : (artist.name || ''));
+                const albumObj = {
+                    id: album.browseId || album.id || album.albumId || '',
+                    browseId: album.browseId || '',
+                    title: albumName,
+                    name: albumName,
+                    artist: { name: artistLabel },
+                    cover: album.cover || cover
+                };
+                const albumStr = JSON.stringify(albumObj).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                 return `
-                    <div class="card animate-in" style="animation-delay:${i * 30}ms" ${albumId ? `onclick='openAlbumPage(${albumIdArg})'` : ''}>
+                    <div class="card animate-in" style="animation-delay:${i * 30}ms; cursor:pointer;" onclick='openAlbumPage(${albumStr})'>
                         <div class="artwork"><img src="${cover}" loading="lazy"></div>
                         <div class="card-title">${albumName}</div>
                         <div class="card-subtitle">${artistLabel}${year}</div>

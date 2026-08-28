@@ -105,8 +105,11 @@ class MusicController {
    */
   async mix(req, res, next) {
     try {
-      const { id } = req.query || {};
-      const cleanId = String(id || '').replace(/^mix_/, '');
+      const { id, title, artist } = req.query || {};
+      let cleanId = String(id || '').replace(/^mix_/, '');
+      if (!cleanId && title) {
+        cleanId = `${title} ${artist || ''}`.trim();
+      }
 
       let recTracks = [];
 
@@ -115,7 +118,7 @@ class MusicController {
         recTracks = await spotifyService.getRecommendations(cleanId, 15);
       }
 
-      // 2. Try YouTube Music recommendations
+      // 2. Try YouTube Music recommendations (official RDAMVM automix queue)
       if ((!recTracks || recTracks.length === 0) && cleanId) {
         recTracks = await youtubeMusicService.getRecommendations(cleanId, 15);
       }
