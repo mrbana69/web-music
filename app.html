@@ -1856,12 +1856,14 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function getActiveAudioPlayer() {
+            if (ytAudioPlayer && ytAudioPlayer.isInit) {
+                return ytAudioPlayer.audioElement;
+            }
             if (isIOS || isSafari || (nativeAudio && nativeAudio.src && !nativeAudio.src.startsWith('data:'))) {
                 return nativeAudio;
             }
-            if (ytAudioPlayer.isInit && !nativeAudio.src) return ytAudioPlayer.audioElement;
-            if (universalPlayer.isInit) return universalPlayer.audioElement;
-            if (state.isHiRes && dashPlayer.isInit) return dashPlayer.audioElement;
+            if (universalPlayer && universalPlayer.isInit) return universalPlayer.audioElement;
+            if (state.isHiRes && dashPlayer && dashPlayer.isInit) return dashPlayer.audioElement;
             return nativeAudio;
         }
 
@@ -2348,29 +2350,49 @@ h1 { font-size: 34px; font-weight: 800; }
         
         function updateProgress() {
             const player = getActiveAudioPlayer();
-            if (!player || !player.duration) return;
+            if (!player) return;
 
-            const percent = (player.currentTime / player.duration) * 100;
-            document.getElementById('progressFill').style.width = percent + '%';
-            document.getElementById('currentTime').textContent = formatTime(player.currentTime);
-            document.getElementById('totalTime').textContent = formatTime(player.duration);
-            updateLyricsScroll(player.currentTime);
+            let cur = player.currentTime || 0;
+            let dur = player.duration || 0;
 
-            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && player.duration > 0) {
+            const currentTrack = state.queue[state.currentIndex];
+            if ((!dur || isNaN(dur) || dur <= 0) && currentTrack) {
+                dur = (currentTrack.duration_ms ? currentTrack.duration_ms / 1000 : currentTrack.duration) || 0;
+            }
+
+            if (!dur || isNaN(dur) || dur <= 0) dur = 210;
+            if (isNaN(cur) || cur < 0) cur = 0;
+            if (cur > dur) cur = dur;
+
+            const percent = dur > 0 ? (cur / dur) * 100 : 0;
+            const progressFill = document.getElementById('progressFill');
+            if (progressFill) progressFill.style.width = percent + '%';
+
+            const curEl = document.getElementById('currentTime');
+            if (curEl) curEl.textContent = formatTime(cur);
+
+            const totalEl = document.getElementById('totalTime');
+            if (totalEl) totalEl.textContent = formatTime(dur);
+
+            if (typeof updateLyricsScroll === 'function') {
+                updateLyricsScroll(cur);
+            }
+
+            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && dur > 0) {
                 try {
                     navigator.mediaSession.setPositionState({
-                        duration: Math.max(player.duration, 1),
+                        duration: Math.max(dur, 1),
                         playbackRate: state.playbackRate || 1.0,
-                        position: Math.min(Math.max(player.currentTime, 0), player.duration)
+                        position: Math.min(Math.max(cur, 0), dur)
                     });
                 } catch (e) {}
             }
         }
 
-        setInterval(updateProgress, 500);
+        setInterval(updateProgress, 250);
 
         function formatTime(s) {
-            if (isNaN(s)) return "0:00";
+            if (isNaN(s) || s === undefined || s === null) return "0:00";
             const m = Math.floor(s / 60);
             const sec = Math.floor(s % 60);
             return `${m}:${sec.toString().padStart(2, '0')}`;
@@ -2378,18 +2400,27 @@ h1 { font-size: 34px; font-weight: 800; }
 
         function seek(e) {
             const player = getActiveAudioPlayer();
-            if (!player || !player.duration) return;
+            if (!player) return;
+            
+            const currentTrack = state.queue[state.currentIndex];
+            let dur = player.duration;
+            if ((!dur || isNaN(dur) || dur <= 0) && currentTrack) {
+                dur = (currentTrack.duration_ms ? currentTrack.duration_ms / 1000 : currentTrack.duration) || 210;
+            }
+            if (!dur || isNaN(dur) || dur <= 0) dur = 210;
             
             const bar = e.currentTarget;
-            const percent = e.offsetX / bar.offsetWidth;
-            seekToSeconds(percent * player.duration);
+            const rect = bar.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const percent = Math.max(0, Math.min(1, clickX / rect.width));
+            seekToSeconds(percent * dur);
         }
 
         function seekToSeconds(seconds) {
             const player = getActiveAudioPlayer();
             if (!player) return;
             player.currentTime = seconds;
-            if (ytAudioPlayer.isInit && ytAudioPlayer.seekTo) {
+            if (ytAudioPlayer && ytAudioPlayer.isInit && ytAudioPlayer.seekTo) {
                 ytAudioPlayer.seekTo(seconds);
             }
             updateProgress();
@@ -3140,29 +3171,50 @@ h1 { font-size: 34px; font-weight: 800; }
             state.syncedLyrics = [];
             document.getElementById('translateBtn').classList.add('hidden');
 
-            const title = encodeURIComponent(track.title);
-            const artist = encodeURIComponent(track.artist?.name || '');
-            
-            if (!track.artist?.name) {
+            const rawTitle = track.title || '';
+            const rawArtist = track.artist?.name || track.artists?.[0]?.name || '';
+
+            if (!rawTitle || !rawArtist) {
                 container.innerHTML = '<p style="text-align:center; color:var(--text-secondary)">No lyrics found.</p>';
                 return;
             }
 
-            const album = encodeURIComponent(track.album?.title || '');
-            const duration = track.duration || 0;
+            // Clean title and artist from YouTube noise (e.g. " - Topic", "(Official Video)")
+            const cleanTitle = rawTitle
+                .replace(/\s*[\(\[](?:official\s*(?:music\s*)?video|official\s*audio|lyrics?|audio|video|clip\s*officiel|visualizer|remastered|hd|4k)[\)\]]/gi, '')
+                .replace(/\s*-\s*(?:official\s*video|lyrics?|audio)$/gi, '')
+                .trim();
+            const cleanArtist = rawArtist
+                .replace(/\s*-\s*Topic$/i, '')
+                .replace(/\s*VEVO$/i, '')
+                .trim();
 
-            const url = `https://lrclib.net/api/get?artist_name=${artist}&track_name=${title}&album_name=${album}&duration=${duration}`
+            const encTitle = encodeURIComponent(cleanTitle);
+            const encArtist = encodeURIComponent(cleanArtist);
 
             try {
-                const res = await fetch(url);
-                const data = await res.json();
-                
-                if (data && (data.lyrics || data.syncedLyrics || data.plainLyrics)) {
-                    state.lyrics = data;
-                    renderLyrics(data);
-                } else {
-                    container.innerHTML = '<p style="text-align:center; color:var(--text-secondary)">No lyrics found.</p>';
+                // Step 1: Search LRCLIB by track_name and artist_name
+                let res = await fetch(`https://lrclib.net/api/search?track_name=${encTitle}&artist_name=${encArtist}`);
+                let items = res.ok ? await res.json() : [];
+
+                // Step 2: Fallback to general query search if no exact match
+                if (!items || items.length === 0) {
+                    const query = encodeURIComponent(`${cleanArtist} ${cleanTitle}`);
+                    res = await fetch(`https://lrclib.net/api/search?q=${query}`);
+                    items = res.ok ? await res.json() : [];
                 }
+
+                if (items && Array.isArray(items) && items.length > 0) {
+                    // Pick the best match with syncedLyrics, or plainLyrics
+                    const best = items.find(i => i.syncedLyrics) || items.find(i => i.plainLyrics) || items[0];
+                    if (best && (best.syncedLyrics || best.plainLyrics || best.lyrics)) {
+                        state.lyrics = best;
+                        renderLyrics(best);
+                        return;
+                    }
+                }
+
+                container.innerHTML = '<p style="text-align:center; color:var(--text-secondary)">No lyrics found.</p>';
             } catch (e) {
                 container.innerHTML = '<p style="text-align:center; color:var(--text-secondary)">Could not load lyrics.</p>';
             }
