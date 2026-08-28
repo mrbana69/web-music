@@ -274,6 +274,24 @@ class MusicController {
       next(err);
     }
   }
+
+  /**
+   * GET /api/playlist - Fetch YouTube / YouTube Music playlist tracks
+   */
+  async playlist(req, res, next) {
+    try {
+      const { id, url, list } = req.query || {};
+      const targetId = id || url || list;
+      if (!targetId) {
+        return res.status(400).json({ error: 'Missing playlist id or url' });
+      }
+
+      const playlistData = await youtubeMusicService.getPlaylist(targetId);
+      return res.status(200).json(playlistData);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = new MusicController();

@@ -805,12 +805,21 @@ h1 { font-size: 34px; font-weight: 800; }
     <div id="googleImportModal" class="splash-overlay hidden" style="background: rgba(0,0,0,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 2200;">
         <div class="modal-card" style="max-width: 480px; width: 92%; max-height: 85vh; display: flex; flex-direction: column; padding: 24px; background: rgba(26,26,28,0.96); border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; box-shadow: 0 24px 60px rgba(0,0,0,0.9);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
-                <h2 style="margin:0; font-size: 20px;">Importa da Google</h2>
+                <h2 style="margin:0; font-size: 20px;">Importa Playlist & Mi Piace</h2>
                 <button class="btn-text" onclick="closeGoogleImportModal()" style="font-size:14px; color:var(--text-secondary);">Chiudi</button>
             </div>
-            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">Seleziona le playlist e le canzoni con Mi Piace che desideri importare nella tua libreria:</div>
             
-            <div style="display:flex; gap:10px; margin-bottom: 14px;">
+            <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:14px; padding:12px; margin-bottom:14px;">
+                <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:6px;">Importa qualsiasi Playlist da Link YouTube:</div>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="customPlaylistLinkInput" placeholder="Incolla link playlist YouTube o YT Music..." style="flex:1; min-width:0; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:8px 10px; color:#fff; font-size:13px; outline:none;">
+                    <button class="btn-primary" onclick="importCustomPlaylistLink()" style="padding:8px 14px; border-radius:10px; font-size:12px; font-weight:600; background:var(--accent); color:#000; flex-shrink:0;">Importa</button>
+                </div>
+            </div>
+
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Oppure seleziona le playlist rilevate dal tuo account Google:</div>
+            
+            <div style="display:flex; gap:10px; margin-bottom: 12px;">
                 <button class="btn-text" onclick="toggleAllGoogleImport(true)" style="font-size:12px; padding:4px 10px; background:rgba(255,255,255,0.08); border-radius:8px;">Seleziona tutte</button>
                 <button class="btn-text" onclick="toggleAllGoogleImport(false)" style="font-size:12px; padding:4px 10px; background:rgba(255,255,255,0.08); border-radius:8px;">Deseleziona tutte</button>
             </div>
@@ -821,7 +830,7 @@ h1 { font-size: 34px; font-weight: 800; }
 
             <div style="display:flex; gap:12px; justify-content:flex-end;">
                 <button class="btn-text" onclick="closeGoogleImportModal()" style="padding:10px 18px;">Annulla</button>
-                <button id="googleImportConfirmBtn" class="btn-primary" onclick="confirmGoogleImport()" style="padding:10px 22px; border-radius:18px; font-weight:600; background:var(--accent); color:#000;">Importa Selezionate</button>
+                <button id="googleImportConfirmBtn" class="btn-primary" onclick="confirmGoogleImport()" style="padding:10px 22px; border-radius:18px; font-weight:600; background:var(--accent); color:#000;">Salva Selezionate</button>
             </div>
         </div>
     </div>
@@ -1545,6 +1554,9 @@ h1 { font-size: 34px; font-weight: 800; }
                     localStorage.setItem(`${provider}_token`, token);
                     if (params.get('user_name')) {
                         localStorage.setItem(`${provider}_user`, params.get('user_name'));
+                    }
+                    if (provider === 'google') {
+                        sessionStorage.setItem('open_google_import_on_load', 'true');
                     }
                     params.delete('access_token');
                     params.delete('provider');
@@ -2900,6 +2912,42 @@ h1 { font-size: 34px; font-weight: 800; }
             showToast(`Importate ${newPlCount} playlist e ${newLikedCount} brani con Mi Piace!`);
         }
 
+        async function importCustomPlaylistLink() {
+            const input = document.getElementById('customPlaylistLinkInput');
+            const val = input ? input.value.trim() : '';
+            if (!val) return alert('Inserisci un link o ID valido di una playlist YouTube.');
+
+            showGlobalSpinner('Importazione playlist in corso...');
+            try {
+                const res = await apiFetch(`/playlist?url=${encodeURIComponent(val)}`);
+                hideGlobalSpinner();
+                if (!res.ok) {
+                    alert('Impossibile caricare la playlist. Verifica che il link sia corretto.');
+                    return;
+                }
+                const pl = await res.json();
+                if (!pl.songs || pl.songs.length === 0) {
+                    alert('Nessun brano trovato in questa playlist.');
+                    return;
+                }
+
+                // Add to state
+                const existingIdx = state.playlists.findIndex(p => p.id === pl.id);
+                if (existingIdx >= 0) {
+                    state.playlists[existingIdx] = pl;
+                } else {
+                    state.playlists.push(pl);
+                }
+                localStorage.setItem('playlists', JSON.stringify(state.playlists));
+                renderPlaylists();
+                closeGoogleImportModal();
+                alert(`Playlist "${pl.name}" importata con successo con ${pl.songs.length} brani!`);
+            } catch (e) {
+                hideGlobalSpinner();
+                alert('Errore durante l\'importazione della playlist.');
+            }
+        }
+
         // Synchronize personalized user library from connected account (Background initial sync)
         async function syncUserGoogleLibrary() {
             const token = localStorage.getItem('google_token');
@@ -3864,7 +3912,14 @@ h1 { font-size: 34px; font-weight: 800; }
                 if (authModal) authModal.classList.remove('hidden');
             } else {
                 if (authModal) authModal.classList.add('hidden');
-                await syncUserGoogleLibrary();
+                if (sessionStorage.getItem('open_google_import_on_load') === 'true') {
+                    sessionStorage.removeItem('open_google_import_on_load');
+                    setTimeout(() => {
+                        manualSyncGoogleLibrary();
+                    }, 350);
+                } else {
+                    await syncUserGoogleLibrary();
+                }
             }
             updateAccountUI();
             loadRecommendations();

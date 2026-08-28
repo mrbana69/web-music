@@ -811,6 +811,100 @@ class YouTubeMusicService {
     const searchRes = await this.search(cleanId || 'top hits', 'track', limit);
     return searchRes?.tracks?.items || [];
   }
+
+  /**
+   * Fetch any YouTube / YouTube Music playlist tracks by playlistId or link
+   */
+  async getPlaylist(playlistId) {
+    let cleanId = String(playlistId || '').trim();
+    const urlMatch = cleanId.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+    if (urlMatch) cleanId = urlMatch[1];
+    cleanId = cleanId.replace(/^VL/, '');
+
+    const browseId = cleanId.startsWith('VL') ? cleanId : `VL${cleanId}`;
+    let playlistTitle = 'YouTube Playlist';
+    let playlistCover = '';
+    let tracks = [];
+
+    try {
+      const browsePayload = {
+        context: {
+          client: {
+            clientName: 'WEB_REMIX',
+            clientVersion: '1.20240101.01.00',
+            hl: 'it',
+            gl: 'IT'
+          }
+        },
+        browseId
+      };
+
+      const browseRes = await fetchJson('https://music.youtube.com/youtubei/v1/browse', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'https://music.youtube.com',
+          'Referer': 'https://music.youtube.com/'
+        },
+        body: JSON.stringify(browsePayload),
+        timeout: 5000
+      });
+
+      const traverseHeader = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.musicDetailHeaderRenderer || node.musicEditablePlaylistDetailHeaderRenderer) {
+          const h = node.musicDetailHeaderRenderer || node.musicEditablePlaylistDetailHeaderRenderer?.header?.musicDetailHeaderRenderer;
+          if (h) {
+            const title = h.title?.runs?.[0]?.text;
+            const rawThumb = h.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url;
+            if (title) playlistTitle = title;
+            if (rawThumb) playlistCover = this.formatThumb(rawThumb);
+          }
+        }
+        for (const k of Object.keys(node)) traverseHeader(node[k]);
+      };
+      traverseHeader(browseRes);
+
+      const traverseTracks = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.musicResponsiveListItemRenderer) {
+          const item = node.musicResponsiveListItemRenderer;
+          const flex = item.flexColumns || [];
+          const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+          const tArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || 'Artist';
+          const vId = item.playlistItemData?.videoId || flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId;
+          const rawThumb = item.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || playlistCover;
+          const thumb = this.formatThumb(rawThumb);
+          if (tTitle && vId) {
+            tracks.push({
+              id: vId,
+              videoId: vId,
+              title: tTitle,
+              artist: { id: `art_${encodeURIComponent(tArtist)}`, name: tArtist, picture: thumb },
+              artists: [{ id: `art_${encodeURIComponent(tArtist)}`, name: tArtist }],
+              album: { id: `pl_${cleanId}`, title: playlistTitle, cover: thumb },
+              duration: 210,
+              duration_ms: 210000,
+              source: 'youtube-playlist'
+            });
+          }
+        }
+        for (const k of Object.keys(node)) traverseTracks(node[k]);
+      };
+      traverseTracks(browseRes);
+    } catch (e) {
+      console.warn('[YouTubeMusicService] Browse playlist failed:', e.message);
+    }
+
+    return {
+      id: cleanId,
+      name: playlistTitle,
+      title: playlistTitle,
+      cover: playlistCover || tracks[0]?.album?.cover || '',
+      itemCount: tracks.length,
+      songs: tracks
+    };
+  }
 }
 
 const youtubeMusicService = new YouTubeMusicService();

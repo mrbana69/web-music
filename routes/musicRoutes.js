@@ -18,5 +18,8 @@ router.get('/artist', (req, res, next) => musicController.artist(req, res, next)
 // /api/album
 router.get('/album', (req, res, next) => musicController.album(req, res, next));
 
+// /api/playlist
+router.get('/playlist', (req, res, next) => musicController.playlist(req, res, next));
+
 module.exports = router;
 
