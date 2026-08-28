@@ -104,7 +104,8 @@ class AuthService {
       response_type: 'code',
       scope: config.google.scopes.join(' '),
       access_type: 'offline',
-      prompt: 'select_account',
+      prompt: 'consent select_account',
+      include_granted_scopes: 'true',
       state: state || 'google_login'
     });
 

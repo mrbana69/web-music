@@ -123,17 +123,18 @@ class AuthController {
 
       const tokenData = await authService.exchangeGoogleCode(code, dynamicRedirectUri);
 
-      const acceptHeader = req.headers.accept || '';
-      if (acceptHeader.includes('text/html')) {
-        const tokenParams = new URLSearchParams({
-          provider: 'google',
-          access_token: tokenData.access_token || '',
-          user_name: tokenData.user?.name || ''
-        });
-        return res.redirect(`/app?${tokenParams.toString()}`);
+      const tokenParams = new URLSearchParams({
+        provider: 'google',
+        access_token: tokenData.access_token || '',
+        user_name: tokenData.user?.name || ''
+      });
+
+      const format = req.query.format || '';
+      if (format === 'json') {
+        return res.status(200).json(tokenData);
       }
 
-      return res.status(200).json(tokenData);
+      return res.redirect(`/app?${tokenParams.toString()}`);
     } catch (err) {
       next(err);
     }
