@@ -1782,10 +1782,15 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         }
 
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
         const universalPlayer = new UniversalPlayer();
         const dashPlayer = new DashPlayer();
         const ytAudioPlayer = new YouTubeAudioPlayer();
-        const nativeAudio = document.getElementById('nativeAudio');
+        const nativeAudio = document.getElementById('nativeAudio') || new Audio();
+        nativeAudio.preload = 'auto';
+        nativeAudio.playsInline = true;
 
         // --- State ---
         let wakeLock = null;
@@ -1835,7 +1840,10 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function getActiveAudioPlayer() {
-            if (ytAudioPlayer.isInit) return ytAudioPlayer.audioElement;
+            if (isIOS || isSafari || (nativeAudio && nativeAudio.src && !nativeAudio.src.startsWith('data:'))) {
+                return nativeAudio;
+            }
+            if (ytAudioPlayer.isInit && !nativeAudio.src) return ytAudioPlayer.audioElement;
             if (universalPlayer.isInit) return universalPlayer.audioElement;
             if (state.isHiRes && dashPlayer.isInit) return dashPlayer.audioElement;
             return nativeAudio;
@@ -2070,16 +2078,16 @@ h1 { font-size: 34px; font-weight: 800; }
                 const streamUrl = streamManifest.urls[0];
                 state.currentStreamUrl = streamUrl;
 
-                let started = false;
+                // Native-First direct audio playback on iOS/Safari/standard HTML5 audio
+                const canUseNative = isIOS || isSafari || (streamUrl && !streamUrl.includes('youtube.com/watch'));
 
-                // If direct audio stream from Google CDN / mp3 / webm / m4a
-                if (streamUrl && (streamUrl.includes('googlevideo.com') || streamUrl.endsWith('.mp3') || streamUrl.endsWith('.m4a') || streamUrl.endsWith('.webm'))) {
+                if (canUseNative && streamUrl && !streamUrl.includes('youtube.com/watch')) {
                     nativeAudio.pause();
                     nativeAudio.currentTime = 0;
                     nativeAudio.src = streamUrl;
                     nativeAudio.load();
                     
-                    await new Promise(resolve => setTimeout(resolve, 150));
+                    await new Promise(resolve => setTimeout(resolve, 80));
                     
                     try {
                         const playPromise = nativeAudio.play();
@@ -2088,15 +2096,25 @@ h1 { font-size: 34px; font-weight: 800; }
                         }
                         started = !nativeAudio.paused;
                     } catch (playError) {
-                        console.warn('Native audio play failed, falling back to YouTube audio bridge:', playError);
-                        const videoId = currentTrack.videoId || currentTrack.id;
-                        ytAudioPlayer.loadVideo(videoId);
-                        started = true;
+                        console.warn('Native audio play failed:', playError);
+                        if (!isIOS && !isSafari) {
+                            const videoId = currentTrack.videoId || currentTrack.id;
+                            ytAudioPlayer.loadVideo(videoId);
+                            started = true;
+                        }
                     }
-                } else {
-                    // Use YouTube Audio Player Bridge
+                } else if (!isIOS && !isSafari) {
+                    // Use YouTube Audio Player Bridge on desktop fallback
                     const videoId = currentTrack.videoId || currentTrack.id || (streamUrl.match(/v=([a-zA-Z0-9_-]{11})/) || [])[1];
                     ytAudioPlayer.loadVideo(videoId || currentTrack.id);
+                    started = true;
+                } else {
+                    // Fallback for iOS/Safari to keep AudioContext & nativeAudio alive
+                    nativeAudio.pause();
+                    nativeAudio.currentTime = 0;
+                    nativeAudio.src = streamUrl;
+                    nativeAudio.load();
+                    await nativeAudio.play().catch(console.warn);
                     started = true;
                 }
 
@@ -2140,12 +2158,11 @@ h1 { font-size: 34px; font-weight: 800; }
                 if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
             }
             
-            if (ytAudioPlayer.isInit) {
+            const player = getActiveAudioPlayer();
+            if (player && typeof player.play === 'function') {
+                state.isPlaying ? player.play() : player.pause();
+            } else if (ytAudioPlayer.isInit && !nativeAudio.src) {
                 state.isPlaying ? ytAudioPlayer.play() : ytAudioPlayer.pause();
-            } else if (universalPlayer.isInit) {
-                state.isPlaying ? universalPlayer.play() : universalPlayer.pause();
-            } else if (state.isHiRes && dashPlayer.isInit) {
-                state.isPlaying ? dashPlayer.play() : dashPlayer.pause();
             } else {
                 state.isPlaying ? nativeAudio.play() : nativeAudio.pause();
             }
@@ -2954,10 +2971,20 @@ h1 { font-size: 34px; font-weight: 800; }
                     return;
                 }
                 const data = await res.json();
+                if (data.requiresReauth) {
+                    if (confirm('Per accedere alle playlist e ai brani con Mi Piace su YouTube, è necessario autorizzare l\'accesso con Google. Vuoi riconnetterti ora?')) {
+                        loginWithGoogle();
+                    }
+                    return;
+                }
                 showGoogleImportModal(data);
             } catch (e) {
                 hideGlobalSpinner();
-                showToast('Impossibile connettersi a Google.');
+                if (confirm('La sessione Google potrebbe essere scaduta o priva di permessi YouTube. Vuoi rieffettuare l\'accesso?')) {
+                    loginWithGoogle();
+                } else {
+                    showToast('Impossibile connettersi a Google.');
+                }
             }
         }
 

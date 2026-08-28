@@ -14,9 +14,30 @@ class StreamResolutionService {
   async extractDirectYouTubeStream(videoId) {
     const clients = [
       {
+        clientName: 'IOS',
+        clientVersion: '19.45.4',
+        deviceModel: 'iPhone16,2',
+        userAgent: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X; en_US)',
+        hl: 'en',
+        gl: 'US'
+      },
+      {
+        clientName: 'ANDROID_MUSIC',
+        clientVersion: '6.43.52',
+        androidSdkVersion: 34,
+        hl: 'en',
+        gl: 'US'
+      },
+      {
         clientName: 'ANDROID_VR',
         clientVersion: '1.50.28',
         androidSdkVersion: 30,
+        hl: 'en',
+        gl: 'US'
+      },
+      {
+        clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+        clientVersion: '2.0',
         hl: 'en',
         gl: 'US'
       },
@@ -39,14 +60,17 @@ class StreamResolutionService {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': client.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Origin': 'https://music.youtube.com'
           },
           body: JSON.stringify(payload),
           timeout: 4500
         });
 
-        const formats = res?.streamingData?.adaptiveFormats || [];
+        const formats = [
+          ...(res?.streamingData?.adaptiveFormats || []),
+          ...(res?.streamingData?.formats || [])
+        ];
         const audioFormats = formats.filter((f) => f.mimeType && f.mimeType.startsWith('audio/'));
 
         // Sort by bitrate descending for highest audio quality
@@ -56,7 +80,7 @@ class StreamResolutionService {
         if (withUrl && withUrl.url) {
           return {
             url: withUrl.url,
-            mimeType: withUrl.mimeType ? withUrl.mimeType.split(';')[0] : 'audio/webm'
+            mimeType: withUrl.mimeType ? withUrl.mimeType.split(';')[0] : 'audio/mp4'
           };
         }
       } catch (err) {
