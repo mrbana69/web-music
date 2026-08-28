@@ -1710,11 +1710,15 @@ h1 { font-size: 34px; font-weight: 800; }
                                     }
                                     updatePlayIcons();
                                 } else if (e.data === 0) { // ENDED
-                                    this.ended = true;
-                                    this.paused = true;
-                                    state.isPlaying = false;
-                                    iOSBackgroundAudio.start();
-                                    nextTrack();
+                                    const cur = this.getCurrentTime();
+                                    const dur = this.getDuration();
+                                    if (this.isInit && !this.paused && dur > 10 && cur >= dur - 3) {
+                                        this.ended = true;
+                                        this.paused = true;
+                                        state.isPlaying = false;
+                                        iOSBackgroundAudio.start();
+                                        nextTrack();
+                                    }
                                 }
                             },
                             'onError': (e) => {
@@ -1829,17 +1833,17 @@ h1 { font-size: 34px; font-weight: 800; }
 
         // --- Wake Lock Helpers ---
         async function requestWakeLock() {
-            if ('wakeLock' in navigator && !wakeLock) {
+            if ('wakeLock' in navigator && !wakeLock && document.visibilityState === 'visible') {
                 try {
                     wakeLock = await navigator.wakeLock.request('screen');
                     wakeLock.addEventListener('release', () => {
                         wakeLock = null;
-                        if (state.isPlaying) {
+                        if (state.isPlaying && document.visibilityState === 'visible') {
                             setTimeout(requestWakeLock, 1000);
                         }
                     });
                 } catch (err) {
-                    console.error('Failed to acquire wake lock:', err);
+                    // Suppress wake lock error when page is inactive/backgrounded
                 }
             }
         }
@@ -1861,26 +1865,37 @@ h1 { font-size: 34px; font-weight: 800; }
             return nativeAudio;
         }
 
-        function checkAndAdvanceIfEnded() {
-            const player = getActiveAudioPlayer();
-            if (player && player.ended) {
-                nextTrack();
+        // Auto-advance logic on actual playback finish
+        universalPlayer.audioElement.addEventListener('ended', () => { 
+            const cur = universalPlayer.audioElement.currentTime || 0;
+            const dur = universalPlayer.audioElement.duration || 0;
+            if (dur > 5 && cur >= dur - 3) {
+                nextTrack(); 
+                releaseWakeLock(); 
             }
-        }
-
-        // Auto-advance logic
-        universalPlayer.audioElement.addEventListener('ended', () => { nextTrack(); releaseWakeLock(); });
-        dashPlayer.audioElement.addEventListener('ended', () => { nextTrack(); releaseWakeLock(); });
+        });
+        dashPlayer.audioElement.addEventListener('ended', () => { 
+            const cur = dashPlayer.audioElement.currentTime || 0;
+            const dur = dashPlayer.audioElement.duration || 0;
+            if (dur > 5 && cur >= dur - 3) {
+                nextTrack(); 
+                releaseWakeLock(); 
+            }
+        });
         nativeAudio.addEventListener('ended', async () => { 
-            await nextTrack(); 
-            releaseWakeLock(); 
+            const cur = nativeAudio.currentTime || 0;
+            const dur = nativeAudio.duration || 0;
+            if (dur > 5 && cur >= dur - 3) {
+                await nextTrack(); 
+                releaseWakeLock(); 
+            }
         });
         
         // Error handler: fallback to YouTube Audio Bridge
         nativeAudio.addEventListener('error', (e) => {
             console.warn('Native audio stream error, delegating to YouTube player bridge:', e);
             const currentTrack = state.queue[state.currentIndex];
-            if (currentTrack) {
+            if (currentTrack && (!nativeAudio.src || nativeAudio.networkState === 3)) {
                 const videoId = currentTrack.videoId || currentTrack.id;
                 ytAudioPlayer.loadVideo(videoId);
             }
@@ -1890,20 +1905,12 @@ h1 { font-size: 34px; font-weight: 800; }
         dashPlayer.audioElement.addEventListener('pause', () => { if (!state.isPlaying) releaseWakeLock(); });
         nativeAudio.addEventListener('pause', () => { if (!state.isPlaying) releaseWakeLock(); });
 
-        // Re-check when returning from background
+        // Re-check wake lock when returning from background
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && state.isPlaying) {
                 if (!wakeLock) requestWakeLock();
-                checkAndAdvanceIfEnded();
             }
         });
-
-        // Periodic check for ended audio (backup for when events don't fire)
-        setInterval(() => {
-            if (state.isPlaying && !document.hidden) {
-                checkAndAdvanceIfEnded();
-            }
-        }, 1000); // Check every second
 
         // --- 3. UI Interactions ---
 
@@ -2217,8 +2224,11 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         }
 
+        let isAdvancingTrack = false;
         async function nextTrack() {
-            if (state.queue.length === 0) return;
+            if (isAdvancingTrack || state.queue.length === 0) return;
+            isAdvancingTrack = true;
+            setTimeout(() => { isAdvancingTrack = false; }, 1500);
             
             // Fade out current track if playing (ensures completion)
             const currentPlayer = getActiveAudioPlayer();
@@ -2228,7 +2238,9 @@ h1 { font-size: 34px; font-weight: 800; }
             
             // Load mix if needed (before advancing)
             if (state.currentIndex >= state.queue.length - 1) {
-                await loadMix(state.queue[state.currentIndex]);
+                if (typeof loadMix === 'function') {
+                    loadMix(state.queue[state.currentIndex]).catch(console.error);
+                }
             }
             
             let nextIndex = state.currentIndex + 1;
