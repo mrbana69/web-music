@@ -24,7 +24,7 @@ const config = {
     ]
   },
 
-  // Google / YouTube Configuration (Standard non-sensitive scopes for 100% login success on all devices)
+  // Google / YouTube Configuration
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
@@ -32,7 +32,8 @@ const config = {
     scopes: [
       'openid',
       'https://www.googleapis.com/auth/userinfo.profile',
-      'https://www.googleapis.com/auth/userinfo.email'
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/youtube.readonly'
     ]
   },
 

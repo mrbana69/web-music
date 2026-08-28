@@ -22,6 +22,25 @@ class YouTubeMusicService {
   }
 
   /**
+   * Format Google/YouTube CDN artwork URLs to crisp HD =w500-h500-l90-rj
+   */
+  formatThumb(rawUrl) {
+    if (!rawUrl) return '';
+    let str = String(rawUrl).trim();
+    if (str.includes('googleusercontent.com') || str.includes('ggpht.com')) {
+      str = str.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj');
+      if (!str.includes('=w500-h500-l90-rj') && !str.includes('=')) {
+        str += '=w500-h500-l90-rj';
+      }
+      return str;
+    }
+    if (str.includes('i.ytimg.com')) {
+      return str.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg');
+    }
+    return str;
+  }
+
+  /**
    * Search YouTube Music using Innertube WEB_REMIX client
    */
   async searchInnertube(query, filterType = 'songs') {
@@ -90,6 +109,20 @@ class YouTubeMusicService {
         const durationStr = subRuns[subRuns.length - 1]?.text || '';
         const durationMs = this.parseDuration(durationStr);
 
+        // Extract real Album name and album browseId from byline runs
+        let realAlbumTitle = titleText;
+        let realAlbumBrowseId = '';
+        const albumRun = subRuns.find((r) => r.navigationEndpoint?.browseEndpoint?.browseId?.startsWith('MPREb_') || r.navigationEndpoint?.browseEndpoint?.browseId?.startsWith('OLAK5uy_'));
+        if (albumRun) {
+          realAlbumTitle = albumRun.text;
+          realAlbumBrowseId = albumRun.navigationEndpoint?.browseEndpoint?.browseId;
+        } else if (subRuns.length >= 3) {
+          const bulletIdx = subRuns.findIndex((r) => r.text && r.text.includes('•'));
+          if (bulletIdx !== -1 && subRuns[bulletIdx + 1] && !subRuns[bulletIdx + 1].text.includes(':') && !subRuns[bulletIdx + 1].text.includes('•')) {
+            realAlbumTitle = subRuns[bulletIdx + 1].text;
+          }
+        }
+
         // Video / Browse ID
         const videoId =
           item.playlistItemData?.videoId ||
@@ -104,7 +137,7 @@ class YouTubeMusicService {
 
         const rawThumb = item.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
         // High quality thumbnail
-        const thumb = rawThumb.replace(/=w\d+-h\d+/, '=w544-h544');
+        const thumb = this.formatThumb(rawThumb);
 
         const finalId = videoId || browseId || `yt_${Buffer.from(titleText + artist).toString('hex').substring(0, 12)}`;
 
@@ -117,7 +150,13 @@ class YouTubeMusicService {
             name: titleText,
             artist: typeof artist === 'string' ? { id: `art_${finalId}`, name: artist, picture: thumb } : artist,
             artists: [{ id: `art_${finalId}`, name: typeof artist === 'string' ? artist : artist?.name || 'Artist' }],
-            album: { id: `alb_${finalId}`, title: titleText, cover: thumb },
+            album: {
+              id: realAlbumBrowseId || `alb_${finalId}`,
+              browseId: realAlbumBrowseId,
+              title: realAlbumTitle,
+              name: realAlbumTitle,
+              cover: thumb
+            },
             picture: thumb,
             cover: thumb,
             duration: Math.round(durationMs / 1000) || 210,
@@ -270,6 +309,68 @@ class YouTubeMusicService {
   async searchCandidates(query) {
     const res = await this.search(query, 'track', 15);
     return res?.tracks?.items || [];
+  }
+
+  /**
+   * Get track info (title, artist, real album, and cover) by videoId from YouTube Music
+   */
+  async getTrackInfo(videoId) {
+    if (!videoId) return null;
+    const cacheKey = `yt_track_info_${videoId}`;
+    const cached = cacheService.get(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const payload = {
+        context: {
+          client: {
+            clientName: 'WEB_REMIX',
+            clientVersion: '1.20240101.01.00',
+            hl: 'it',
+            gl: 'IT'
+          }
+        },
+        videoId
+      };
+
+      const res = await fetchJson('https://music.youtube.com/youtubei/v1/player', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'https://music.youtube.com',
+          'Referer': 'https://music.youtube.com/'
+        },
+        body: JSON.stringify(payload),
+        timeout: 4000
+      });
+
+      const details = res?.videoDetails;
+      if (details) {
+        const title = details.title || '';
+        const author = details.author || 'Artist';
+        const rawThumb = details.thumbnail?.thumbnails?.[details.thumbnail.thumbnails.length - 1]?.url || '';
+        const thumb = this.formatThumb(rawThumb);
+
+        const trackInfo = {
+          id: videoId,
+          videoId,
+          title,
+          artist: { id: `art_${encodeURIComponent(author)}`, name: author, picture: thumb },
+          artists: [{ id: `art_${encodeURIComponent(author)}`, name: author }],
+          album: { id: `alb_${videoId}`, title, cover: thumb },
+          duration: Number(details.lengthSeconds) || 210,
+          duration_ms: (Number(details.lengthSeconds) || 210) * 1000,
+          cover: thumb,
+          picture: thumb
+        };
+
+        cacheService.set(cacheKey, trackInfo, 3600);
+        return trackInfo;
+      }
+    } catch (e) {
+      console.warn('[YouTubeMusicService] getTrackInfo failed:', e.message);
+    }
+    return null;
   }
 
   /**
@@ -452,7 +553,7 @@ class YouTubeMusicService {
               resolvedArtist = best.artist;
             }
             if (best.thumb) {
-              albumCover = best.thumb.replace(/=w\d+-h\d+/, '=w544-h544');
+              albumCover = this.formatThumb(best.thumb);
             }
           }
         }
@@ -498,7 +599,7 @@ class YouTubeMusicService {
             const rawThumb = h.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url;
             if (title) resolvedTitle = title;
             if (artist) resolvedArtist = artist;
-            if (rawThumb) albumCover = rawThumb.replace(/=w\d+-h\d+/, '=w544-h544');
+            if (rawThumb) albumCover = this.formatThumb(rawThumb);
           }
           for (const k of Object.keys(node)) traverseHeader(node[k]);
         };

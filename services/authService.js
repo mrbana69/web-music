@@ -171,15 +171,44 @@ class AuthService {
 
     // 1. Fetch user's YouTube playlists
     try {
-      const plData = await fetchJson('https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&mine=true&maxResults=25', { headers, timeout: 5000 });
+      const plData = await fetchJson('https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&mine=true&maxResults=50', { headers, timeout: 5000 });
       if (plData && plData.items) {
-        playlists = plData.items.map(p => ({
-          id: p.id,
-          name: p.snippet?.title || 'Playlist',
-          title: p.snippet?.title || 'Playlist',
-          cover: p.snippet?.thumbnails?.high?.url || p.snippet?.thumbnails?.medium?.url || '',
-          itemCount: p.contentDetails?.itemCount || 0,
-          songs: []
+        playlists = await Promise.all(plData.items.map(async (p) => {
+          let songs = [];
+          try {
+            const itemsData = await fetchJson(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${p.id}&maxResults=50`, { headers, timeout: 4000 });
+            if (itemsData && itemsData.items) {
+              songs = itemsData.items.map(item => {
+                const title = item.snippet?.title || '';
+                const channelTitle = item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist';
+                const vId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+                const rawThumb = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
+                const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
+                return {
+                  id: vId,
+                  videoId: vId,
+                  title,
+                  artist: { id: `art_${vId}`, name: channelTitle, picture: thumb },
+                  artists: [{ name: channelTitle }],
+                  album: { id: `alb_${vId}`, title, cover: thumb },
+                  duration: 210,
+                  duration_ms: 210000,
+                  source: 'youtube-playlist'
+                };
+              }).filter(s => s.id && s.title && s.title !== 'Deleted video' && s.title !== 'Private video');
+            }
+          } catch (e) {}
+
+          const rawThumb = p.snippet?.thumbnails?.high?.url || p.snippet?.thumbnails?.medium?.url || (songs[0]?.album?.cover) || '';
+          const cover = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
+          return {
+            id: p.id,
+            name: p.snippet?.title || 'Playlist',
+            title: p.snippet?.title || 'Playlist',
+            cover,
+            itemCount: songs.length || p.contentDetails?.itemCount || 0,
+            songs
+          };
         }));
       }
     } catch (e) {
@@ -188,12 +217,13 @@ class AuthService {
 
     // 2. Fetch user's Liked videos
     try {
-      const likedData = await fetchJson('https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&myRating=like&maxResults=30', { headers, timeout: 5000 });
+      const likedData = await fetchJson('https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&myRating=like&maxResults=50', { headers, timeout: 5000 });
       if (likedData && likedData.items) {
         likedSongs = likedData.items.map(v => {
           const title = v.snippet?.title || '';
           const channelTitle = v.snippet?.channelTitle || 'Artist';
-          const thumb = v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.medium?.url || '';
+          const rawThumb = v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.medium?.url || '';
+          const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
           return {
             id: v.id,
             videoId: v.id,
@@ -205,7 +235,7 @@ class AuthService {
             duration_ms: 210000,
             source: 'youtube-liked'
           };
-        });
+        }).filter(s => s.id && s.title);
       }
     } catch (e) {
       console.warn('[AuthService] Fetching YouTube liked videos failed:', e.message);

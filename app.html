@@ -718,6 +718,76 @@ h1 { font-size: 34px; font-weight: 800; }
 .modal-list-item span { font-weight: 600; }
 .modal-list-item small { font-size: 12px; color: rgba(255,255,255,0.7); }
 
+/* Skeleton Loading Animations */
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.11) 50%, rgba(255,255,255,0.03) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite ease-in-out;
+    border-radius: 8px;
+}
+
+.skeleton-card {
+    background: var(--bg-secondary);
+    border-radius: 14px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid rgba(255,255,255,0.04);
+}
+
+.skeleton-card .skeleton-art {
+    width: 100%;
+    aspect-ratio: 1/1;
+    border-radius: 10px;
+}
+
+.skeleton-card .skeleton-title {
+    height: 14px;
+    width: 75%;
+}
+
+.skeleton-card .skeleton-sub {
+    height: 11px;
+    width: 45%;
+}
+
+.skeleton-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.02);
+    margin-bottom: 8px;
+}
+
+.skeleton-row .skeleton-img {
+    width: 46px;
+    height: 46px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.skeleton-row .skeleton-lines {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.modal-checkbox {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
 #importOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 300; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; backdrop-filter: blur(20px); }
 #importLog { width: 100%; max-width: 400px; height: 300px; overflow-y: auto; background: var(--bg-tertiary); border-radius: 12px; border: 1px solid var(--glass-border); padding: 15px; font-family: monospace; font-size: 12px; margin-top: 20px; color: #ccc; }
     </style>
@@ -729,6 +799,30 @@ h1 { font-size: 34px; font-weight: 800; }
         <div class="splash-content">
             <div class="splash-logo">Preluded</div>
             <div class="splash-subtitle">Caricamento…</div>
+        </div>
+    </div>
+
+    <div id="googleImportModal" class="splash-overlay hidden" style="background: rgba(0,0,0,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 2200;">
+        <div class="modal-card" style="max-width: 480px; width: 92%; max-height: 85vh; display: flex; flex-direction: column; padding: 24px; background: rgba(26,26,28,0.96); border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; box-shadow: 0 24px 60px rgba(0,0,0,0.9);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+                <h2 style="margin:0; font-size: 20px;">Importa da Google</h2>
+                <button class="btn-text" onclick="closeGoogleImportModal()" style="font-size:14px; color:var(--text-secondary);">Chiudi</button>
+            </div>
+            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">Seleziona le playlist e le canzoni con Mi Piace che desideri importare nella tua libreria:</div>
+            
+            <div style="display:flex; gap:10px; margin-bottom: 14px;">
+                <button class="btn-text" onclick="toggleAllGoogleImport(true)" style="font-size:12px; padding:4px 10px; background:rgba(255,255,255,0.08); border-radius:8px;">Seleziona tutte</button>
+                <button class="btn-text" onclick="toggleAllGoogleImport(false)" style="font-size:12px; padding:4px 10px; background:rgba(255,255,255,0.08); border-radius:8px;">Deseleziona tutte</button>
+            </div>
+
+            <div id="googleImportList" style="flex:1; overflow-y: auto; padding-right: 4px; margin-bottom: 16px;">
+                <!-- Generated playlist & liked items -->
+            </div>
+
+            <div style="display:flex; gap:12px; justify-content:flex-end;">
+                <button class="btn-text" onclick="closeGoogleImportModal()" style="padding:10px 18px;">Annulla</button>
+                <button id="googleImportConfirmBtn" class="btn-primary" onclick="confirmGoogleImport()" style="padding:10px 22px; border-radius:18px; font-weight:600; background:var(--accent); color:#000;">Importa Selezionate</button>
+            </div>
         </div>
     </div>
 
@@ -903,6 +997,15 @@ h1 { font-size: 34px; font-weight: 800; }
                 <div class="list-info">
                     <div class="card-title" id="accountTitle">Accedi con Google</div>
                     <div class="card-subtitle" id="accountSubtitle">Sincronizza preferiti e sessione</div>
+                </div>
+            </div>
+            <div id="syncGoogleItem" class="list-item" onclick="manualSyncGoogleLibrary()">
+                <div class="list-artwork" style="display:flex; align-items:center; justify-content:center;">
+                    <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+                </div>
+                <div class="list-info">
+                    <div class="card-title">Sincronizza da Google</div>
+                    <div class="card-subtitle" id="syncStatusSubtitle">Importa playlist e brani con Mi Piace</div>
                 </div>
             </div>
 
@@ -1413,9 +1516,19 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         // Format artwork URL supporting standard HTTP/HTTPS URLs, local paths, and legacy hashes
-        function formatArtworkUrl(coverOrPic, size = '320x320') {
+        function formatArtworkUrl(coverOrPic, size = '500x500') {
             if (!coverOrPic) return '';
-            const str = String(coverOrPic).trim();
+            let str = String(coverOrPic).trim();
+            if (str.includes('googleusercontent.com') || str.includes('ggpht.com')) {
+                str = str.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj');
+                if (!str.includes('=w500-h500-l90-rj') && !str.includes('=')) {
+                    str += '=w500-h500-l90-rj';
+                }
+                return str;
+            }
+            if (str.includes('i.ytimg.com')) {
+                return str.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg');
+            }
             if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('data:') || str.startsWith('/')) {
                 return str;
             }
@@ -1445,13 +1558,16 @@ h1 { font-size: 34px; font-weight: 800; }
         // --- iOS Safari Background Audio Session Manager ---
         const iOSBackgroundAudio = {
             audioEl: null,
+            ctx: null,
+            osc: null,
+            gain: null,
             init() {
                 if (!this.audioEl) {
                     this.audioEl = document.getElementById('nativeAudio');
                     if (!this.audioEl) {
                         this.audioEl = new Audio();
                     }
-                    // Ultra-lightweight silent WAV audio loop to keep iOS WebKit audio pipeline active in background
+                    // Ultra-lightweight silent WAV audio loop
                     this.audioEl.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
                     this.audioEl.loop = true;
                     this.audioEl.playsInline = true;
@@ -1464,12 +1580,35 @@ h1 { font-size: 34px; font-weight: 800; }
                     if (this.audioEl && this.audioEl.paused) {
                         this.audioEl.play().catch(() => {});
                     }
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        if (!this.ctx) {
+                            this.ctx = new AudioCtx();
+                        }
+                        if (this.ctx.state === 'suspended') {
+                            this.ctx.resume().catch(() => {});
+                        }
+                        if (!this.osc) {
+                            this.osc = this.ctx.createOscillator();
+                            this.gain = this.ctx.createGain();
+                            this.osc.frequency.value = 15; // Inaudible sub-bass frequency
+                            this.gain.gain.value = 0.0001; // Ultra-low gain
+                            this.osc.connect(this.gain);
+                            this.gain.connect(this.ctx.destination);
+                            this.osc.start();
+                        }
+                    }
                 } catch (e) {}
             },
             stop() {
                 try {
                     if (this.audioEl && !this.audioEl.paused) {
                         this.audioEl.pause();
+                    }
+                    if (this.osc) {
+                        this.osc.stop();
+                        this.osc.disconnect();
+                        this.osc = null;
                     }
                 } catch (e) {}
             }
@@ -2371,8 +2510,8 @@ h1 { font-size: 34px; font-weight: 800; }
                 const container = document.getElementById('searchResults');
                 container.innerHTML = `
                     <h2 class="section-title" style="opacity: 0.7;">Searching for "${query}"...</h2>
-                    <div class="grid" style="justify-items: center; padding: 60px 20px;">
-                        <div class="spinner" style="width: 48px; height: 48px;"></div>
+                    <div class="grid">
+                        ${renderSkeletonGrid(8)}
                     </div>
                 `;
 
@@ -2603,28 +2742,177 @@ h1 { font-size: 34px; font-weight: 800; }
             } catch (e) { console.error(e); }
         }
 
-        // Synchronize personalized user library from connected account
+        // Skeleton Loading Template Generators
+        function renderSkeletonGrid(count = 6) {
+            return Array.from({ length: count }).map(() => `
+                <div class="skeleton-card">
+                    <div class="skeleton skeleton-art"></div>
+                    <div class="skeleton skeleton-title"></div>
+                    <div class="skeleton skeleton-sub"></div>
+                </div>
+            `).join('');
+        }
+
+        function renderSkeletonRows(count = 6) {
+            return Array.from({ length: count }).map(() => `
+                <div class="skeleton-row">
+                    <div class="skeleton skeleton-img"></div>
+                    <div class="skeleton-lines">
+                        <div class="skeleton" style="height:14px; width:65%;"></div>
+                        <div class="skeleton" style="height:11px; width:40%;"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Google Playlists & Liked Songs Selective Import
+        let pendingGoogleData = null;
+
+        function showGoogleImportModal(data) {
+            pendingGoogleData = data;
+            const container = document.getElementById('googleImportList');
+            const modal = document.getElementById('googleImportModal');
+            if (!container || !modal) return;
+
+            let html = '';
+
+            // Liked songs item
+            if (data.likedSongs && data.likedSongs.length > 0) {
+                html += `
+                    <div class="modal-list-item" style="display:flex; align-items:center; gap:12px; padding:12px 14px; background:rgba(255,255,255,0.06); border-radius:14px; margin-bottom:10px; cursor:pointer;" onclick="toggleCheckbox('google_liked')">
+                        <input type="checkbox" id="google_liked" class="modal-checkbox" checked onclick="event.stopPropagation()">
+                        <div style="width:40px; height:40px; border-radius:8px; background:linear-gradient(135deg, #fa2d48, #ff9f0a); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <svg class="icon" viewBox="0 0 24 24" style="width:20px; height:20px; color:#fff;"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                        </div>
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-weight:600; font-size:14px; color:#fff;">Brani con Mi Piace</div>
+                            <div style="font-size:12px; color:var(--text-secondary);">${data.likedSongs.length} brani</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Playlists
+            if (data.playlists && data.playlists.length > 0) {
+                data.playlists.forEach((p, idx) => {
+                    const cover = formatArtworkUrl(p.cover, '120x120') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+                    html += `
+                        <div class="modal-list-item" style="display:flex; align-items:center; gap:12px; padding:12px 14px; background:rgba(255,255,255,0.06); border-radius:14px; margin-bottom:10px; cursor:pointer;" onclick="toggleCheckbox('pl_${idx}')">
+                            <input type="checkbox" id="pl_${idx}" data-idx="${idx}" class="modal-checkbox" checked onclick="event.stopPropagation()">
+                            <img src="${cover}" style="width:40px; height:40px; border-radius:8px; object-fit:cover; flex-shrink:0;">
+                            <div style="flex:1; min-width:0;">
+                                <div style="font-weight:600; font-size:14px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.name || p.title}</div>
+                                <div style="font-size:12px; color:var(--text-secondary);">${p.songs?.length || p.itemCount || 0} brani</div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            if (!html) {
+                container.innerHTML = '<p style="color:var(--text-secondary); text-align:center; padding:20px;">Nessuna playlist o brano con Mi Piace trovato sul tuo account Google.</p>';
+            } else {
+                container.innerHTML = html;
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeGoogleImportModal() {
+            const modal = document.getElementById('googleImportModal');
+            if (modal) modal.classList.add('hidden');
+            pendingGoogleData = null;
+        }
+
+        function toggleCheckbox(id) {
+            const el = document.getElementById(id);
+            if (el) el.checked = !el.checked;
+        }
+
+        function toggleAllGoogleImport(select) {
+            document.querySelectorAll('#googleImportList .modal-checkbox').forEach(cb => {
+                cb.checked = select;
+            });
+        }
+
+        function confirmGoogleImport() {
+            if (!pendingGoogleData) {
+                closeGoogleImportModal();
+                return;
+            }
+
+            let newPlCount = 0;
+            let newLikedCount = 0;
+
+            // Check Liked
+            const likedCb = document.getElementById('google_liked');
+            if (likedCb && likedCb.checked && pendingGoogleData.likedSongs?.length > 0) {
+                const existingLiked = new Set(state.likedSongs.map(s => s.id));
+                const newLiked = pendingGoogleData.likedSongs.filter(s => !existingLiked.has(s.id));
+                if (newLiked.length > 0) {
+                    state.likedSongs = [...newLiked, ...state.likedSongs];
+                    localStorage.setItem('likedSongs', JSON.stringify(state.likedSongs));
+                    newLikedCount = newLiked.length;
+                }
+            }
+
+            // Check Playlists
+            if (pendingGoogleData.playlists?.length > 0) {
+                const existingMap = new Map(state.playlists.map(p => [p.id, p]));
+                pendingGoogleData.playlists.forEach((p, idx) => {
+                    const cb = document.getElementById(`pl_${idx}`);
+                    if (cb && cb.checked) {
+                        if (!existingMap.has(p.id)) {
+                            state.playlists.push(p);
+                            newPlCount++;
+                        } else {
+                            const existing = existingMap.get(p.id);
+                            if (p.songs && p.songs.length > 0) {
+                                existing.songs = p.songs;
+                                existing.itemCount = p.songs.length;
+                            }
+                        }
+                    }
+                });
+                localStorage.setItem('playlists', JSON.stringify(state.playlists));
+                renderPlaylists();
+            }
+
+            closeGoogleImportModal();
+            loadRecommendations();
+            showToast(`Importate ${newPlCount} playlist e ${newLikedCount} brani con Mi Piace!`);
+        }
+
+        // Synchronize personalized user library from connected account (Background initial sync)
         async function syncUserGoogleLibrary() {
             const token = localStorage.getItem('google_token');
-            if (!token) return;
+            if (!token) return { playlists: 0, liked: 0 };
 
             try {
                 const res = await apiFetch(`/auth/google/library?token=${encodeURIComponent(token)}`);
-                if (!res.ok) return;
+                if (!res.ok) return { playlists: 0, liked: 0 };
                 const data = await res.json();
 
-                let updated = false;
+                let newPlCount = 0;
+                let newLikedCount = 0;
 
-                // Sync playlists
+                // Sync playlists with their songs
                 if (data.playlists && Array.isArray(data.playlists) && data.playlists.length > 0) {
-                    const existingIds = new Set(state.playlists.map(p => p.id));
-                    const newPlaylists = data.playlists.filter(p => !existingIds.has(p.id));
-                    if (newPlaylists.length > 0) {
-                        state.playlists = [...state.playlists, ...newPlaylists];
-                        localStorage.setItem('playlists', JSON.stringify(state.playlists));
-                        renderPlaylists();
-                        updated = true;
-                    }
+                    const existingMap = new Map(state.playlists.map(p => [p.id, p]));
+                    data.playlists.forEach(p => {
+                        if (!existingMap.has(p.id)) {
+                            state.playlists.push(p);
+                            newPlCount++;
+                        } else {
+                            const existing = existingMap.get(p.id);
+                            if (p.songs && p.songs.length > 0) {
+                                existing.songs = p.songs;
+                                existing.itemCount = p.songs.length;
+                            }
+                        }
+                    });
+                    localStorage.setItem('playlists', JSON.stringify(state.playlists));
+                    renderPlaylists();
                 }
 
                 // Sync liked songs
@@ -2632,12 +2920,11 @@ h1 { font-size: 34px; font-weight: 800; }
                     const existingLiked = new Set(state.likedSongs.map(s => s.id));
                     const newLiked = data.likedSongs.filter(s => !existingLiked.has(s.id));
                     if (newLiked.length > 0) {
-                        state.likedSongs = [...state.likedSongs, ...newLiked];
+                        state.likedSongs = [...newLiked, ...state.likedSongs];
                         localStorage.setItem('likedSongs', JSON.stringify(state.likedSongs));
-                        updated = true;
+                        newLikedCount = newLiked.length;
                     }
 
-                    // If listening history is empty, populate with liked songs
                     const history = JSON.parse(localStorage.getItem('listening_history') || '[]');
                     if (history.length === 0) {
                         localStorage.setItem('listening_history', JSON.stringify(data.likedSongs.slice(0, 10)));
@@ -2645,11 +2932,32 @@ h1 { font-size: 34px; font-weight: 800; }
                     }
                 }
 
-                if (updated) {
-                    console.log('Successfully synced user library from Google account');
-                }
+                return { playlists: newPlCount, liked: newLikedCount };
             } catch (e) {
                 console.warn('Syncing user library failed:', e);
+                return { playlists: 0, liked: 0 };
+            }
+        }
+
+        async function manualSyncGoogleLibrary() {
+            const token = localStorage.getItem('google_token');
+            if (!token) {
+                loginWithGoogle();
+                return;
+            }
+            showGlobalSpinner('Recupero libreria Google in corso...');
+            try {
+                const res = await apiFetch(`/auth/google/library?token=${encodeURIComponent(token)}`);
+                hideGlobalSpinner();
+                if (!res.ok) {
+                    showToast('Errore durante il recupero della libreria Google.');
+                    return;
+                }
+                const data = await res.json();
+                showGoogleImportModal(data);
+            } catch (e) {
+                hideGlobalSpinner();
+                showToast('Impossibile connettersi a Google.');
             }
         }
 
@@ -2660,7 +2968,7 @@ h1 { font-size: 34px; font-weight: 800; }
             const grid = document.getElementById('recommendations');
             if (!grid) return;
             
-            grid.innerHTML = '<div class="spinner" style="grid-column:1/-1;"></div>';
+            grid.innerHTML = renderSkeletonGrid(8);
 
             const userTracks = [...history, ...liked];
 
@@ -3756,9 +4064,17 @@ h1 { font-size: 34px; font-weight: 800; }
 
         function openAlbumPageFromCurrent() {
             const track = state.queue[state.currentIndex];
-            if (!track || !track.album) return;
+            if (!track) return;
+            const albumPayload = {
+                id: track.album?.browseId || track.album?.id || '',
+                browseId: track.album?.browseId || '',
+                title: track.album?.title || track.album?.name || track.title,
+                name: track.album?.title || track.album?.name || track.title,
+                artist: track.artist || { name: 'Unknown' },
+                cover: track.album?.cover || track.cover || ''
+            };
             closeFullPlayer();
-            openAlbumPage(track.album);
+            openAlbumPage(albumPayload);
         }
 
         // --- Artist Page ---
@@ -3791,6 +4107,21 @@ h1 { font-size: 34px; font-weight: 800; }
             const topSongsContainer = document.getElementById('artistTopSongs');
             const discographyContainer = document.getElementById('artistDiscography');
             const similarContainer = document.getElementById('artistSimilar');
+
+            if (header) {
+                header.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:16px; width:100%;">
+                        <div class="skeleton" style="width:120px; height:120px; border-radius:16px; flex-shrink:0;"></div>
+                        <div style="flex:1;">
+                            <div class="skeleton" style="height:24px; width:60%; margin-bottom:8px;"></div>
+                            <div class="skeleton" style="height:14px; width:40%;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+            if (topSongsContainer) topSongsContainer.innerHTML = '<h2 class="section-title">Top Songs</h2><div class="grid">' + renderSkeletonGrid(6) + '</div>';
+            if (discographyContainer) discographyContainer.innerHTML = '<h2 class="section-title">Discografia</h2><div class="grid">' + renderSkeletonGrid(6) + '</div>';
+            if (similarContainer) similarContainer.innerHTML = '<h2 class="section-title">Artisti simili</h2><div class="grid">' + renderSkeletonGrid(6) + '</div>';
 
             // Reset collection back button
             const collectionBackButton = document.querySelector('#tab-collection .header-actions button');
@@ -4062,8 +4393,19 @@ h1 { font-size: 34px; font-weight: 800; }
             const header = document.getElementById('albumHeader');
             const tracksContainer = document.getElementById('albumTracks');
 
-            if (header) header.innerHTML = `<div class="spinner"></div>`;
-            if (tracksContainer) tracksContainer.innerHTML = `<div class="spinner"></div>`;
+            if (header) {
+                header.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:16px; width:100%;">
+                        <div class="skeleton" style="width:140px; height:140px; border-radius:12px; flex-shrink:0;"></div>
+                        <div style="flex:1;">
+                            <div class="skeleton" style="height:24px; width:70%; margin-bottom:10px;"></div>
+                            <div class="skeleton" style="height:15px; width:45%; margin-bottom:10px;"></div>
+                            <div class="skeleton" style="height:12px; width:30%;"></div>
+                        </div>
+                    </div>
+                `;
+            }
+            if (tracksContainer) tracksContainer.innerHTML = renderSkeletonRows(6);
 
             showGlobalSpinner('Caricamento album...');
 
