@@ -189,6 +189,24 @@ async function runTests() {
       'GET /api/auth/session returns provider connection state'
     );
 
+    // 17. Quick Picks (Scelte rapide) Endpoint
+    const quickPicksRes = await request('/api/quick-picks?limit=10');
+    assert(
+      quickPicksRes.status === 200 &&
+      quickPicksRes.body.ok === true &&
+      Array.isArray(quickPicksRes.body.items || quickPicksRes.body.data?.items),
+      'GET /api/quick-picks returns items array for YouTube Music quick picks'
+    );
+
+    // 18. Google Auth Quick Picks Alias Endpoint
+    const googleQuickPicksRes = await request('/api/auth/google/quick-picks?limit=5');
+    assert(
+      googleQuickPicksRes.status === 200 &&
+      googleQuickPicksRes.body.ok === true &&
+      Array.isArray(googleQuickPicksRes.body.items || googleQuickPicksRes.body.data?.items),
+      'GET /api/auth/google/quick-picks returns items array'
+    );
+
   } finally {
     server.close();
   }

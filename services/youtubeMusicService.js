@@ -926,6 +926,133 @@ class YouTubeMusicService {
       songs: tracks
     };
   }
+
+  /**
+   * Get YouTube Music "Scelte rapide" (Quick Picks / Listen Again / Heavy Rotation)
+   * If accessToken is provided, fetches the user's authentic personalized quick picks from their account
+   */
+  async getQuickPicks(accessToken = null, limit = 20) {
+    const cacheKey = `yt_quick_picks_${accessToken ? accessToken.substring(0, 16) : 'guest'}_${limit}`;
+    const cached = cacheService.get(cacheKey);
+    if (cached) return cached;
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'Origin': 'https://music.youtube.com',
+      'Referer': 'https://music.youtube.com/'
+    };
+
+    if (accessToken && accessToken !== 'demo_google_access_token') {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    } else if (this.cookie) {
+      headers['Cookie'] = this.cookie;
+    }
+
+    const payload = {
+      context: {
+        client: {
+          clientName: 'WEB_REMIX',
+          clientVersion: '1.20240101.01.00',
+          hl: 'it',
+          gl: 'IT'
+        }
+      },
+      browseId: 'FEmusic_home'
+    };
+
+    let quickPicks = [];
+    let isPersonalized = false;
+
+    try {
+      const homeRes = await fetchJson(`${this.innertubeEndpoint}/browse`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        timeout: 6000
+      });
+
+      const traverse = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.musicCarouselShelfRenderer) {
+          const headerText = node.musicCarouselShelfRenderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || '';
+          if (/scelte rapide|quick picks|listen again|di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta|heavy rotation/i.test(headerText)) {
+            if (/di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta/i.test(headerText)) {
+              isPersonalized = true;
+            }
+            const contents = node.musicCarouselShelfRenderer.contents || [];
+            for (const item of contents) {
+              const renderer = item.musicResponsiveListItemRenderer || item.musicTwoRowItemRenderer;
+              if (renderer) {
+                const flex = renderer.flexColumns || [];
+                const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.title?.runs?.[0]?.text;
+                const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.subtitle?.runs?.[0]?.text || 'Artist';
+                const tArtist = this.formatArtistName(rawArtist);
+                const vId = renderer.playlistItemData?.videoId ||
+                  renderer.navigationEndpoint?.watchEndpoint?.videoId ||
+                  renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+                const rawThumb = renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url ||
+                  renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
+                const thumb = this.formatThumb(rawThumb);
+
+                if (tTitle && vId && !quickPicks.some(p => p.id === vId || p.videoId === vId)) {
+                  quickPicks.push({
+                    id: vId,
+                    videoId: vId,
+                    title: tTitle,
+                    artist: { id: `art_${encodeURIComponent(tArtist)}`, name: tArtist, picture: thumb },
+                    artists: [{ id: `art_${encodeURIComponent(tArtist)}`, name: tArtist }],
+                    album: { id: `alb_${vId}`, title: tTitle, cover: thumb },
+                    duration: 210,
+                    duration_ms: 210000,
+                    thumbnail: thumb,
+                    cover: thumb,
+                    source: 'ytmusic-quick-picks'
+                  });
+                }
+              }
+            }
+          }
+        }
+        for (const k of Object.keys(node)) traverse(node[k]);
+      };
+
+      traverse(homeRes);
+    } catch (e) {
+      console.warn('[YouTubeMusicService] getQuickPicks browse failed:', e.message);
+    }
+
+    // If authenticated user provided and we want to ensure their library liked music is present
+    if (accessToken && accessToken !== 'demo_google_access_token' && quickPicks.length < limit) {
+      try {
+        const authService = require('./authService');
+        const userLib = await authService.getUserLibrary(accessToken);
+        if (userLib && userLib.likedSongs && userLib.likedSongs.length > 0) {
+          isPersonalized = true;
+          for (const s of userLib.likedSongs) {
+            if (!quickPicks.some(p => p.id === s.id || p.videoId === s.id)) {
+              quickPicks.unshift(s);
+            }
+          }
+        }
+      } catch (err) {}
+    }
+
+    // Fallback if still empty: search trending hits
+    if (quickPicks.length === 0) {
+      const topHits = await this.search('Top Hits 2025', 'track', limit);
+      quickPicks = topHits?.tracks?.items || [];
+    }
+
+    const result = {
+      items: quickPicks.slice(0, limit),
+      total: Math.min(quickPicks.length, limit),
+      personalized: Boolean(accessToken && isPersonalized),
+      source: 'ytmusic'
+    };
+
+    cacheService.set(cacheKey, result, 1200);
+    return result;
+  }
 }
 
 const youtubeMusicService = new YouTubeMusicService();

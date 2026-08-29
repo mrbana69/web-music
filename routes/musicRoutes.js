@@ -21,5 +21,9 @@ router.get('/album', (req, res, next) => musicController.album(req, res, next));
 // /api/playlist
 router.get('/playlist', (req, res, next) => musicController.playlist(req, res, next));
 
+// /api/quick-picks (YouTube Music Scelte rapide)
+router.get('/quick-picks', (req, res, next) => musicController.quickPicks(req, res, next));
+router.get('/quickpicks', (req, res, next) => musicController.quickPicks(req, res, next));
+
 module.exports = router;
 

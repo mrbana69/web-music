@@ -156,6 +156,24 @@ class AuthController {
     }
   }
 
+  async googleQuickPicks(req, res, next) {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '') || req.query.token || req.query.access_token || null;
+      const limit = parseInt(req.query.limit, 10) || 20;
+
+      const youtubeMusicService = require('../services/youtubeMusicService');
+      const quickPicksData = await youtubeMusicService.getQuickPicks(token, limit);
+      return res.status(200).json({
+        ok: true,
+        data: quickPicksData,
+        ...quickPicksData
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   // ==========================================
   // YouTube Device Code Flow (TV / CLI Fallback)
   // ==========================================

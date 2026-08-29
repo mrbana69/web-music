@@ -94,7 +94,34 @@ class MusicController {
         duration: targetMetadata.duration || 0
       });
 
-      return res.status(200).json(manifestPayload);
+      return res.status(200).json({
+        ...manifestPayload,
+        directUrl: streamInfo.directUrl,
+        mimeType: streamInfo.mimeType,
+        source: streamInfo.source || 'youtube',
+        videoId: resolved.videoId,
+        trackId: id
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /api/quick-picks - YouTube Music "Scelte rapide" / personalized heavy rotation
+   */
+  async quickPicks(req, res, next) {
+    try {
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.replace(/^Bearer\s+/i, '') || req.query.token || req.query.access_token || null;
+      const limit = parseInt(req.query.limit, 10) || 20;
+
+      const quickPicksData = await youtubeMusicService.getQuickPicks(token, limit);
+      return res.status(200).json({
+        ok: true,
+        data: quickPicksData,
+        ...quickPicksData
+      });
     } catch (err) {
       next(err);
     }

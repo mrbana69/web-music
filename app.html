@@ -23,8 +23,6 @@
 
     <link rel="icon" href="data:,">
     <link rel="manifest" href="manifest.json">
-    <!-- dash.js - Official DASH library for progressive chunk streaming -->
-    <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Syne:wght@600;700;800&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Overpass:ital,wght@0,100..900;1,100..900&display=swap');
@@ -226,6 +224,99 @@ h1 { font-size: 34px; font-weight: 800; }
 }
 .horizontal-scroll::-webkit-scrollbar { display: none; }
 .horizontal-scroll .card { flex-shrink: 0; width: 160px; }
+
+/* --- YouTube Music Style Quick Picks (Scelte rapide) --- */
+.quick-picks-container {
+    display: grid;
+    grid-template-rows: repeat(4, auto);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(280px, 320px);
+    gap: 10px 16px;
+    overflow-x: auto;
+    padding-bottom: 12px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.quick-picks-container::-webkit-scrollbar { display: none; }
+@media (max-width: 600px) {
+    .quick-picks-container {
+        grid-auto-columns: minmax(260px, 85vw);
+        gap: 8px 12px;
+    }
+}
+.quick-pick-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+    scroll-snap-align: start;
+    user-select: none;
+}
+.quick-pick-item:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-2px);
+}
+.quick-pick-item:active {
+    transform: scale(0.97);
+}
+.quick-pick-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: var(--bg-tertiary);
+    flex-shrink: 0;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+.quick-pick-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.quick-pick-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
+.quick-pick-artist {
+    font-size: 12px;
+    color: var(--text-secondary, #aaa);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+    margin-top: 2px;
+}
+.quick-pick-play-btn {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    color: var(--accent, #fff);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+}
+.quick-pick-item:hover .quick-pick-play-btn {
+    opacity: 1;
+}
 
 .card { cursor: pointer; transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1); background: transparent; }
 .card:active { transform: scale(0.95); }
@@ -866,14 +957,32 @@ h1 { font-size: 34px; font-weight: 800; }
 
     <div id="tab-home" class="main-container active-tab-content">
         <header>
-            <div class="header-actions">
+            <div class="header-actions" style="display:flex; justify-content:space-between; align-items:center;">
                 <h1>Listen Now</h1>
+                <div id="homeAccountBadge" style="display:flex; align-items:center; gap:8px;"></div>
             </div>
         </header>
         <div class="container">
-            <h2 class="section-title">Top Picks</h2>
-            <div class="grid" id="recommendations">
+            <!-- Scelte Rapide Section (YouTube Music Quick Picks) -->
+            <div id="quickPicksSection" style="margin-bottom: 32px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:12px;">
+                    <div>
+                        <div id="quickPicksLabel" style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--accent); margin-bottom:2px;">INIZIA LA RADIO DA UN BRANO</div>
+                        <h2 class="section-title" style="margin:0;">Scelte rapide</h2>
+                    </div>
+                    <button id="playAllQuickPicksBtn" class="btn-text" style="font-size:13px; font-weight:600; color:var(--accent); padding:6px 14px; background:rgba(255,255,255,0.06); border-radius:20px; display:flex; align-items:center; gap:6px;" onclick="playAllQuickPicks()">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24" style="width:16px;height:16px;"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                        Riproduci tutte
+                    </button>
                 </div>
+                <div id="quickPicksGrid" class="quick-picks-container">
+                    <!-- Dynamic Quick Picks Cards -->
+                </div>
+            </div>
+
+            <h2 class="section-title">Top Picks & Daily Mix</h2>
+            <div class="grid" id="recommendations">
+            </div>
         </div>
     </div>
 
@@ -1191,300 +1300,69 @@ h1 { font-size: 34px; font-weight: 800; }
     <div id="ytAudioBridge" style="position:fixed; bottom:0; right:0; width:200px; height:200px; opacity:0.001; pointer-events:none; z-index:-1;"></div>
 
     <script>
-        // --- 1. Universal Player using dash.js (Official DASH Library) ---
-        // dash.js is the official DASH library that handles progressive chunk streaming
-        // Perfect for APIs serving DASH manifests - downloads chunks, not full file
-        class UniversalPlayer {
-            constructor() {
-                this.videoElement = document.createElement('video');
-                this.videoElement.style.display = 'none';
-                document.body.appendChild(this.videoElement);
-                this.dashPlayer = null;
-                this.isPlaying = false;
-                this.isInit = false;
+        // --- 1. Track Stream Resolver & Audio Cache ---
+        const streamUrlCache = new Map();
+
+        async function resolveTrackAudio(track) {
+            if (!track || !track.id) {
+                throw new Error("Dati brano non validi");
+            }
+            const trackId = track.id;
+            if (streamUrlCache.has(trackId)) {
+                return streamUrlCache.get(trackId);
             }
 
-            async loadFromDASH(xmlUrl) {
+            const manifestRes = await apiFetch(`/track/?id=${encodeURIComponent(trackId)}&quality=LOSSLESS`);
+            if (!manifestRes.ok) {
+                throw new Error(`Risoluzione brano fallita: ${manifestRes.status}`);
+            }
+            const manifestData = await manifestRes.json();
+
+            let streamUrl = manifestData.directUrl || null;
+            let mimeType = manifestData.mimeType || 'audio/mp4';
+            let source = manifestData.source || 'api';
+            let videoId = manifestData.videoId || track.videoId || track.id;
+
+            // Backward compatibility if directUrl wasn't at top level
+            if (!streamUrl && manifestData.data?.manifest) {
                 try {
-                    // Check if dash.js is available
-                    if (typeof dashjs === 'undefined') {
-                        console.warn("dash.js not loaded, falling back to native audio");
-                        return false;
+                    const streamManifest = JSON.parse(atob(manifestData.data.manifest));
+                    if (streamManifest.urls && streamManifest.urls.length > 0) {
+                        streamUrl = streamManifest.urls[0];
                     }
-
-                    // Stop any existing player
-                    if (this.dashPlayer) {
-                        this.dashPlayer.destroy();
-                        this.dashPlayer = null;
-                    }
-
-                    // Initialize dash.js player with optimal settings
-                    this.dashPlayer = dashjs.MediaPlayer().create();
-                    
-                    // Configure for low latency and better handling
-                    this.dashPlayer.updateSettings({
-                        streaming: {
-                            buffer: {
-                                stableBufferTime: 2,
-                                bufferTimeAtTopQuality: 10
-                            },
-                            gaps: {
-                                jumpGaps: true
-                            },
-                            lowLatencyEnabled: false
-                        }
-                    });
-
-                    // Initialize the video element with the DASH manifest
-                    this.dashPlayer.initialize(this.videoElement, xmlUrl, false);
-
-                    return new Promise((resolve) => {
-                        const onStreamInitialized = () => {
-                            this.isInit = true;
-                            this.dashPlayer.off(dashjs.MediaPlayer.events.STREAM_INITIALIZED, onStreamInitialized);
-                            resolve(true);
-                        };
-
-                        const onError = (event) => {
-                            console.error("dash.js error:", event);
-                            this.dashPlayer.off(dashjs.MediaPlayer.events.STREAM_INITIALIZED, onStreamInitialized);
-                            this.dashPlayer.off(dashjs.MediaPlayer.events.ERROR, onError);
-                            resolve(false);
-                        };
-
-                        this.dashPlayer.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, onStreamInitialized);
-                        this.dashPlayer.on(dashjs.MediaPlayer.events.ERROR, onError);
-                    });
                 } catch (e) {
-                    console.error("Universal player load failed", e);
-                    return false;
+                    console.warn("Decodifica manifest fallback:", e);
                 }
             }
 
-            play() { 
-                if (this.videoElement) {
-                    this.videoElement.play(); 
-                    this.isPlaying = true;
-                }
+            if (!streamUrl) {
+                throw new Error("Nessun URL stream disponibile per questo brano.");
             }
-            pause() { 
-                if (this.videoElement) {
-                    this.videoElement.pause(); 
-                    this.isPlaying = false;
-                }
-            }
-            setVolume(v) { 
-                if (this.videoElement) {
-                    this.videoElement.volume = v; 
-                }
-            }
-            setPlaybackRate(rate) {
-                if (this.videoElement) {
-                    this.videoElement.playbackRate = rate;
-                }
-            }
-            seek(time) { 
-                if (this.videoElement) {
-                    this.videoElement.currentTime = time; 
-                }
-            }
-            
-            reset() {
-                if (this.dashPlayer) {
-                    try {
-                        this.dashPlayer.destroy();
-                    } catch (e) {}
-                    this.dashPlayer = null;
-                }
-                if (this.videoElement) {
-                    this.videoElement.pause();
-                    this.videoElement.removeAttribute('src');
-                    this.videoElement.currentTime = 0;
-                }
-                this.isInit = false;
-            }
-            
-            get audioElement() {
-                // Return video element as audio source (dash.js uses video element for audio streams)
-                return this.videoElement;
-            }
+
+            const isDirectAudio = !streamUrl.includes('youtube.com/watch');
+            const result = {
+                trackId,
+                streamUrl,
+                mimeType,
+                source,
+                videoId,
+                isDirectAudio
+            };
+
+            // Cache for 10 minutes to speed up repeats and pre-fetching
+            streamUrlCache.set(trackId, result);
+            setTimeout(() => streamUrlCache.delete(trackId), 10 * 60 * 1000);
+
+            return result;
         }
 
-        // --- 1b. Custom DASH / MSE Player (The "Progressive Download" Logic) ---
-        class DashPlayer {
-            constructor() {
-                this.mediaSource = null;
-                this.sourceBuffer = null;
-                this.audioElement = document.createElement('audio'); // MSE attaches here
-                this.queue = [];
-                this.isInit = false;
-                this.isPlaying = false;
-                this.loadId = 0;
-            }
-
-            attachTo(elementId) {
-                // Not strictly necessary as we play audio in background, but useful for events
-                // For this implementation, we use an internal audio element for MSE
-            }
-
-            async loadFromXML(xmlString) {
-                if (this.mediaSource) {
-                    this.reset();
+        function prefetchNextTrack() {
+            const nextIndex = state.currentIndex + 1;
+            if (nextIndex < state.queue.length) {
+                const nextTrack = state.queue[nextIndex];
+                if (nextTrack && nextTrack.id && !streamUrlCache.has(nextTrack.id)) {
+                    resolveTrackAudio(nextTrack).catch(() => {});
                 }
-
-                // Parse XML
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(xmlString, "text/xml");
-                
-                // Extract Info
-                const representation = doc.querySelector('Representation');
-                const template = doc.querySelector('SegmentTemplate');
-                const timelineNodes = doc.querySelectorAll('SegmentTimeline S');
-                const mimeType = doc.querySelector('AdaptationSet').getAttribute('mimeType'); // audio/mp4
-                const codecs = representation.getAttribute('codecs'); // flac
-                const timescale = parseInt(template.getAttribute('timescale'));
-                const initUrl = template.getAttribute('initialization');
-                const mediaUrlTemplate = template.getAttribute('media');
-                const startNumber = parseInt(template.getAttribute('startNumber') || "1");
-
-                // Generate Segment List
-                let segments = [];
-                let currentNumber = startNumber;
-                let currentTime = 0;
-
-                timelineNodes.forEach(node => {
-                    const d = parseInt(node.getAttribute('d'));
-                    const r = parseInt(node.getAttribute('r') || "0"); // Repeat count
-                    
-                    // Add the first segment of this node
-                    segments.push({ number: currentNumber, duration: d, time: currentTime });
-                    currentNumber++;
-                    currentTime += d;
-
-                    // Add repeats
-                    for(let i = 0; i < r; i++) {
-                        segments.push({ number: currentNumber, duration: d, time: currentTime });
-                        currentNumber++;
-                        currentTime += d;
-                    }
-                });
-
-                // Initialize MSE
-                this.mediaSource = new MediaSource();
-                this.audioElement.src = URL.createObjectURL(this.mediaSource);
-                
-                return new Promise((resolve, reject) => {
-                    this.mediaSource.addEventListener('sourceopen', async () => {
-                        try {
-                            // "audio/mp4; codecs='flac'" might need specific browser support. 
-                            // If fails, fallback logic would go here.
-                            const codecString = `${mimeType}; codecs="${codecs}"`;
-                            this.sourceBuffer = this.mediaSource.addSourceBuffer(codecString);
-                            
-                            // 1. Fetch Init Segment
-                            const initData = await this.fetchSegment(initUrl);
-                            this.sourceBuffer.appendBuffer(initData);
-
-                            this.sourceBuffer.addEventListener('updateend', () => {
-                                if (!this.isInit) {
-                                    this.isInit = true;
-                                    this.loadSegmentsProgressively(segments, mediaUrlTemplate);
-                                    resolve();
-                                }
-                            });
-                        } catch(e) {
-                            console.error("MSE Error", e);
-                            reject(e);
-                        }
-                    }, { once: true });
-                });
-            }
-
-            async fetchSegment(url) {
-                const response = await fetch(url);
-                return await response.arrayBuffer();
-            }
-
-            async loadSegmentsProgressively(segments, urlTemplate) {
-                const currentId = this.loadId;
-                // This simulates the "Progressive Download"
-                for (const seg of segments) {
-                    if (this.loadId !== currentId) break;
-                    if (!this.mediaSource || this.mediaSource.readyState === 'closed') break;
-
-                    const url = urlTemplate.replace('$Number$', seg.number);
-                    
-                    try {
-                        const data = await this.fetchSegment(url);
-                        
-                        if (this.loadId !== currentId) break;
-
-                        let appended = false;
-                        while (!appended) {
-                            if (this.loadId !== currentId) break;
-                            
-                            while(this.sourceBuffer && this.sourceBuffer.updating) {
-                                await new Promise(r => setTimeout(r, 50));
-                            }
-                            if (this.loadId !== currentId) break;
-
-                            try {
-                                this.sourceBuffer.appendBuffer(data);
-                                appended = true;
-                            } catch (err) {
-                                if (err.name === 'QuotaExceededError') {
-                                    const currentTime = this.audioElement.currentTime;
-                                    if (currentTime > 10) {
-                                        if (!this.sourceBuffer.updating) {
-                                            this.sourceBuffer.remove(0, currentTime - 10);
-                                        }
-                                    } else {
-                                        await new Promise(r => setTimeout(r, 1000));
-                                    }
-                                } else {
-                                    throw err;
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Segment load failed", e);
-                        if (e.name === 'QuotaExceededError') break;
-                    }
-                }
-                
-                while(this.sourceBuffer && this.sourceBuffer.updating) {
-                    await new Promise(r => setTimeout(r, 50));
-                }
-
-                if (this.loadId === currentId && this.mediaSource && this.mediaSource.readyState === 'open') {
-                    this.mediaSource.endOfStream();
-                }
-            }
-
-            play() { this.audioElement.play(); this.isPlaying = true; }
-            pause() { this.audioElement.pause(); this.isPlaying = false; }
-            setVolume(v) { this.audioElement.volume = v; }
-            setPlaybackRate(rate) { this.audioElement.playbackRate = rate; }
-            seek(time) { this.audioElement.currentTime = time; }
-            
-            reset() {
-                this.loadId++;
-                if (this.audioElement) {
-                    this.audioElement.pause();
-                    if (this.mediaSource && this.sourceBuffer) {
-                        try {
-                            if (this.sourceBuffer.updating) this.sourceBuffer.abort();
-                            if (this.mediaSource.readyState === 'open') {
-                                this.mediaSource.removeSourceBuffer(this.sourceBuffer);
-                            }
-                        } catch (e) {}
-                    }
-                    this.audioElement.removeAttribute('src');
-                    this.audioElement.load();
-                }
-                this.isInit = false;
-                this.mediaSource = null;
-                this.sourceBuffer = null;
             }
         }
 
@@ -1741,14 +1619,9 @@ h1 { font-size: 34px; font-weight: 800; }
                                 console.warn('YouTube player error:', e);
                                 const errCode = e?.data;
                                 if (errCode === 150 || errCode === 101 || errCode === 100 || errCode === 2) {
-                                    console.warn(`[YouTubePlayer] Video restriction code ${errCode}, falling back to direct stream...`);
-                                    if (state.currentStreamUrl && !state.currentStreamUrl.includes('youtube.com/watch')) {
-                                        nativeAudio.pause();
-                                        nativeAudio.src = state.currentStreamUrl;
-                                        nativeAudio.play().catch(console.warn);
-                                    } else {
-                                        setTimeout(() => { nextTrack(); }, 500);
-                                    }
+                                    console.warn(`[YouTubePlayer] Restrizione video codice ${errCode}`);
+                                    showToast("Questo brano non può essere riprodotto tramite Preluded.", 3500, 'error');
+                                    setTimeout(() => { nextTrack(); }, 1200);
                                 }
                             }
                         }
@@ -1828,12 +1701,34 @@ h1 { font-size: 34px; font-weight: 800; }
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-        const universalPlayer = new UniversalPlayer();
-        const dashPlayer = new DashPlayer();
         const ytAudioPlayer = new YouTubeAudioPlayer();
         const nativeAudio = document.getElementById('nativeAudio') || new Audio();
         nativeAudio.preload = 'auto';
         nativeAudio.playsInline = true;
+        nativeAudio.setAttribute('playsinline', '');
+        nativeAudio.setAttribute('webkit-playsinline', '');
+
+        // Unlock audio context on user gesture (essential for iOS Safari PWA)
+        let audioUnlocked = false;
+        function unlockAudioContext() {
+            if (audioUnlocked) return;
+            audioUnlocked = true;
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) {
+                    const ctx = new AudioCtx();
+                    ctx.resume().catch(() => {});
+                }
+                if (nativeAudio.paused && !nativeAudio.src) {
+                    nativeAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+                    nativeAudio.play().then(() => {
+                        nativeAudio.pause();
+                    }).catch(() => {});
+                }
+            } catch (e) {}
+        }
+        document.addEventListener('touchstart', unlockAudioContext, { once: true, passive: true });
+        document.addEventListener('click', unlockAudioContext, { once: true, passive: true });
 
         // --- State ---
         let wakeLock = null;
@@ -1842,7 +1737,6 @@ h1 { font-size: 34px; font-weight: 800; }
             queue: [],
             currentIndex: 0,
             isPlaying: false,
-            isHiRes: false,
             volume: 1,
             playbackRate: 1,
             lyrics: null,
@@ -1883,56 +1777,59 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function getActiveAudioPlayer() {
-            if (ytAudioPlayer && ytAudioPlayer.isInit) {
+            if (ytAudioPlayer && ytAudioPlayer.isInit && ytAudioPlayer.audioElement && !nativeAudio.src) {
                 return ytAudioPlayer.audioElement;
             }
-            if (isIOS || isSafari || (nativeAudio && nativeAudio.src && !nativeAudio.src.startsWith('data:'))) {
-                return nativeAudio;
-            }
-            if (universalPlayer && universalPlayer.isInit) return universalPlayer.audioElement;
-            if (state.isHiRes && dashPlayer && dashPlayer.isInit) return dashPlayer.audioElement;
             return nativeAudio;
         }
 
-        // Auto-advance logic on actual playback finish
-        universalPlayer.audioElement.addEventListener('ended', () => { 
-            const cur = universalPlayer.audioElement.currentTime || 0;
-            const dur = universalPlayer.audioElement.duration || 0;
-            if (dur > 5 && cur >= dur - 3) {
-                nextTrack(); 
-                releaseWakeLock(); 
-            }
+        // Native Audio Event Listeners (Single persistent player for iOS background continuity)
+        nativeAudio.addEventListener('play', () => {
+            state.isPlaying = true;
+            updatePlayIcons();
+            requestWakeLock();
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
         });
-        dashPlayer.audioElement.addEventListener('ended', () => { 
-            const cur = dashPlayer.audioElement.currentTime || 0;
-            const dur = dashPlayer.audioElement.duration || 0;
-            if (dur > 5 && cur >= dur - 3) {
-                nextTrack(); 
-                releaseWakeLock(); 
-            }
+
+        nativeAudio.addEventListener('pause', () => {
+            state.isPlaying = false;
+            updatePlayIcons();
+            releaseWakeLock();
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
         });
-        nativeAudio.addEventListener('ended', async () => { 
+
+        nativeAudio.addEventListener('ended', async () => {
             const cur = nativeAudio.currentTime || 0;
             const dur = nativeAudio.duration || 0;
             if (dur > 5 && cur >= dur - 3) {
-                await nextTrack(); 
-                releaseWakeLock(); 
-            }
-        });
-        
-        // Error handler: fallback to YouTube Audio Bridge
-        nativeAudio.addEventListener('error', (e) => {
-            console.warn('Native audio stream error, delegating to YouTube player bridge:', e);
-            const currentTrack = state.queue[state.currentIndex];
-            if (currentTrack && (!nativeAudio.src || nativeAudio.networkState === 3)) {
-                const videoId = currentTrack.videoId || currentTrack.id;
-                ytAudioPlayer.loadVideo(videoId);
+                await nextTrack();
+                releaseWakeLock();
             }
         });
 
-        universalPlayer.audioElement.addEventListener('pause', () => { if (!state.isPlaying) releaseWakeLock(); });
-        dashPlayer.audioElement.addEventListener('pause', () => { if (!state.isPlaying) releaseWakeLock(); });
-        nativeAudio.addEventListener('pause', () => { if (!state.isPlaying) releaseWakeLock(); });
+        nativeAudio.addEventListener('timeupdate', () => {
+            const cur = nativeAudio.currentTime || 0;
+            const dur = nativeAudio.duration || 0;
+            if (dur > 30 && dur - cur <= 20) {
+                prefetchNextTrack();
+            }
+        });
+
+        // Error handler: fallback to YouTube Audio Bridge if available or graceful notify
+        nativeAudio.addEventListener('error', (e) => {
+            console.warn('Native audio stream error:', e);
+            const currentTrack = state.queue[state.currentIndex];
+            if (currentTrack && (!nativeAudio.src || nativeAudio.networkState === 3 || nativeAudio.error)) {
+                const videoId = currentTrack.videoId || currentTrack.id;
+                if (videoId && (!state.currentStreamUrl || !state.currentStreamUrl.includes('youtube.com/watch'))) {
+                    ytAudioPlayer.loadVideo(videoId);
+                    showToast("Riproduzione via YouTube fallback (background non supportato su iOS in modalità video)", 4000);
+                } else {
+                    showToast("Questo brano non può essere riprodotto tramite Preluded.", 3500, 'error');
+                    setTimeout(() => { nextTrack(); }, 1200);
+                }
+            }
+        });
 
         // Re-check wake lock when returning from background
         document.addEventListener('visibilitychange', () => {
@@ -2005,7 +1902,6 @@ h1 { font-size: 34px; font-weight: 800; }
         }, { passive: true });
 
         // --- 4. Audio Control Wrapper ---
-        // Handles routing between UniversalPlayer (all platforms), DashPlayer (legacy), and Native Audio (fallback)
 
         async function clearCacheAndUpdate() {
             if ('serviceWorker' in navigator) {
@@ -2085,6 +1981,7 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         async function playTrack(track, fromQueue = false, fromSearch = false, playlistIndex = -1) {
+            if (!track) return false;
             addToHistory(track);
             state.mixLoaded = false;
             
@@ -2103,40 +2000,19 @@ h1 { font-size: 34px; font-weight: 800; }
 
             nativeAudio.pause();
             ytAudioPlayer.reset();
-            universalPlayer.reset();
-            dashPlayer.reset();
+
+            let started = false;
 
             try {
-                // Step 1: Fetch the initial JSON manifest from the API
-                const manifestRes = await apiFetch(`/track/?id=${currentTrack.id}&quality=LOSSLESS`);
-                if (!manifestRes.ok) throw new Error(`Manifest fetch failed with status: ${manifestRes.status}`);
-                const manifestData = await manifestRes.json();
+                const streamData = await resolveTrackAudio(currentTrack);
+                state.currentStreamUrl = streamData.streamUrl;
 
-                // Step 2: Decode the Base64 manifest string to get the second manifest
-                if (!manifestData.data || !manifestData.data.manifest) {
-                    throw new Error("Initial manifest format is incorrect.");
-                }
-                const streamManifestStr = atob(manifestData.data.manifest);
-                const streamManifest = JSON.parse(streamManifestStr);
-
-                // Step 3: Extract the final playable URL from the second manifest
-                if (!streamManifest.urls || streamManifest.urls.length === 0) {
-                    throw new Error("No stream URL found in the final manifest.");
-                }
-                const streamUrl = streamManifest.urls[0];
-                state.currentStreamUrl = streamUrl;
-
-                // Native-First direct audio playback on iOS/Safari/standard HTML5 audio
-                const canUseNative = isIOS || isSafari || (streamUrl && !streamUrl.includes('youtube.com/watch'));
-
-                if (canUseNative && streamUrl && !streamUrl.includes('youtube.com/watch')) {
+                if (streamData.isDirectAudio && streamData.streamUrl) {
                     nativeAudio.pause();
                     nativeAudio.currentTime = 0;
-                    nativeAudio.src = streamUrl;
+                    nativeAudio.src = streamData.streamUrl;
                     nativeAudio.load();
-                    
-                    await new Promise(resolve => setTimeout(resolve, 80));
-                    
+
                     try {
                         const playPromise = nativeAudio.play();
                         if (playPromise !== undefined) {
@@ -2145,35 +2021,27 @@ h1 { font-size: 34px; font-weight: 800; }
                         started = !nativeAudio.paused;
                     } catch (playError) {
                         console.warn('Native audio play failed:', playError);
-                        if (!isIOS && !isSafari) {
-                            const videoId = currentTrack.videoId || currentTrack.id;
-                            ytAudioPlayer.loadVideo(videoId);
+                        if (streamData.videoId) {
+                            ytAudioPlayer.loadVideo(streamData.videoId);
                             started = true;
                         }
                     }
-                } else if (!isIOS && !isSafari) {
-                    // Use YouTube Audio Player Bridge on desktop fallback
-                    const videoId = currentTrack.videoId || currentTrack.id || (streamUrl.match(/v=([a-zA-Z0-9_-]{11})/) || [])[1];
-                    ytAudioPlayer.loadVideo(videoId || currentTrack.id);
-                    started = true;
-                } else {
-                    // Fallback for iOS/Safari to keep AudioContext & nativeAudio alive
-                    nativeAudio.pause();
-                    nativeAudio.currentTime = 0;
-                    nativeAudio.src = streamUrl;
-                    nativeAudio.load();
-                    await nativeAudio.play().catch(console.warn);
+                } else if (streamData.videoId) {
+                    ytAudioPlayer.loadVideo(streamData.videoId);
+                    if (isIOS || isSafari) {
+                        showToast("Riproduzione via YouTube (background non supportato su iOS in modalità video)", 4000);
+                    }
                     started = true;
                 }
 
                 state.isPlaying = started;
                 if (started) {
                     requestWakeLock();
+                    prefetchNextTrack();
                 }
                 updatePlayIcons();
 
                 // If the URL includes a shared track id, keep it while playing that track.
-                // Remove it once the user switches to another track (to avoid leaving the shared link in the URL).
                 const params = new URLSearchParams(window.location.search);
                 const urlTrack = params.get('track');
                 if (urlTrack && urlTrack !== currentTrack.id) {
@@ -2184,9 +2052,10 @@ h1 { font-size: 34px; font-weight: 800; }
 
             } catch (e) {
                 console.error("Playback failed with error:", e);
-                alert(`Playback failed: ${e.message}. Please try again.`);
+                showToast("Questo brano non può essere riprodotto tramite Preluded.", 3500, 'error');
                 state.isPlaying = false;
                 updatePlayIcons();
+                setTimeout(() => { nextTrack(); }, 1200);
             }
 
             return state.isPlaying;
@@ -2198,11 +2067,9 @@ h1 { font-size: 34px; font-weight: 800; }
             
             if (state.isPlaying && !wasPlaying) {
                 requestWakeLock();
-                iOSBackgroundAudio.start();
                 if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
             } else if (!state.isPlaying && wasPlaying) {
                 releaseWakeLock();
-                iOSBackgroundAudio.stop();
                 if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
             }
             
@@ -2249,6 +2116,9 @@ h1 { font-size: 34px; font-weight: 800; }
                             seekToSeconds(details.seekTime);
                         }
                     });
+                    // Explicitly nullify seekbackward and seekforward so iOS renders ⏮ and ⏭ track skip buttons instead of +/-15s
+                    navigator.mediaSession.setActionHandler('seekbackward', null);
+                    navigator.mediaSession.setActionHandler('seekforward', null);
                 } catch (e) {}
             }
         }
@@ -2462,24 +2332,18 @@ h1 { font-size: 34px; font-weight: 800; }
 
         function setVolume(val) {
             state.volume = val;
-            universalPlayer.setVolume(val);
-            dashPlayer.setVolume(val);
-            ytAudioPlayer.setVolume(val);
             nativeAudio.volume = val;
+            if (ytAudioPlayer && ytAudioPlayer.setVolume) {
+                ytAudioPlayer.setVolume(val);
+            }
         }
 
         function setPlaybackSpeed(val) {
             state.playbackRate = parseFloat(val);
             document.querySelector('.speed-display').textContent = val + 'x';
-            
-            if (ytAudioPlayer.isInit) {
+            nativeAudio.playbackRate = state.playbackRate;
+            if (ytAudioPlayer && ytAudioPlayer.setPlaybackRate) {
                 ytAudioPlayer.setPlaybackRate(state.playbackRate);
-            } else if (universalPlayer.isInit) {
-                universalPlayer.setPlaybackRate(state.playbackRate);
-            } else if (state.isHiRes && dashPlayer.isInit) {
-                dashPlayer.setPlaybackRate(state.playbackRate);
-            } else {
-                nativeAudio.playbackRate = state.playbackRate;
             }
         }
 
@@ -3113,54 +2977,130 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         }
 
-        // Home "Listen Now" Personal Recommendations & Trending
+        // Home "Listen Now" Personal Recommendations & YouTube Music Quick Picks
+        let quickPicksList = [];
+
         async function loadRecommendations() {
-            const history = JSON.parse(localStorage.getItem('listening_history') || '[]');
-            const liked = state.likedSongs || [];
+            const googleToken = localStorage.getItem('google_token');
+            const googleUser = localStorage.getItem('google_user');
+            const quickPicksContainer = document.getElementById('quickPicksGrid');
+            const quickPicksLabel = document.getElementById('quickPicksLabel');
             const grid = document.getElementById('recommendations');
-            if (!grid) return;
-            
-            grid.innerHTML = renderSkeletonGrid(8);
 
-            const userTracks = [...history, ...liked];
-
-            if (userTracks.length > 0) {
-                // Deduplicate tracks by ID
-                const uniqueTracks = [];
-                const seenIds = new Set();
-                for (const t of userTracks) {
-                    if (t && t.id && !seenIds.has(t.id)) {
-                        seenIds.add(t.id);
-                        uniqueTracks.push(t);
-                    }
-                }
-
-                // Add Daily Mix card
-                const dailyMixCard = `
-                    <div class="card animate-in" onclick="loadDailyMix()">
-                        <div class="artwork" style="background: linear-gradient(45deg, #ff6b6b, #4ecdc4); display:flex; align-items:center; justify-content:center;">
-                            <svg class="icon icon-xl" style="color:white;" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                        </div>
-                        <div class="card-title">Daily Mix</div>
-                        <div class="card-subtitle">Personalizzato per te</div>
+            if (quickPicksContainer) {
+                quickPicksContainer.innerHTML = `
+                    <div style="grid-column: 1/-1; display:flex; align-items:center; gap:8px; padding:15px; color:var(--text-secondary); font-size:13px;">
+                        <div class="spinner" style="width:18px; height:18px;"></div>
+                        Caricamento scelte rapide...
                     </div>
                 `;
-                grid.innerHTML = dailyMixCard + uniqueTracks.slice(0, 15).map((track, i) => createCard(track, i + 1)).join('');
-            } else {
-                // Load trending hits on initial start
-                try {
-                    const res = await apiFetch('/search/?s=Top+Hits+2025');
-                    const data = await res.json();
-                    const tracks = data?.data?.items || data?.data?.tracks?.items || [];
-                    if (tracks.length > 0) {
-                        grid.innerHTML = tracks.slice(0, 12).map((track, i) => createCard(track, i)).join('');
+            }
+            if (grid) {
+                grid.innerHTML = renderSkeletonGrid(8);
+            }
+
+            // 1. Fetch YouTube Music Quick Picks (using connected Google account token if available)
+            try {
+                const headers = googleToken ? { 'Authorization': `Bearer ${googleToken}` } : {};
+                const qpRes = await apiFetch(`/api/quick-picks?limit=20`, { headers });
+                const qpData = await qpRes.json();
+                const items = qpData.items || qpData.data?.items || [];
+                quickPicksList = items;
+
+                if (quickPicksContainer) {
+                    if (items.length > 0) {
+                        if (qpData.personalized || googleUser) {
+                            if (quickPicksLabel) quickPicksLabel.textContent = `DAL TUO ACCOUNT YOUTUBE MUSIC (${googleUser || 'Connesso'})`;
+                        } else {
+                            if (quickPicksLabel) quickPicksLabel.textContent = "INIZIA LA RADIO DA UN BRANO";
+                        }
+                        quickPicksContainer.innerHTML = items.map((track, idx) => {
+                            const thumb = formatArtworkUrl(track.thumbnail || track.cover || track.album?.cover, '120x120') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+                            const artistName = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
+                            return `
+                                <div class="quick-pick-item animate-in" style="animation-delay:${idx * 20}ms" onclick='playQuickPickTrack(${idx})'>
+                                    <img class="quick-pick-thumb" src="${thumb}" loading="lazy" alt="${track.title}">
+                                    <div class="quick-pick-info">
+                                        <div class="quick-pick-title">${track.title}</div>
+                                        <div class="quick-pick-artist">${artistName}</div>
+                                    </div>
+                                    <div class="quick-pick-play-btn">
+                                        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
                     } else {
-                        grid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Inizia ad ascoltare brani per ricevere consigli personalizzati.</p>';
+                        quickPicksContainer.innerHTML = `<p style="color:var(--text-secondary); padding:10px;">Nessuna scelta rapida disponibile al momento.</p>`;
                     }
-                } catch (e) {
-                    grid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Inizia ad ascoltare brani per ricevere consigli personalizzati.</p>';
+                }
+            } catch (err) {
+                console.warn("Failed to load quick picks:", err);
+                if (quickPicksContainer) {
+                    quickPicksContainer.innerHTML = `<p style="color:var(--text-secondary); padding:10px;">Impossibile caricare le scelte rapide.</p>`;
                 }
             }
+
+            // 2. Load personalized Daily Mix & Top Picks
+            const history = JSON.parse(localStorage.getItem('listening_history') || '[]');
+            const liked = state.likedSongs || [];
+            const userTracks = [...history, ...liked];
+
+            if (grid) {
+                if (userTracks.length > 0) {
+                    // Deduplicate tracks by ID
+                    const uniqueTracks = [];
+                    const seenIds = new Set();
+                    for (const t of userTracks) {
+                        if (t && t.id && !seenIds.has(t.id)) {
+                            seenIds.add(t.id);
+                            uniqueTracks.push(t);
+                        }
+                    }
+
+                    // Add Daily Mix card
+                    const dailyMixCard = `
+                        <div class="card animate-in" onclick="loadDailyMix()">
+                            <div class="artwork" style="background: linear-gradient(45deg, #ff6b6b, #4ecdc4); display:flex; align-items:center; justify-content:center;">
+                                <svg class="icon icon-xl" style="color:white;" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                            </div>
+                            <div class="card-title">Daily Mix</div>
+                            <div class="card-subtitle">Personalizzato per te</div>
+                        </div>
+                    `;
+                    grid.innerHTML = dailyMixCard + uniqueTracks.slice(0, 15).map((track, i) => createCard(track, i + 1)).join('');
+                } else {
+                    // Load trending hits on initial start
+                    try {
+                        const res = await apiFetch('/search/?s=Top+Hits+2025');
+                        const data = await res.json();
+                        const tracks = data?.data?.items || data?.data?.tracks?.items || [];
+                        if (tracks.length > 0) {
+                            grid.innerHTML = tracks.slice(0, 12).map((track, i) => createCard(track, i)).join('');
+                        } else {
+                            grid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Inizia ad ascoltare brani per ricevere consigli personalizzati.</p>';
+                        }
+                    } catch (e) {
+                        grid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Inizia ad ascoltare brani per ricevere consigli personalizzati.</p>';
+                    }
+                }
+            }
+        }
+
+        function playQuickPickTrack(index) {
+            if (!quickPicksList || quickPicksList.length === 0) return;
+            const targetTrack = quickPicksList[index];
+            if (!targetTrack) return;
+            state.queue = [...quickPicksList];
+            state.currentIndex = index;
+            playTrack(targetTrack, true, false);
+        }
+
+        function playAllQuickPicks() {
+            if (!quickPicksList || quickPicksList.length === 0) return;
+            state.queue = [...quickPicksList];
+            state.currentIndex = 0;
+            playTrack(quickPicksList[0], true, false);
         }
 
         async function loadDailyMix() {
@@ -3298,8 +3238,7 @@ h1 { font-size: 34px; font-weight: 800; }
                     }
 
                     div.onclick = () => {
-                        const player = state.isHiRes ? dashPlayer : nativeAudio;
-                        player.currentTime = line.time;
+                        seekToSeconds(line.time);
                     };
                     container.appendChild(div);
                 });
@@ -3976,12 +3915,31 @@ h1 { font-size: 34px; font-weight: 800; }
             const userName = localStorage.getItem('google_user');
             const titleEl = document.getElementById('accountTitle');
             const subEl = document.getElementById('accountSubtitle');
+            const homeBadge = document.getElementById('homeAccountBadge');
+
             if (userName && titleEl && subEl) {
                 titleEl.textContent = userName;
                 subEl.textContent = 'Account Google connesso · Tocca per uscire';
             } else if (titleEl && subEl) {
                 titleEl.textContent = 'Accedi con Google';
                 subEl.textContent = 'Sincronizza preferiti e sessione';
+            }
+
+            if (homeBadge) {
+                if (userName) {
+                    homeBadge.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:16px; background:rgba(255,255,255,0.08); font-size:12px; font-weight:600; color:var(--text-primary); cursor:pointer;" onclick="manualSyncGoogleLibrary()" title="Sincronizza con YouTube Music">
+                            <span style="width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.6);"></span>
+                            <span>${userName}</span>
+                        </div>
+                    `;
+                } else {
+                    homeBadge.innerHTML = `
+                        <button class="btn-text" onclick="loginWithGoogle()" style="font-size:12px; font-weight:600; padding:5px 12px; border-radius:16px; background:rgba(255,255,255,0.06); color:var(--text-secondary); display:flex; align-items:center; gap:6px;">
+                            Accedi con Google
+                        </button>
+                    `;
+                }
             }
         }
 
