@@ -975,6 +975,13 @@ class YouTubeMusicService {
         if (!node || typeof node !== 'object') return;
         if (node.musicCarouselShelfRenderer) {
           const headerText = node.musicCarouselShelfRenderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || '';
+          const lowerHeader = headerText.toLowerCase();
+
+          // Strictly ignore any shelves for Shorts, Clips, or Samples
+          if (lowerHeader.includes('shorts') || lowerHeader.includes('clip') || lowerHeader.includes('campionati') || lowerHeader.includes('momenti musicali') || lowerHeader.includes('brevi')) {
+            return;
+          }
+
           if (/scelte rapide|quick picks|listen again|di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta|heavy rotation/i.test(headerText)) {
             if (/di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta/i.test(headerText)) {
               isPersonalized = true;
@@ -987,6 +994,12 @@ class YouTubeMusicService {
                 const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.title?.runs?.[0]?.text;
                 const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.subtitle?.runs?.[0]?.text || 'Artist';
                 const tArtist = this.formatArtistName(rawArtist);
+                
+                // Reject if title or artist suggests a short video
+                if (!tTitle || tTitle.toLowerCase().includes('#shorts') || tTitle.toLowerCase().includes('#short') || tArtist.toLowerCase().includes('shorts')) {
+                  continue;
+                }
+
                 const vId = renderer.playlistItemData?.videoId ||
                   renderer.navigationEndpoint?.watchEndpoint?.videoId ||
                   renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;

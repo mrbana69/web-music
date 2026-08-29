@@ -234,63 +234,122 @@ class AuthService {
       }
     }
 
-    // 2. Fetch user's Liked videos (Try videos?myRating=like, then fallback to LL/LM playlists)
+    // Helper to check if a video is an actual music track (not a YouTube Short or video clip)
+    const isMusicTrack = (title, categoryId, durationMs) => {
+      if (!title || typeof title !== 'string') return false;
+      const lower = title.toLowerCase();
+      if (lower.includes('#shorts') || lower.includes('#short') || lower.includes('tiktok') || lower.includes('#reels')) {
+        return false;
+      }
+      if (durationMs && durationMs < 55000) { // Shorts are < 60s
+        return false;
+      }
+      if (categoryId && categoryId !== '10' && categoryId !== 10) {
+        return false;
+      }
+      return true;
+    };
+
+    const parseISO8601Duration = (duration) => {
+      if (!duration) return 210000;
+      const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+      if (!match) return 210000;
+      const hours = parseInt(match[1] || 0, 10);
+      const minutes = parseInt(match[2] || 0, 10);
+      const seconds = parseInt(match[3] || 0, 10);
+      return (hours * 3600 + minutes * 60 + seconds) * 1000;
+    };
+
+    // 2. Fetch user's Liked Music (PRIORITIZE YouTube Music "LM" playlist, which contains ONLY music tracks)
     try {
-      const likedData = await fetchJson('https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&myRating=like&maxResults=50', { headers, timeout: 5000 });
-      if (likedData && likedData.items) {
-        likedSongs = likedData.items.map(v => {
-          const title = v.snippet?.title || '';
-          const channelTitle = cleanArtistName(v.snippet?.channelTitle || 'Artist');
-          const rawThumb = v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.medium?.url || '';
+      const lmData = await fetchJson('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=LM&maxResults=50', { headers, timeout: 5000 });
+      if (lmData && lmData.items && lmData.items.length > 0) {
+        likedSongs = lmData.items.map(item => {
+          const title = item.snippet?.title || '';
+          const channelTitle = cleanArtistName(item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist');
+          const vId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+          const rawThumb = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
           const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
           return {
-            id: v.id,
-            videoId: v.id,
+            id: vId,
+            videoId: vId,
             title,
-            artist: { id: `art_${v.id}`, name: channelTitle, picture: thumb },
+            artist: { id: `art_${vId}`, name: channelTitle, picture: thumb },
             artists: [{ name: channelTitle }],
-            album: { id: `alb_${v.id}`, title, cover: thumb },
+            album: { id: `alb_${vId}`, title, cover: thumb },
             duration: 210,
             duration_ms: 210000,
-            source: 'youtube-liked'
+            source: 'youtube-liked-music'
           };
-        }).filter(s => s.id && s.title);
+        }).filter(s => s.id && s.title && s.title !== 'Deleted video' && s.title !== 'Private video' && isMusicTrack(s.title));
       }
     } catch (e) {
-      console.warn('[AuthService] Fetching YouTube liked videos failed, trying LL playlist:', e.message);
-      if (e.message && (e.message.includes('401') || e.message.includes('403') || e.message.includes('insufficient'))) {
-        requiresReauth = true;
+      console.warn('[AuthService] LM playlist fetch failed, trying filtered videos API:', e.message);
+    }
+
+    // Fallback if LM is not available: fetch videos?myRating=like but STRICTLY FILTER FOR categoryId=10 (Music) & duration >= 55s
+    if (likedSongs.length === 0) {
+      try {
+        const likedData = await fetchJson('https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&myRating=like&maxResults=50', { headers, timeout: 5000 });
+        if (likedData && likedData.items) {
+          likedSongs = likedData.items.map(v => {
+            const title = v.snippet?.title || '';
+            const categoryId = v.snippet?.categoryId;
+            const durationMs = parseISO8601Duration(v.contentDetails?.duration);
+            const channelTitle = cleanArtistName(v.snippet?.channelTitle || 'Artist');
+            const rawThumb = v.snippet?.thumbnails?.high?.url || v.snippet?.thumbnails?.medium?.url || '';
+            const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
+            
+            if (!isMusicTrack(title, categoryId, durationMs)) {
+              return null;
+            }
+
+            return {
+              id: v.id,
+              videoId: v.id,
+              title,
+              artist: { id: `art_${v.id}`, name: channelTitle, picture: thumb },
+              artists: [{ name: channelTitle }],
+              album: { id: `alb_${v.id}`, title, cover: thumb },
+              duration: Math.round(durationMs / 1000) || 210,
+              duration_ms: durationMs || 210000,
+              source: 'youtube-liked'
+            };
+          }).filter(Boolean);
+        }
+      } catch (e) {
+        console.warn('[AuthService] Fetching YouTube liked videos failed:', e.message);
+        if (e.message && (e.message.includes('401') || e.message.includes('403') || e.message.includes('insufficient'))) {
+          requiresReauth = true;
+        }
       }
     }
 
-    // Fallback for liked songs: fetch "LL" (Liked List) or "LM" (Liked Music) playlist
+    // Secondary fallback for liked songs: fetch "LL" (Liked List) playlist with music filtering
     if (likedSongs.length === 0) {
-      for (const plId of ['LL', 'LM']) {
-        try {
-          const llData = await fetchJson(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${plId}&maxResults=50`, { headers, timeout: 4000 });
-          if (llData && llData.items && llData.items.length > 0) {
-            likedSongs = llData.items.map(item => {
-              const title = item.snippet?.title || '';
-              const channelTitle = cleanArtistName(item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist');
-              const vId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
-              const rawThumb = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
-              const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
-              return {
-                id: vId,
-                videoId: vId,
-                title,
-                artist: { id: `art_${vId}`, name: channelTitle, picture: thumb },
-                artists: [{ name: channelTitle }],
-                album: { id: `alb_${vId}`, title, cover: thumb },
-                duration: 210,
-                duration_ms: 210000,
-                source: 'youtube-liked'
-              };
-            }).filter(s => s.id && s.title && s.title !== 'Deleted video' && s.title !== 'Private video');
-            break;
-          }
-        } catch (err) {}
-      }
+      try {
+        const llData = await fetchJson(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=LL&maxResults=50`, { headers, timeout: 4000 });
+        if (llData && llData.items && llData.items.length > 0) {
+          likedSongs = llData.items.map(item => {
+            const title = item.snippet?.title || '';
+            const channelTitle = cleanArtistName(item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist');
+            const vId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+            const rawThumb = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
+            const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
+            return {
+              id: vId,
+              videoId: vId,
+              title,
+              artist: { id: `art_${vId}`, name: channelTitle, picture: thumb },
+              artists: [{ name: channelTitle }],
+              album: { id: `alb_${vId}`, title, cover: thumb },
+              duration: 210,
+              duration_ms: 210000,
+              source: 'youtube-liked'
+            };
+          }).filter(s => s.id && s.title && s.title !== 'Deleted video' && s.title !== 'Private video' && isMusicTrack(s.title));
+        }
+      } catch (err) {}
     }
 
     return {
