@@ -157,6 +157,16 @@ class YouTubeMusicService {
         const thumb = this.formatThumb(rawThumb);
 
         const navEndpoint = item.playlistItemData?.navigationEndpoint ||
+          item.doubleTapCommand ||
+          item.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint ||
+          item.navigationEndpoint;
+        const musicVideoType = navEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType ||
+          (realAlbumBrowseId ? 'MUSIC_VIDEO_TYPE_ATV' : 'MUSIC_VIDEO_TYPE_OMV');
+
+        const isSong = musicVideoType === 'MUSIC_VIDEO_TYPE_ATV' || Boolean(realAlbumBrowseId);
+        const isMusicVideo = musicVideoType === 'MUSIC_VIDEO_TYPE_OMV';
+
+        const finalId = videoId || browseId || `yt_${Buffer.from(titleText + artist).toString('hex').substring(0, 12)}`;
 
         if (titleText) {
           results.push({
@@ -180,6 +190,9 @@ class YouTubeMusicService {
             duration_ms: durationMs || 210000,
             thumbnail: thumb,
             itemType: isSong ? 'song' : (isMusicVideo ? 'video' : 'song'),
+            musicVideoType: musicVideoType || 'MUSIC_VIDEO_TYPE_ATV',
+            isOfficial: isSong || isMusicVideo,
+            source: 'ytmusic'
           });
         }
       }
@@ -997,11 +1010,23 @@ class YouTubeMusicService {
                 const navEndpoint = renderer.playlistItemData?.navigationEndpoint ||
                   renderer.navigationEndpoint ||
                   renderer.doubleTapCommand ||
+                  renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint;
+                const musicVideoType = navEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType;
+
+                // If explicitly UGC (User Generated Content non-music video) or shorts, skip it
+                if (musicVideoType === 'MUSIC_VIDEO_TYPE_UGC') {
+                  continue;
+                }
+
                 const isSong = musicVideoType === 'MUSIC_VIDEO_TYPE_ATV' || !musicVideoType;
                 const isMusicVideo = musicVideoType === 'MUSIC_VIDEO_TYPE_OMV';
 
+                const vId = renderer.playlistItemData?.videoId ||
+                  navEndpoint?.watchEndpoint?.videoId ||
+                  renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
                 const rawThumb = renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url ||
                   renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
+                const thumb = this.formatThumb(rawThumb);
 
                 if (tTitle && vId && !quickPicks.some(p => p.id === vId || p.videoId === vId)) {
                   quickPicks.push({
@@ -1019,6 +1044,9 @@ class YouTubeMusicService {
                     musicVideoType: musicVideoType || 'MUSIC_VIDEO_TYPE_ATV',
                     isOfficial: true,
                     source: 'ytmusic-quick-picks'
+                  });
+                }
+              }
             }
           }
         }

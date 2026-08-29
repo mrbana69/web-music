@@ -36,7 +36,7 @@ app.get('*', (req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
-if (process.env.NODE_ENV !== 'test') {
+if (require.main === module && !process.env.VERCEL && process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     console.log(`====================================================`);
     console.log(`  Preluded Music API running at http://localhost:${PORT}`);
