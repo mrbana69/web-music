@@ -1385,7 +1385,9 @@ h1 { font-size: 34px; font-weight: 800; }
 
         async function apiFetch(endpoint, options = {}) {
             const apiUrl = await getWorkingApiUrl();
-            const response = await fetch(`${apiUrl}${endpoint}`, {
+            const cleanEndpoint = endpoint.startsWith('/api/') ? endpoint.substring(4) : (endpoint === '/api' ? '' : endpoint);
+            const normalizedEndpoint = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
+            const response = await fetch(`${apiUrl}${normalizedEndpoint}`, {
                 ...options,
                 headers: {
                     'Accept': 'application/json',
@@ -3002,7 +3004,7 @@ h1 { font-size: 34px; font-weight: 800; }
             // 1. Fetch YouTube Music Quick Picks (using connected Google account token if available)
             try {
                 const headers = googleToken ? { 'Authorization': `Bearer ${googleToken}` } : {};
-                const qpRes = await apiFetch(`/api/quick-picks?limit=20`, { headers });
+                const qpRes = await apiFetch(`/quick-picks?limit=20`, { headers });
                 const qpData = await qpRes.json();
                 const items = qpData.items || qpData.data?.items || [];
                 quickPicksList = items;
