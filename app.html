@@ -2201,8 +2201,8 @@ h1 { font-size: 34px; font-weight: 800; }
 
         function updateMediaSession(track) {
             if (!track || !('mediaSession' in navigator)) return;
-            const artUrl = getTrackArt(track, 'large');
-            const artistName = track.artist?.name || (typeof track.artist === 'string' ? track.artist : 'Unknown Artist');
+            const artUrl = formatArtworkUrl(track.album?.cover || track.cover || track.thumbnail, '640x640') || 'https://preluded.vercel.app/icons/512x512.png';
+            const artistName = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
             try {
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: track.title || 'Unknown Title',
@@ -4314,6 +4314,26 @@ h1 { font-size: 34px; font-weight: 800; }
             renderPlaylistPicker();
             const modal = document.getElementById('playlistPickerOverlay');
             if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeAddToPlaylistModal() {
+            const modal = document.getElementById('playlistPickerOverlay');
+            if (modal) modal.classList.add('hidden');
+            targetTrackForPlaylist = null;
+        }
+
+        function showGlobalSpinner(text = 'Caricamento...') {
+            const spinner = document.getElementById('globalSpinner');
+            if (spinner) {
+                const textEl = spinner.querySelector('.spinner-text');
+                if (textEl) textEl.textContent = text;
+                spinner.classList.remove('hidden');
+            }
+        }
+
+        function hideGlobalSpinner() {
+            const spinner = document.getElementById('globalSpinner');
+            if (spinner) spinner.classList.add('hidden');
         }
 
         function filterPlaylistPicker() {
