@@ -1400,7 +1400,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 return streamUrlCache.get(trackId);
             }
 
-            const manifestRes = await apiFetch(`/track/?id=${encodeURIComponent(trackId)}&quality=LOSSLESS`);
+            const manifestRes = await apiFetch(`/track?id=${encodeURIComponent(trackId)}&quality=LOSSLESS`);
             if (!manifestRes.ok) {
                 throw new Error(`Risoluzione brano fallita: ${manifestRes.status}`);
             }
@@ -2090,10 +2090,15 @@ h1 { font-size: 34px; font-weight: 800; }
             addToHistory(track);
             state.mixLoaded = false;
             
-            // Smooth fade out of currently active player before switching tracks
-            const currentPlayer = getActiveAudioPlayer();
-            if (state.isPlaying && currentPlayer && !currentPlayer.paused) {
-                await fadeOut(currentPlayer, 0.3);
+            // iOS & Mobile Audio Unlock: trigger audio activation immediately inside user tap gesture
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            if (isIOS || isMobile) {
+                try {
+                    backgroundAudioManager.init();
+                    backgroundAudioManager.start();
+                } catch(e) {}
             }
             
             if (!fromQueue) {
@@ -2109,27 +2114,21 @@ h1 { font-size: 34px; font-weight: 800; }
             updateMediaSession(currentTrack);
             document.getElementById('miniPlayer').classList.add('visible');
 
-            nativeAudio.pause();
-            ytAudioPlayer.reset();
-
             let started = false;
 
             try {
                 const streamData = await resolveTrackAudio(currentTrack);
                 state.currentStreamUrl = streamData.streamUrl;
 
-                const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
                 const isWatchUrl = streamData.streamUrl && streamData.streamUrl.includes('youtube.com/watch');
                 const directPlayUrl = (!isWatchUrl && streamData.streamUrl) ? streamData.streamUrl : `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
 
-                // Native HTML5 Audio for Mobile (Android & iOS) and Direct Streams
-                if (isMobile || !isWatchUrl) {
-                    nativeAudio.pause();
-                    nativeAudio.currentTime = 0;
-                    nativeAudio.src = directPlayUrl;
-                    nativeAudio.load();
-
+                // 1. Try Native HTML5 Audio
+                if (!isWatchUrl || isMobile || isIOS) {
                     try {
+                        nativeAudio.pause();
+                        nativeAudio.src = directPlayUrl;
+                        nativeAudio.load();
                         const playPromise = nativeAudio.play();
                         if (playPromise !== undefined) {
                             await playPromise;
@@ -2137,22 +2136,30 @@ h1 { font-size: 34px; font-weight: 800; }
                         started = !nativeAudio.paused;
                     } catch (playError) {
                         console.warn('Native audio play error, trying backend stream fallback:', playError);
-                        if (nativeAudio.src !== `/api/stream?id=${encodeURIComponent(currentTrack.id)}`) {
-                            nativeAudio.src = `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
-                            nativeAudio.load();
-                            try { 
-                                await nativeAudio.play(); 
-                                started = !nativeAudio.paused; 
-                            } catch(e) {}
-                        }
-                        if (!started && !isMobile && streamData.videoId) {
-                            ytAudioPlayer.loadVideo(streamData.videoId);
-                            started = true;
+                        try {
+                            const proxyUrl = `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
+                            if (nativeAudio.src !== proxyUrl) {
+                                nativeAudio.src = proxyUrl;
+                                nativeAudio.load();
+                                await nativeAudio.play();
+                                started = !nativeAudio.paused;
+                            }
+                        } catch(proxyErr) {
+                            console.warn('Proxy stream failed:', proxyErr);
                         }
                     }
-                } else if (streamData.videoId) {
-                    ytAudioPlayer.loadVideo(streamData.videoId);
-                    started = true;
+                }
+
+                // 2. Fallback to YouTube Audio Bridge if native audio did not start
+                if (!started && streamData.videoId) {
+                    try {
+                        nativeAudio.pause();
+                        nativeAudio.removeAttribute('src');
+                        ytAudioPlayer.loadVideo(streamData.videoId);
+                        started = true;
+                    } catch(ytErr) {
+                        console.warn('YouTube audio bridge fallback failed:', ytErr);
+                    }
                 }
 
                 state.isPlaying = started;
@@ -2160,6 +2167,8 @@ h1 { font-size: 34px; font-weight: 800; }
                     requestWakeLock();
                     prefetchNextTrack();
                     backgroundAudioManager.start();
+                } else {
+                    showToast('Impossibile avviare il brano.', 3000, 'error');
                 }
                 updatePlayIcons();
 
