@@ -4175,43 +4175,95 @@ h1 { font-size: 34px; font-weight: 800; }
 
         function filterPlaylistPicker() {
             const query = (document.getElementById('playlistPickerSearch')?.value || '').trim().toLowerCase();
+            renderPlaylistPicker(query);
+        }
+
+        function renderPlaylistPicker(filterQuery = '') {
+            const container = document.getElementById('playlistPickerList');
+            const track = targetTrackForPlaylist || state.queue[state.currentIndex];
+            if (!container) return;
+            container.innerHTML = '';
 
             if (!state.playlists || state.playlists.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align:center; padding:24px 10px; color:var(--text-secondary);">
                         <svg class="icon" viewBox="0 0 24 24" style="width:36px; height:36px; margin-bottom:8px; opacity:0.5;"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
                         <p style="font-size:13px;">Nessuna playlist creata.</p>
                         <button class="btn-text" onclick="createPlaylistAndAdd()" style="color:var(--accent); font-weight:600; margin-top:8px;">+ Crea la tua prima playlist</button>
                     </div>
+                `;
+                return;
+            }
 
             let filtered = state.playlists.map((pl, idx) => ({ pl, idx }));
             if (filterQuery) {
+                filtered = filtered.filter(({ pl }) => (pl.name || pl.title || '').toLowerCase().includes(filterQuery));
             }
 
+            if (filtered.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-secondary); font-size:13px; text-align:center; padding:18px 0;">Nessuna playlist corrispondente.</p>';
+                return;
+            }
+
+            filtered.forEach(({ pl, idx }) => {
+                const songs = pl.songs || [];
                 const already = track ? songs.some(t => t.id === track.id || (t.videoId && t.videoId === track.videoId)) : false;
                 const cover = formatArtworkUrl(pl.cover, '120x120') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
                 const item = document.createElement('div');
                 item.className = 'modal-list-item';
+                item.style.cssText = 'display:flex; align-items:center; gap:12px; padding:10px 12px; margin-bottom:8px;';
+                item.innerHTML = `
+                    <img src="${cover}" style="width:38px; height:38px; border-radius:8px; object-fit:cover; flex-shrink:0; background:rgba(255,255,255,0.05);" loading="lazy">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-weight:600; font-size:14px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${pl.name || pl.title}</div>
+                        <div style="font-size:12px; color:var(--text-secondary);">${songs.length} brani</div>
+                    </div>
                     <button class="btn-text" style="padding:6px 12px; font-size:12px; border-radius:100px; background:${already ? 'rgba(255,255,255,0.08)' : 'rgba(250,45,72,0.15)'}; color:${already ? 'var(--text-secondary)' : 'var(--accent)'}; font-weight:600; flex-shrink:0;" ${already ? 'disabled' : ''}>
                         ${already ? '✓ Aggiunta' : '+ Aggiungi'}
                     </button>
                 `;
                 item.onclick = (e) => {
+                    if (already) {
+                        showToast('Questo brano è già presente nella playlist.');
+                        return;
+                    }
+                    addTrackToSpecificPlaylist(idx);
+                };
+                container.appendChild(item);
+            });
+        }
+
+        function addTrackToSpecificPlaylist(playlistIndex) {
+            const track = targetTrackForPlaylist || state.queue[state.currentIndex];
+            if (!track) return;
+
             const pl = state.playlists[playlistIndex];
             if (!pl) return;
+            if (!pl.songs) pl.songs = [];
 
             if (!pl.songs.some(t => t.id === track.id || (t.videoId && t.videoId === track.videoId))) {
                 pl.songs.push(track);
                 pl.itemCount = pl.songs.length;
+                if (!pl.cover && track.album?.cover) {
+                    pl.cover = track.album.cover;
+                }
+                localStorage.setItem('playlists', JSON.stringify(state.playlists));
                 renderPlaylists();
                 renderPlaylistPicker(document.getElementById('playlistPickerSearch')?.value || '');
                 showToast(`Aggiunta a \"${pl.name || pl.title}\"!`);
+                setTimeout(() => {
+                    closeAddToPlaylistModal();
                 }, 400);
             } else {
                 showToast('Questo brano è già presente nella playlist.');
+            }
         }
 
+        function createPlaylistAndAdd() {
             const name = prompt('Nome della nuova playlist:');
             if (!name || !name.trim()) return;
 
+            const track = targetTrackForPlaylist || state.queue[state.currentIndex];
             const newPl = {
                 id: `pl_local_${Date.now()}`,
                 name: name.trim(),
@@ -4219,18 +4271,20 @@ h1 { font-size: 34px; font-weight: 800; }
                 cover: track?.album?.cover || '',
                 itemCount: track ? 1 : 0,
                 songs: track ? [track] : []
+            };
+            state.playlists.unshift(newPl);
             localStorage.setItem('playlists', JSON.stringify(state.playlists));
             renderPlaylists();
             renderPlaylistPicker();
-            showToast(`Playlist \"${newPl.name}\" creata con successo!`);
+            showToast(`Playlist "${newPl.name}" creata con successo!`);
+        }
 
         function openArtistPageFromCurrent() {
+            const track = state.queue[state.currentIndex];
             if (!track || !track.artist) return;
-        function showGlobalSpinner(message = '') {
-            const overlay = document.getElementById('globalSpinner');
-            if (!overlay) return;
-            if (!overlay) return;
-            overlay.classList.add('hidden');
+            closeFullPlayer();
+            openArtistPage(track.artist);
+        }
 
         function openAlbumPageFromCurrent() {
             const track = state.queue[state.currentIndex];
@@ -4241,9 +4295,22 @@ h1 { font-size: 34px; font-weight: 800; }
                 name: track.album?.title || track.album?.name || track.title,
                 artist: track.artist || { name: 'Unknown' },
                 cover: track.album?.cover || track.cover || ''
+            };
+            closeFullPlayer();
+            openAlbumPage(albumPayload);
+        }
+
+        async function openArtistPage(artistOrId) {
+            let artistName = '';
+            let artistId = '';
+            let artistPic = '';
+
             if (typeof artistOrId === 'string') {
+                artistName = artistOrId;
             } else if (typeof artistOrId === 'object' && artistOrId !== null) {
                 artistName = artistOrId.name || artistOrId.artist?.name || (typeof artistOrId.artist === 'string' ? artistOrId.artist : '');
+                artistId = artistOrId.id || '';
+                artistPic = artistOrId.picture || '';
             }
 
             artistName = String(artistName || '').trim();
