@@ -260,34 +260,38 @@ class AuthService {
       return (hours * 3600 + minutes * 60 + seconds) * 1000;
     };
 
-    // 2. Fetch user's Liked Music (PRIORITIZE YouTube Music "LM" playlist, which contains ONLY music tracks)
-    try {
-      const lmData = await fetchJson('https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=LM&maxResults=50', { headers, timeout: 5000 });
-      if (lmData && lmData.items && lmData.items.length > 0) {
-        likedSongs = lmData.items.map(item => {
-          const title = item.snippet?.title || '';
-          const channelTitle = cleanArtistName(item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist');
-          const vId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
-          const rawThumb = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
-          const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
-          return {
-            id: vId,
-            videoId: vId,
-            title,
-            artist: { id: `art_${vId}`, name: channelTitle, picture: thumb },
-            artists: [{ name: channelTitle }],
-            album: { id: `alb_${vId}`, title, cover: thumb },
-            duration: 210,
-            duration_ms: 210000,
-            source: 'youtube-liked-music'
-          };
-        }).filter(s => s.id && s.title && s.title !== 'Deleted video' && s.title !== 'Private video' && isMusicTrack(s.title));
+    // 2. Fetch user's Liked Music (PRIORITIZE YouTube Music "LM" playlist, then "LL")
+    for (const plId of ['LM', 'LL']) {
+      try {
+        const lmData = await fetchJson(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${plId}&maxResults=50`, { headers, timeout: 5000 });
+        if (lmData && lmData.items && lmData.items.length > 0) {
+          likedSongs = lmData.items.map(item => {
+            const title = item.snippet?.title || '';
+            const channelTitle = cleanArtistName(item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist');
+            const vId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+            const rawThumb = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
+            const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/default\.jpg/, '/hqdefault.jpg').replace(/\/maxresdefault\.jpg/, '/hqdefault.jpg'));
+            return {
+              id: vId,
+              videoId: vId,
+              title,
+              artist: { id: `art_${vId}`, name: channelTitle, picture: thumb },
+              artists: [{ name: channelTitle }],
+              album: { id: `alb_${vId}`, title, cover: thumb },
+              duration: 210,
+              duration_ms: 210000,
+              source: plId === 'LM' ? 'youtube-liked-music' : 'youtube-liked'
+            };
+          }).filter(s => s.id && s.title && s.title !== 'Deleted video' && s.title !== 'Private video' && isMusicTrack(s.title));
+
+          if (likedSongs.length > 0) break;
+        }
+      } catch (e) {
+        console.warn(`[AuthService] ${plId} playlist fetch failed:`, e.message);
       }
-    } catch (e) {
-      console.warn('[AuthService] LM playlist fetch failed, trying filtered videos API:', e.message);
     }
 
-    // Fallback if LM is not available: fetch videos?myRating=like but STRICTLY FILTER FOR categoryId=10 (Music) & duration >= 55s
+    // Fallback if LM/LL are not available: fetch videos?myRating=like with strict categoryId=10 filtering
     if (likedSongs.length === 0) {
       try {
         const likedData = await fetchJson('https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&myRating=like&maxResults=50', { headers, timeout: 5000 });
@@ -318,38 +322,11 @@ class AuthService {
           }).filter(Boolean);
         }
       } catch (e) {
-        console.warn('[AuthService] Fetching YouTube liked videos failed:', e.message);
+        console.warn('[AuthService] Fetching YouTube liked videos fallback failed:', e.message);
         if (e.message && (e.message.includes('401') || e.message.includes('403') || e.message.includes('insufficient'))) {
           requiresReauth = true;
         }
       }
-    }
-
-    // Secondary fallback for liked songs: fetch "LL" (Liked List) playlist with music filtering
-    if (likedSongs.length === 0) {
-      try {
-        const llData = await fetchJson(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=LL&maxResults=50`, { headers, timeout: 4000 });
-        if (llData && llData.items && llData.items.length > 0) {
-          likedSongs = llData.items.map(item => {
-            const title = item.snippet?.title || '';
-            const channelTitle = cleanArtistName(item.snippet?.videoOwnerChannelTitle || item.snippet?.channelTitle || 'Artist');
-            const vId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
-            const rawThumb = item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || '';
-            const thumb = rawThumb.includes('googleusercontent.com') ? rawThumb.replace(/=[ws]\d+.*$/, '=w500-h500-l90-rj') : (rawThumb.replace(/\/hqdefault\.jpg/, '/maxresdefault.jpg'));
-            return {
-              id: vId,
-              videoId: vId,
-              title,
-              artist: { id: `art_${vId}`, name: channelTitle, picture: thumb },
-              artists: [{ name: channelTitle }],
-              album: { id: `alb_${vId}`, title, cover: thumb },
-              duration: 210,
-              duration_ms: 210000,
-              source: 'youtube-liked'
-            };
-          }).filter(s => s.id && s.title && s.title !== 'Deleted video' && s.title !== 'Private video' && isMusicTrack(s.title));
-        }
-      } catch (err) {}
     }
 
     return {

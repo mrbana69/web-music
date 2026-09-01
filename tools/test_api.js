@@ -154,7 +154,16 @@ async function runTests() {
       'GET /api/stream-url?videoId=demo-track-1 returns playable directUrl'
     );
 
-    // 13. Auth Spotify Login Endpoint
+    // 13. Home Feed Endpoint (Live YouTube Music Home Feed)
+    const homeRes = await request('/api/home');
+    assert(
+      homeRes.status === 200 &&
+      homeRes.body.sections &&
+      Array.isArray(homeRes.body.sections),
+      'GET /api/home returns sections array from YouTube Music'
+    );
+
+    // 14. Auth Spotify Login Endpoint
     const authSpotifyLogin = await request('/api/auth/spotify/login');
     assert(
       authSpotifyLogin.status === 200 &&

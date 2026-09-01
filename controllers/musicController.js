@@ -128,6 +128,29 @@ class MusicController {
   }
 
   /**
+   * GET /api/stream - Direct audio stream redirection / proxy for mobile background playback
+   */
+  async stream(req, res, next) {
+    try {
+      const { id } = req.query || {};
+      if (!id) {
+        return res.status(400).json({ error: 'Missing track id' });
+      }
+
+      const resolved = await trackResolverService.resolveTrack({ id, title: id });
+      const streamInfo = await streamResolutionService.resolveStreamUrl(resolved.videoId);
+
+      if (streamInfo && streamInfo.directUrl && !streamInfo.directUrl.includes('youtube.com/watch')) {
+        return res.redirect(302, streamInfo.directUrl);
+      }
+
+      return res.redirect(302, streamInfo?.directUrl || `https://www.youtube.com/watch?v=${id}`);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * GET /api/mix - Dynamic recommendations / track radio
    */
   async mix(req, res, next) {
@@ -161,6 +184,18 @@ class MusicController {
         title: 'Recommendations',
         items: recTracks.map((t) => ({ item: t }))
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /api/home - Official YouTube Music Home Feed (Quick Picks, Mixes, New Releases)
+   */
+  async home(req, res, next) {
+    try {
+      const homeFeed = await youtubeMusicService.getHome();
+      return res.status(200).json(homeFeed);
     } catch (err) {
       next(err);
     }

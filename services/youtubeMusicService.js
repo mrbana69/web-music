@@ -1013,7 +1013,6 @@ class YouTubeMusicService {
                   renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint;
                 const musicVideoType = navEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType;
 
-                // If explicitly UGC (User Generated Content non-music video) or shorts, skip it
                 if (musicVideoType === 'MUSIC_VIDEO_TYPE_UGC') {
                   continue;
                 }
@@ -1089,6 +1088,112 @@ class YouTubeMusicService {
 
     cacheService.set(cacheKey, result, 1200);
     return result;
+  }
+
+  /**
+   * Fetch live Home feed from YouTube Music (FEmusic_home)
+   */
+  async getHome() {
+    const cacheKey = 'ytm_home_feed';
+    const cached = cacheService.get(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const browsePayload = {
+        context: {
+          client: {
+            clientName: 'WEB_REMIX',
+            clientVersion: '1.20240101.01.00',
+            hl: 'it',
+            gl: 'IT'
+          }
+        },
+        browseId: 'FEmusic_home'
+      };
+
+      const browseRes = await fetchJson('https://music.youtube.com/youtubei/v1/browse', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'https://music.youtube.com',
+          'Referer': 'https://music.youtube.com/'
+        },
+        body: JSON.stringify(browsePayload),
+        timeout: 6000
+      });
+
+      const sections = [];
+      const traverse = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.musicCarouselShelfRenderer) {
+          const header = node.musicCarouselShelfRenderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || 'Consigliati';
+          const items = [];
+          const itemNodes = node.musicCarouselShelfRenderer.contents || [];
+          for (const it of itemNodes) {
+            if (it.musicResponsiveListItemRenderer) {
+              const item = it.musicResponsiveListItemRenderer;
+              const flex = item.flexColumns || [];
+              const title = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+              const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || 'Artist';
+              const artist = this.formatArtistName(rawArtist);
+              const videoId = item.playlistItemData?.videoId || flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId;
+              const rawThumb = item.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
+              const thumb = this.formatThumb(rawThumb);
+              if (title && videoId) {
+                items.push({
+                  id: videoId,
+                  videoId,
+                  title,
+                  artist: { id: `art_${encodeURIComponent(artist)}`, name: artist, picture: thumb },
+                  artists: [{ id: `art_${encodeURIComponent(artist)}`, name: artist }],
+                  album: { id: `alb_${videoId}`, title, cover: thumb },
+                  duration: 210,
+                  duration_ms: 210000,
+                  source: 'youtube-home'
+                });
+              }
+            } else if (it.musicTwoRowItemRenderer) {
+              const item = it.musicTwoRowItemRenderer;
+              const title = item.title?.runs?.[0]?.text;
+              const rawArtist = item.subtitle?.runs?.[0]?.text || 'Artist';
+              const artist = this.formatArtistName(rawArtist);
+              const videoId = item.navigationEndpoint?.watchEndpoint?.videoId;
+              const browseId = item.navigationEndpoint?.browseEndpoint?.browseId;
+              const rawThumb = item.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
+              const thumb = this.formatThumb(rawThumb);
+              const finalId = videoId || browseId;
+              if (title && finalId) {
+                items.push({
+                  id: finalId,
+                  videoId: videoId || finalId,
+                  browseId,
+                  title,
+                  artist: { id: `art_${encodeURIComponent(artist)}`, name: artist, picture: thumb },
+                  artists: [{ id: `art_${encodeURIComponent(artist)}`, name: artist }],
+                  album: { id: `alb_${finalId}`, title, cover: thumb },
+                  duration: 210,
+                  duration_ms: 210000,
+                  source: 'youtube-home'
+                });
+              }
+            }
+          }
+          if (items.length > 0) {
+            sections.push({ header, items });
+          }
+        }
+        for (const k of Object.keys(node)) traverse(node[k]);
+      };
+
+      traverse(browseRes);
+
+      const result = { sections };
+      cacheService.set(cacheKey, result, 1800);
+      return result;
+    } catch (e) {
+      console.warn('[YouTubeMusicService] Fetch home feed failed:', e.message);
+      return { sections: [] };
+    }
   }
 }
 

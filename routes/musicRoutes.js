@@ -8,8 +8,14 @@ router.get('/info', (req, res, next) => musicController.info(req, res, next));
 // /api/track
 router.get('/track', (req, res, next) => musicController.track(req, res, next));
 
+// /api/stream
+router.get('/stream', (req, res, next) => musicController.stream(req, res, next));
+
 // /api/mix
 router.get('/mix', (req, res, next) => musicController.mix(req, res, next));
+
+// /api/home
+router.get('/home', (req, res, next) => musicController.home(req, res, next));
 
 // /api/artist and /api/artist/similar
 router.get('/artist/similar', (req, res, next) => musicController.artistSimilar(req, res, next));
