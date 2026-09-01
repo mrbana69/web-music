@@ -10,6 +10,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="google-site-verification" content="_kimSe9yJG7PDmHzahDbOyxZwAo0AoT6V6-VRi-YKZ0">
+    <script>
+        // If launched from Home Screen as standalone PWA app, go directly to /app
+        if (window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches) {
+            window.location.replace('/app');
+        }
+    </script>
+    <meta name="apple-mobile-web-app-title" content="Preluded">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mrbana69/web-music/refs/heads/main/icons/512x512.png">
+    <link rel="manifest" href="/manifest.json">
     <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/4430/4430494.png">
     
     <!-- Open Graph -->
