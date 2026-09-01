@@ -1141,7 +1141,11 @@ h1 { font-size: 34px; font-weight: 800; }
             <p style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:12px;">
                 Come su <strong>SimpMusic</strong> e <strong>ViMusic</strong>, collegando la sessione del tuo account YouTube Music potrai avere le <strong>Scelte Rapide, i Mix e "Di nuovo all'ascolto" identici al 100%</strong> alla tua pagina reale di YouTube Music!
             </p>
-            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; margin-bottom:14px; font-size:12px; color:var(--text-secondary); line-height:1.6;">
+            <div id="electron1ClickLoginBox" style="display:none; margin-bottom:14px; background:linear-gradient(135deg, rgba(250,45,72,0.15), rgba(255,107,0,0.15)); border:1px solid rgba(250,45,72,0.4); border-radius:12px; padding:12px; text-align:center;">
+                <p style="margin:0 0 10px 0; font-size:13px; font-weight:600; color:#fff;">✨ Accesso Automatico 1-Click Desktop (SimpMusic)</p>
+                <button class="btn-primary" onclick="if(window.desktopAPI) window.desktopAPI.openSimpMusicLogin()" style="width:100%; padding:10px; border-radius:20px; font-weight:bold; cursor:pointer; background:var(--accent-gradient);">🔑 Accedi con Google Automaticamente</button>
+            </div>
+            <div id="manualCookieGuide" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; margin-bottom:14px; font-size:12px; color:var(--text-secondary); line-height:1.6;">
                 <strong style="color:var(--text-primary);">Come ottenere il cookie in 3 passi:</strong><br>
                 1. Apri <a href="https://music.youtube.com" target="_blank" style="color:var(--accent);">music.youtube.com</a> nel browser (con il tuo account connesso).<br>
                 2. Premi <code>F12</code> &rarr; <em>Applicazione</em> / <em>Archiviazione</em> &rarr; <em>Cookie</em> &rarr; <code>https://music.youtube.com</code>.<br>
@@ -4067,10 +4071,29 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         // --- Authentication & YouTube Music Session (SimpMusic Style) ---
+        if (window.desktopAPI && window.desktopAPI.isElectron) {
+            window.desktopAPI.onSimpMusicAuthSuccess((data) => {
+                if (data && data.cookieString) {
+                    localStorage.setItem('ytm_cookie', data.cookieString);
+                    updateAccountUI();
+                    showToast('Accesso a YouTube Music completato con successo!', 4000);
+                    closeYtmCookieModal();
+                    loadRecommendations();
+                }
+            });
+            window.desktopAPI.onSimpMusicAuthError((err) => {
+                showToast('Accesso annullato o non riuscito', 3000, 'error');
+            });
+        }
+
         function openYtmCookieModal() {
             const modal = document.getElementById('ytmCookieModal');
             const input = document.getElementById('ytmCookieInput');
             const btnRemove = document.getElementById('btnRemoveYtmCookie');
+            const box = document.getElementById('electron1ClickLoginBox');
+            if (box && window.desktopAPI && window.desktopAPI.isElectron) {
+                box.style.display = 'block';
+            }
             const current = localStorage.getItem('ytm_cookie') || '';
             if (input) input.value = current;
             if (btnRemove) btnRemove.style.display = current ? 'block' : 'none';

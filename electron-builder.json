@@ -1,0 +1,25 @@
+{
+  "appId": "com.preluded.music",
+  "productName": "Preluded Music Dev",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "**/*",
+    "!dist/**/*",
+    "!.github/**/*",
+    "!native-docs/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "icons/512x512.png"
+  },
+  "portable": {
+    "artifactName": "Preluded-Dev-Windows.exe"
+  }
+}
