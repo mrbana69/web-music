@@ -1847,13 +1847,20 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function getActiveAudioPlayer() {
-            if (ytAudioPlayer && ytAudioPlayer.isInit && ytAudioPlayer.audioElement && !nativeAudio.src) {
+            if (ytAudioPlayer && ytAudioPlayer.isInit && !ytAudioPlayer.paused) {
+                return ytAudioPlayer.audioElement;
+            }
+            if (nativeAudio && !nativeAudio.paused) {
+                return nativeAudio;
+            }
+            if (ytAudioPlayer && ytAudioPlayer.isInit) {
                 return ytAudioPlayer.audioElement;
             }
             return nativeAudio;
         }
 
         // Native Audio Event Listeners (Single persistent player for iOS background continuity)
+        nativeAudio.addEventListener('timeupdate', updateProgress);
         nativeAudio.addEventListener('play', () => {
             state.isPlaying = true;
             updatePlayIcons();
@@ -2378,11 +2385,22 @@ h1 { font-size: 34px; font-weight: 800; }
         // --- 5. Timeline & Volume Events ---
         
         function updateProgress() {
-            const player = getActiveAudioPlayer();
-            if (!player) return;
+            let cur = 0;
+            let dur = 0;
 
-            let cur = player.currentTime || 0;
-            let dur = player.duration || 0;
+            if (ytAudioPlayer && ytAudioPlayer.isInit && !ytAudioPlayer.paused) {
+                cur = ytAudioPlayer.getCurrentTime() || 0;
+                dur = ytAudioPlayer.getDuration() || 0;
+            } else if (nativeAudio && (!nativeAudio.paused || nativeAudio.currentTime > 0)) {
+                cur = nativeAudio.currentTime || 0;
+                dur = nativeAudio.duration || 0;
+            } else {
+                const player = getActiveAudioPlayer();
+                if (player) {
+                    cur = player.currentTime || 0;
+                    dur = player.duration || 0;
+                }
+            }
 
             const currentTrack = state.queue[state.currentIndex];
             if ((!dur || isNaN(dur) || dur <= 0) && currentTrack) {
@@ -2446,11 +2464,11 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function seekToSeconds(seconds) {
-            const player = getActiveAudioPlayer();
-            if (!player) return;
-            player.currentTime = seconds;
-            if (ytAudioPlayer && ytAudioPlayer.isInit && ytAudioPlayer.seekTo) {
-                ytAudioPlayer.seekTo(seconds);
+            if (nativeAudio && nativeAudio.src) {
+                try { nativeAudio.currentTime = seconds; } catch(e) {}
+            }
+            if (ytAudioPlayer && ytAudioPlayer.isInit) {
+                try { ytAudioPlayer.seekTo(seconds); } catch(e) {}
             }
             updateProgress();
         }
