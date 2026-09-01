@@ -1634,8 +1634,8 @@ h1 { font-size: 34px; font-weight: 800; }
                 if (!container) return;
                 try {
                     this.player = new YT.Player('ytAudioBridge', {
-                        height: '1',
-                        width: '1',
+                        height: '64',
+                        width: '64',
                         playerVars: {
                             'autoplay': 1,
                             'controls': 0,
@@ -1643,7 +1643,7 @@ h1 { font-size: 34px; font-weight: 800; }
                             'disablekb': 1,
                             'fs': 0,
                             'rel': 0,
-                            'origin': window.location.origin
+                            'enablejsapi': 1
                         },
                         events: {
                             'onReady': () => {
@@ -1780,22 +1780,14 @@ h1 { font-size: 34px; font-weight: 800; }
         nativeAudio.setAttribute('playsinline', '');
         nativeAudio.setAttribute('webkit-playsinline', '');
 
-        // Unlock audio context on user gesture (essential for iOS Safari PWA)
+        // Unlock audio context on user gesture (essential for mobile & iOS Safari PWA)
         let audioUnlocked = false;
         function unlockAudioContext() {
             if (audioUnlocked) return;
             audioUnlocked = true;
             try {
-                const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                if (AudioCtx) {
-                    const ctx = new AudioCtx();
-                    ctx.resume().catch(() => {});
-                }
-                if (nativeAudio.paused && !nativeAudio.src) {
-                    nativeAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-                    nativeAudio.play().then(() => {
-                        nativeAudio.pause();
-                    }).catch(() => {});
+                if (backgroundAudioManager && backgroundAudioManager.start) {
+                    backgroundAudioManager.start();
                 }
             } catch (e) {}
         }
@@ -1920,26 +1912,19 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         });
 
-        // Error handler: fallback to YouTube Audio Bridge if available or graceful notify
+        // Error handler: graceful fallback to YouTube Audio Bridge
         nativeAudio.addEventListener('error', (e) => {
             console.warn('Native audio stream error:', e);
             const currentTrack = state.queue[state.currentIndex];
-            if (currentTrack && (!nativeAudio.src || nativeAudio.networkState === 3 || nativeAudio.error)) {
+            if (currentTrack) {
                 const videoId = currentTrack.videoId || currentTrack.id;
-                if (videoId && (!state.currentStreamUrl || !state.currentStreamUrl.includes('youtube.com/watch'))) {
-                    ytAudioPlayer.loadVideo(videoId);
-                    showToast("Riproduzione via YouTube fallback (background non supportato su iOS in modalità video)", 4000);
-                } else {
-                    showToast("Questo brano non può essere riprodotto tramite Preluded.", 3500, 'error');
-                    setTimeout(() => { nextTrack(); }, 1200);
+                if (videoId && ytAudioPlayer) {
+                    try {
+                        nativeAudio.pause();
+                        nativeAudio.removeAttribute('src');
+                        ytAudioPlayer.loadVideo(videoId);
+                    } catch (err) {}
                 }
-            }
-        });
-
-        // Re-check wake lock when returning from background
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && state.isPlaying) {
-                if (!wakeLock) requestWakeLock();
             }
         });
 
@@ -2090,16 +2075,11 @@ h1 { font-size: 34px; font-weight: 800; }
             addToHistory(track);
             state.mixLoaded = false;
             
-            // iOS & Mobile Audio Unlock: trigger audio activation immediately inside user tap gesture
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-            const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            
-            if (isIOS || isMobile) {
-                try {
-                    backgroundAudioManager.init();
-                    backgroundAudioManager.start();
-                } catch(e) {}
-            }
+            // iOS & Mobile Audio Gesture Unlock
+            try {
+                backgroundAudioManager.init();
+                backgroundAudioManager.start();
+            } catch(e) {}
             
             if (!fromQueue) {
                 state.queue = [track];
@@ -2121,13 +2101,13 @@ h1 { font-size: 34px; font-weight: 800; }
                 state.currentStreamUrl = streamData.streamUrl;
 
                 const isWatchUrl = streamData.streamUrl && streamData.streamUrl.includes('youtube.com/watch');
-                const directPlayUrl = (!isWatchUrl && streamData.streamUrl) ? streamData.streamUrl : `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
+                const isDirectCdn = streamData.isDirectAudio && !isWatchUrl && streamData.streamUrl && (streamData.streamUrl.startsWith('http://') || streamData.streamUrl.startsWith('https://'));
 
-                // 1. Try Native HTML5 Audio
-                if (!isWatchUrl || isMobile || isIOS) {
+                // 1. Try Native HTML5 Audio for direct Google CDN audio stream
+                if (isDirectCdn) {
                     try {
                         nativeAudio.pause();
-                        nativeAudio.src = directPlayUrl;
+                        nativeAudio.src = streamData.streamUrl;
                         nativeAudio.load();
                         const playPromise = nativeAudio.play();
                         if (playPromise !== undefined) {
@@ -2135,30 +2115,22 @@ h1 { font-size: 34px; font-weight: 800; }
                         }
                         started = !nativeAudio.paused;
                     } catch (playError) {
-                        console.warn('Native audio play error, trying backend stream fallback:', playError);
-                        try {
-                            const proxyUrl = `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
-                            if (nativeAudio.src !== proxyUrl) {
-                                nativeAudio.src = proxyUrl;
-                                nativeAudio.load();
-                                await nativeAudio.play();
-                                started = !nativeAudio.paused;
-                            }
-                        } catch(proxyErr) {
-                            console.warn('Proxy stream failed:', proxyErr);
-                        }
+                        console.warn('Native CDN play failed, switching to YouTube bridge player:', playError);
                     }
                 }
 
-                // 2. Fallback to YouTube Audio Bridge if native audio did not start
-                if (!started && streamData.videoId) {
-                    try {
-                        nativeAudio.pause();
-                        nativeAudio.removeAttribute('src');
-                        ytAudioPlayer.loadVideo(streamData.videoId);
-                        started = true;
-                    } catch(ytErr) {
-                        console.warn('YouTube audio bridge fallback failed:', ytErr);
+                // 2. YouTube Audio Bridge for all other tracks or fallback
+                if (!started) {
+                    const videoId = streamData.videoId || currentTrack.videoId || currentTrack.id;
+                    if (videoId && ytAudioPlayer) {
+                        try {
+                            nativeAudio.pause();
+                            nativeAudio.removeAttribute('src');
+                            ytAudioPlayer.loadVideo(videoId);
+                            started = true;
+                        } catch(ytErr) {
+                            console.warn('YouTube bridge fallback failed:', ytErr);
+                        }
                     }
                 }
 
@@ -2168,7 +2140,7 @@ h1 { font-size: 34px; font-weight: 800; }
                     prefetchNextTrack();
                     backgroundAudioManager.start();
                 } else {
-                    showToast('Impossibile avviare il brano.', 3000, 'error');
+                    showToast('Impossibile avviare la riproduzione.', 3000, 'error');
                 }
                 updatePlayIcons();
 
@@ -2182,7 +2154,18 @@ h1 { font-size: 34px; font-weight: 800; }
                 }
 
             } catch (e) {
-                console.error("Playback failed with error:", e);
+                console.error("Playback error:", e);
+                const fallbackVideoId = currentTrack.videoId || currentTrack.id;
+                if (fallbackVideoId && ytAudioPlayer) {
+                    try {
+                        nativeAudio.pause();
+                        nativeAudio.removeAttribute('src');
+                        ytAudioPlayer.loadVideo(fallbackVideoId);
+                        state.isPlaying = true;
+                        updatePlayIcons();
+                        return true;
+                    } catch(fe) {}
+                }
                 showToast("Questo brano non può essere riprodotto tramite Preluded.", 3500, 'error');
                 state.isPlaying = false;
                 updatePlayIcons();
@@ -2201,7 +2184,6 @@ h1 { font-size: 34px; font-weight: 800; }
                 backgroundAudioManager.start();
                 if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
             } else if (!state.isPlaying && wasPlaying) {
-                releaseWakeLock();
                 backgroundAudioManager.stop();
                 if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
             }
@@ -2218,15 +2200,14 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function updateMediaSession(track) {
-            if ('mediaSession' in navigator && track) {
-                const artUrl = formatArtworkUrl(track.album?.cover, '640x640') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
-                const artistName = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
-                const albumTitle = track.album?.title || track.title || 'Unknown Album';
-
+            if (!track || !('mediaSession' in navigator)) return;
+            const artUrl = getTrackArt(track, 'large');
+            const artistName = track.artist?.name || (typeof track.artist === 'string' ? track.artist : 'Unknown Artist');
+            try {
                 navigator.mediaSession.metadata = new MediaMetadata({
-                    title: track.title || 'Unknown Track',
+                    title: track.title || 'Unknown Title',
                     artist: artistName,
-                    album: albumTitle,
+                    album: track.album?.title || 'Preluded Music',
                     artwork: [
                         { src: artUrl, sizes: '96x96', type: 'image/jpeg' },
                         { src: artUrl, sizes: '128x128', type: 'image/jpeg' },
@@ -2239,31 +2220,29 @@ h1 { font-size: 34px; font-weight: 800; }
 
                 navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
 
-                try {
-                    navigator.mediaSession.setActionHandler('play', () => togglePlay());
-                    navigator.mediaSession.setActionHandler('pause', () => togglePlay());
-                    navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
-                    navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
-                    navigator.mediaSession.setActionHandler('seekto', (details) => {
-                        if (details.seekTime !== undefined) {
-                            seekToSeconds(details.seekTime);
-                        }
-                    });
-                    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                        const offset = details.seekOffset || 10;
-                        const player = getActiveAudioPlayer();
-                        if (player) seekToSeconds(Math.max(0, (player.currentTime || 0) - offset));
-                    });
-                    navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                        const offset = details.seekOffset || 10;
-                        const player = getActiveAudioPlayer();
-                        if (player) seekToSeconds(Math.min(player.duration || 300, (player.currentTime || 0) + offset));
-                    });
-                    navigator.mediaSession.setActionHandler('stop', () => {
-                        if (state.isPlaying) togglePlay();
-                    });
-                } catch (e) {}
-            }
+                navigator.mediaSession.setActionHandler('play', () => togglePlay());
+                navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+                navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
+                navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
+                navigator.mediaSession.setActionHandler('seekto', (details) => {
+                    if (details.seekTime !== undefined) {
+                        seekToSeconds(details.seekTime);
+                    }
+                });
+                navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                    const offset = details.seekOffset || 10;
+                    const player = getActiveAudioPlayer();
+                    if (player) seekToSeconds(Math.max(0, (player.currentTime || 0) - offset));
+                });
+                navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                    const offset = details.seekOffset || 10;
+                    const player = getActiveAudioPlayer();
+                    if (player) seekToSeconds(Math.min(player.duration || 300, (player.currentTime || 0) + offset));
+                });
+                navigator.mediaSession.setActionHandler('stop', () => {
+                    if (state.isPlaying) togglePlay();
+                });
+            } catch (e) {}
         }
 
         let isAdvancingTrack = false;
