@@ -11,15 +11,8 @@
     "!native-docs/**/*"
   ],
   "win": {
-    "target": [
-      {
-        "target": "portable",
-        "arch": ["x64"]
-      }
-    ],
-    "icon": "icons/512x512.png"
-  },
-  "portable": {
-    "artifactName": "Preluded-Dev-Windows.exe"
+    "target": "dir",
+    "icon": "icons/512x512.png",
+    "signAndEditExecutable": false
   }
 }

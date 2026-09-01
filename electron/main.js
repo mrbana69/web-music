@@ -14,35 +14,43 @@ let localPort = process.env.PORT || 3000;
 let isDev = process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
 const logBuffer = [];
+let isEmitting = false;
 
 function emitLog(message, type = 'info') {
-  const timestamp = new Date().toLocaleTimeString();
-  const entry = { timestamp, message: String(message), type };
-  logBuffer.push(entry);
-  if (logBuffer.length > 200) logBuffer.shift();
-  
-  console.log(`[${timestamp}] [${type.toUpperCase()}] ${message}`);
-  
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('live-log-message', entry);
-  }
-  if (logWindow && !logWindow.isDestroyed()) {
-    logWindow.webContents.send('live-log-message', entry);
+  if (isEmitting) return;
+  isEmitting = true;
+  try {
+    const timestamp = new Date().toLocaleTimeString();
+    const entry = { timestamp, message: String(message), type };
+    logBuffer.push(entry);
+    if (logBuffer.length > 200) logBuffer.shift();
+    
+    originalStdout(`[${timestamp}] [${type.toUpperCase()}] ${message}\n`);
+    
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('live-log-message', entry);
+    }
+    if (logWindow && !logWindow.isDestroyed()) {
+      logWindow.webContents.send('live-log-message', entry);
+    }
+  } catch (e) {
+  } finally {
+    isEmitting = false;
   }
 }
 
-// Hook stdout and stderr for live logging
+// Hook stdout and stderr for live logging with recursion safety
 const originalStdout = process.stdout.write.bind(process.stdout);
 process.stdout.write = (chunk, encoding, callback) => {
-  const text = chunk.toString().trim();
-  if (text) emitLog(text, 'stdout');
+  const text = chunk ? chunk.toString().trim() : '';
+  if (text && !isEmitting) emitLog(text, 'stdout');
   return originalStdout(chunk, encoding, callback);
 };
 
 const originalStderr = process.stderr.write.bind(process.stderr);
 process.stderr.write = (chunk, encoding, callback) => {
-  const text = chunk.toString().trim();
-  if (text) emitLog(text, 'stderr');
+  const text = chunk ? chunk.toString().trim() : '';
+  if (text && !isEmitting) emitLog(text, 'stderr');
   return originalStderr(chunk, encoding, callback);
 };
 
@@ -222,8 +230,7 @@ function createMainWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  createMainWindow();
+let serverInstance = null;
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
@@ -231,9 +238,10 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (serverInstance) {
 });
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
+
