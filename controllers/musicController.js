@@ -113,10 +113,11 @@ class MusicController {
   async quickPicks(req, res, next) {
     try {
       const authHeader = req.headers.authorization || '';
-      const token = authHeader.replace(/^Bearer\s+/i, '') || req.query.token || req.query.access_token || null;
+      const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
+      const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
       const limit = parseInt(req.query.limit, 10) || 20;
 
-      const quickPicksData = await youtubeMusicService.getQuickPicks(token, limit);
+      const quickPicksData = await youtubeMusicService.getQuickPicks(userCookie, limit);
       return res.status(200).json({
         ok: true,
         data: quickPicksData,
@@ -194,7 +195,10 @@ class MusicController {
    */
   async home(req, res, next) {
     try {
-      const homeFeed = await youtubeMusicService.getHome();
+      const authHeader = req.headers.authorization || '';
+      const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
+      const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : null);
+      const homeFeed = await youtubeMusicService.getHome(userCookie);
       return res.status(200).json(homeFeed);
     } catch (err) {
       next(err);

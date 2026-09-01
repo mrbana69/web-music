@@ -1,7 +1,7 @@
 {
   "name": "Preuded Music from Interlude",
   "short_name": "Preluded",
-  "start_url": "./index.html",
+  "start_url": "./app/",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#1c1c1e",

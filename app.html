@@ -1117,16 +1117,82 @@ h1 { font-size: 34px; font-weight: 800; }
             </div>
             <div id="playlistPickerList" class="modal-scroll-body"></div>
             <div style="margin-top:10px; display:flex; gap:10px; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.08); padding-top:12px;">
+                <button class="btn-text" onclick="createPlaylistAndAdd()" style="display:flex; align-items:center; gap:6px; font-weight:600; color:var(--accent); font-size:13px;">
+                    <svg class="icon" viewBox="0 0 24 24" style="width:18px; height:18px;"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    Nuova playlist
+                </button>
+                <button class="btn-text" onclick="closeAddToPlaylistModal()" style="color:var(--text-secondary); font-size:13px;">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal YouTube Music Session (SimpMusic Style) -->
+    <div id="ytmCookieModal" class="modal-overlay hidden" onclick="if(event.target===this) closeYtmCookieModal()">
+        <div class="modal-card" style="max-width:480px;" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:22px;">🔴</span>
+                    <h2 style="margin:0; font-size:18px;">Sessione YouTube Music</h2>
+                </div>
+                <button class="control-btn small" onclick="closeYtmCookieModal()" title="Chiudi" style="width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.08); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center;">✕</button>
+            </div>
+            <p style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:12px;">
+                Come su <strong>SimpMusic</strong> e <strong>ViMusic</strong>, collegando la sessione del tuo account YouTube Music potrai avere le <strong>Scelte Rapide, i Mix e "Di nuovo all'ascolto" identici al 100%</strong> alla tua pagina reale di YouTube Music!
+            </p>
+            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; margin-bottom:14px; font-size:12px; color:var(--text-secondary); line-height:1.6;">
+                <strong style="color:var(--text-primary);">Come ottenere il cookie in 3 passi:</strong><br>
+                1. Apri <a href="https://music.youtube.com" target="_blank" style="color:var(--accent);">music.youtube.com</a> nel browser (con il tuo account connesso).<br>
+                2. Premi <code>F12</code> &rarr; <em>Applicazione</em> / <em>Archiviazione</em> &rarr; <em>Cookie</em> &rarr; <code>https://music.youtube.com</code>.<br>
+                3. Copia il valore del cookie <code>SAPISID</code> (o l'intera stringa Cookie) e incollalo qui sotto.
+            </div>
+            <div style="margin-bottom:12px;">
+                <textarea id="ytmCookieInput" rows="3" placeholder="Incolla qui il tuo SAPISID o la stringa Cookie..." style="width:100%; border-radius:10px; border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.05); color:#fff; padding:10px; font-size:12px; font-family:monospace; resize:vertical; outline:none; box-sizing:border-box;"></textarea>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:space-between; align-items:center;">
+                <button class="btn-text" id="btnRemoveYtmCookie" onclick="removeYtmCookie()" style="color:#ef4444; font-size:13px; display:none;">Rimuovi Sessione</button>
+                <div style="display:flex; gap:10px; margin-left:auto;">
+                    <button class="btn-text" onclick="closeYtmCookieModal()" style="color:var(--text-secondary); font-size:13px;">Annulla</button>
+                    <button class="btn-primary" onclick="saveYtmCookie()" style="padding:8px 18px; font-size:13px; font-weight:600; border-radius:20px;">Salva & Sincronizza</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Libreria -->
+    <div id="tab-library" class="main-container hidden">
         <header>
-                    <div style="width:15px"></div>
-                    <button class="btn-text" onclick="createPlaylist()">New</button>
+            <h1>Libreria</h1>
+        </header>
+        <div class="container">
+            <div class="list-item" onclick="openLikedSongs()">
+                <div class="list-artwork"><div style="background:linear-gradient(135deg, #fa2d48, #ff9f0a); width:100%; height:100%; display:flex; align-items:center; justify-content:center; border-radius:8px;"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div></div>
+                <div class="list-info">
+                    <div class="card-title">Brani con Mi Piace</div>
+                    <div class="card-subtitle" id="likedSongsSubtitle">I tuoi preferiti</div>
+                </div>
+            </div>
+
+            <div class="section-title">
+                <span>Playlists</span>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-text" onclick="document.getElementById('csvInput').click()">Importa CSV</button>
+                    <button class="btn-text" onclick="createPlaylist()">+ Nuova</button>
                 </div>
             </div>
             <input type="file" id="csvInput" hidden accept=".csv" onchange="handleCSVImport(this)">
             <div id="playlistsList"></div>
 
             <div class="section-title" style="margin-top: 30px;">
-                <span>Account</span>
+                <span>Account & Sessioni</span>
+            </div>
+            <div id="ytmSessionItem" class="list-item" onclick="openYtmCookieModal()" style="border:1px solid rgba(255,0,0,0.25); background:rgba(255,0,0,0.04); border-radius:14px; margin-bottom:8px;">
+                <div class="list-artwork" style="display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #ff0000, #b30000); border-radius:8px;">
+                    <svg class="icon" viewBox="0 0 24 24" style="color:#fff;"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>
+                </div>
+                <div class="list-info">
+                    <div class="card-title" id="ytmSessionTitle">Sessione YouTube Music (SimpMusic Style)</div>
+                    <div class="card-subtitle" id="ytmSessionSubtitle">Collega per Scelte Rapide reali al 100%</div>
+                </div>
             </div>
             <div id="accountStatusItem" class="list-item" onclick="handleAccountAction()">
                 <div class="list-artwork" style="display:flex; align-items:center; justify-content:center;">
@@ -3021,6 +3087,7 @@ h1 { font-size: 34px; font-weight: 800; }
         async function loadRecommendations() {
             const googleToken = localStorage.getItem('google_token');
             const googleUser = localStorage.getItem('google_user');
+            const ytmCookie = localStorage.getItem('ytm_cookie');
             const quickPicksContainer = document.getElementById('quickPicksGrid');
             const quickPicksLabel = document.getElementById('quickPicksLabel');
             const grid = document.getElementById('recommendations');
@@ -3037,18 +3104,27 @@ h1 { font-size: 34px; font-weight: 800; }
                 grid.innerHTML = renderSkeletonGrid(8);
             }
 
-            // 1. Fetch YouTube Music Quick Picks (using connected Google account token if available)
+            // 1. Fetch YouTube Music Quick Picks (using connected YouTube Music Session Cookie or Google Token)
             try {
-                const headers = googleToken ? { 'Authorization': `Bearer ${googleToken}` } : {};
-                const qpRes = await apiFetch(`/quick-picks?limit=20`, { headers });
+                const headers = {};
+                if (ytmCookie) {
+                    headers['X-YTM-Cookie'] = ytmCookie;
+                } else if (googleToken) {
+                    headers['Authorization'] = `Bearer ${googleToken}`;
+                }
+
+                const queryParam = ytmCookie ? `&ytm_cookie=${encodeURIComponent(ytmCookie)}` : (googleToken ? `&token=${encodeURIComponent(googleToken)}` : '');
+                const qpRes = await apiFetch(`/quick-picks?limit=20${queryParam}`, { headers });
                 const qpData = await qpRes.json();
                 const items = qpData.items || qpData.data?.items || [];
                 quickPicksList = items;
 
                 if (quickPicksContainer) {
                     if (items.length > 0) {
-                        if (qpData.personalized || googleUser) {
-                            if (quickPicksLabel) quickPicksLabel.textContent = `DAL TUO ACCOUNT YOUTUBE MUSIC (${googleUser || 'Connesso'})`;
+                        if (ytmCookie || qpData.personalized) {
+                            if (quickPicksLabel) quickPicksLabel.innerHTML = `<span style="color:#22c55e;">●</span> DAL TUO YOUTUBE MUSIC REALE (Sessione Attiva)`;
+                        } else if (googleUser) {
+                            if (quickPicksLabel) quickPicksLabel.textContent = `DAL TUO ACCOUNT GOOGLE (${googleUser})`;
                         } else {
                             if (quickPicksLabel) quickPicksLabel.textContent = "INIZIA LA RADIO DA UN BRANO";
                         }
@@ -3961,12 +4037,64 @@ h1 { font-size: 34px; font-weight: 800; }
             document.getElementById('tab-library').classList.remove('hidden');
         }
 
-        // --- Authentication & Account State ---
+        // --- Authentication & YouTube Music Session (SimpMusic Style) ---
+        function openYtmCookieModal() {
+            const modal = document.getElementById('ytmCookieModal');
+            const input = document.getElementById('ytmCookieInput');
+            const btnRemove = document.getElementById('btnRemoveYtmCookie');
+            const current = localStorage.getItem('ytm_cookie') || '';
+            if (input) input.value = current;
+            if (btnRemove) btnRemove.style.display = current ? 'block' : 'none';
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeYtmCookieModal() {
+            const modal = document.getElementById('ytmCookieModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function saveYtmCookie() {
+            const input = document.getElementById('ytmCookieInput');
+            const val = (input?.value || '').trim();
+            if (!val) {
+                showToast('Inserisci il cookie o il token SAPISID');
+                return;
+            }
+            localStorage.setItem('ytm_cookie', val);
+            closeYtmCookieModal();
+            updateAccountUI();
+            showToast('Sessione YouTube Music salvata con successo!');
+            loadRecommendations();
+        }
+
+        function removeYtmCookie() {
+            if (confirm('Vuoi rimuovere la sessione YouTube Music?')) {
+                localStorage.removeItem('ytm_cookie');
+                closeYtmCookieModal();
+                updateAccountUI();
+                showToast('Sessione YouTube Music rimossa');
+                loadRecommendations();
+            }
+        }
+
         function updateAccountUI() {
             const userName = localStorage.getItem('google_user');
+            const ytmCookie = localStorage.getItem('ytm_cookie');
             const titleEl = document.getElementById('accountTitle');
             const subEl = document.getElementById('accountSubtitle');
+            const ytmTitle = document.getElementById('ytmSessionTitle');
+            const ytmSub = document.getElementById('ytmSessionSubtitle');
             const homeBadge = document.getElementById('homeAccountBadge');
+
+            if (ytmTitle && ytmSub) {
+                if (ytmCookie) {
+                    ytmTitle.innerHTML = '<span style="color:#22c55e;">●</span> YouTube Music Connesso';
+                    ytmSub.textContent = 'Sessione attiva · Scelte Rapide & Home reali';
+                } else {
+                    ytmTitle.textContent = 'Sessione YouTube Music (SimpMusic Style)';
+                    ytmSub.textContent = 'Collega per Scelte Rapide reali al 100%';
+                }
+            }
 
             if (userName && titleEl && subEl) {
                 titleEl.textContent = userName;
@@ -3977,7 +4105,14 @@ h1 { font-size: 34px; font-weight: 800; }
             }
 
             if (homeBadge) {
-                if (userName) {
+                if (ytmCookie) {
+                    homeBadge.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:16px; background:rgba(255,0,0,0.15); border:1px solid rgba(255,0,0,0.3); font-size:12px; font-weight:600; color:#fff; cursor:pointer;" onclick="openYtmCookieModal()" title="Gestisci Sessione YouTube Music">
+                            <span style="width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.6);"></span>
+                            <span>YouTube Music</span>
+                        </div>
+                    `;
+                } else if (userName) {
                     homeBadge.innerHTML = `
                         <div style="display:flex; align-items:center; gap:6px; padding:5px 12px; border-radius:16px; background:rgba(255,255,255,0.08); font-size:12px; font-weight:600; color:var(--text-primary); cursor:pointer;" onclick="manualSyncGoogleLibrary()" title="Sincronizza con YouTube Music">
                             <span style="width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px rgba(34,197,94,0.6);"></span>
@@ -3986,8 +4121,8 @@ h1 { font-size: 34px; font-weight: 800; }
                     `;
                 } else {
                     homeBadge.innerHTML = `
-                        <button class="btn-text" onclick="loginWithGoogle()" style="font-size:12px; font-weight:600; padding:5px 12px; border-radius:16px; background:rgba(255,255,255,0.06); color:var(--text-secondary); display:flex; align-items:center; gap:6px;">
-                            Accedi con Google
+                        <button class="btn-text" onclick="openYtmCookieModal()" style="font-size:12px; font-weight:600; padding:5px 12px; border-radius:16px; background:rgba(255,255,255,0.06); color:var(--text-secondary); display:flex; align-items:center; gap:6px;">
+                            Collega YTM
                         </button>
                     `;
                 }
