@@ -802,47 +802,37 @@ h1 { font-size: 34px; font-weight: 800; }
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.78);
-    backdrop-filter: blur(14px);
-    display: flex;
+    backdrop-filter: blur(16px);
     justify-content: center;
     align-items: center;
     z-index: 1000;
-    padding: 20px;
-}
-.modal-overlay.hidden { display: none; }
+    padding: max(16px, env(safe-area-inset-top, 16px)) 16px max(16px, env(safe-area-inset-bottom, 16px));
+    overscroll-behavior: contain;
 .modal-card {
-    width: min(480px, 100%);
-    background: rgba(10,10,10,0.92);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 18px;
-    padding: 18px 18px 16px;
-    box-shadow: 0 24px 55px rgba(0,0,0,0.7);
+    width: min(460px, 100%);
+    max-height: calc(85vh);
+    max-height: calc(85dvh);
+    background: rgba(18,18,20,0.96);
     color: #fff;
-}
-.modal-card h2 { margin: 0 0 12px; font-size: 18px; }
-.modal-list-item {
-    padding: 12px 14px;
-    border-radius: 14px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
-    margin-bottom: 10px;
-    cursor: pointer;
     display: flex;
+    flex-direction: column;
+    overflow: hidden;
+.modal-scroll-body {
+    padding-right: 4px;
+    margin: 10px 0;
     justify-content: space-between;
     align-items: center;
-    transition: background 0.2s ease;
+    transition: background 0.2s ease, transform 0.15s ease;
 }
 .modal-list-item:hover { background: rgba(255,255,255,0.12); }
-.modal-list-item span { font-weight: 600; }
+.modal-list-item:active { transform: scale(0.98); }
 .modal-list-item small { font-size: 12px; color: rgba(255,255,255,0.7); }
 
 /* Skeleton Loading Animations */
 @keyframes shimmer {
     0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
 }
 
-.skeleton {
     background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.11) 50%, rgba(255,255,255,0.03) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite ease-in-out;
@@ -1110,31 +1100,24 @@ h1 { font-size: 34px; font-weight: 800; }
         </div>
     </div>
 
-    <div id="playlistPickerOverlay" class="modal-overlay hidden">
-        <div class="modal-card">
-            <h2 style="margin-top:0;">Aggiungi a playlist</h2>
-            <div id="playlistPickerList" style="margin-top:12px;"></div>
-            <div style="margin-top:16px; display:flex; gap:10px; justify-content:flex-end;">
-                <button class="btn-text" onclick="createPlaylistAndAdd()">Nuova playlist</button>
-                <button class="btn-text" onclick="closeAddToPlaylistModal()">Chiudi</button>
+    <div id="playlistPickerOverlay" class="modal-overlay hidden" onclick="if(event.target===this) closeAddToPlaylistModal()">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div>
+                    <h2 style="margin:0; font-size:18px;">Aggiungi a playlist</h2>
+                    <p id="playlistPickerSubtitle" style="margin:2px 0 0; font-size:12px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px;"></p>
+                </div>
+                <button class="control-btn small" onclick="closeAddToPlaylistModal()" title="Chiudi" style="width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.08); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+                    <svg class="icon" viewBox="0 0 24 24" style="width:18px; height:18px;"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
             </div>
-        </div>
-    </div>
-
-    <div id="tab-library" class="main-container hidden">
+            <div style="position:relative; margin-bottom:6px;">
+                <input type="text" id="playlistPickerSearch" placeholder="Cerca tra le tue playlist..." oninput="filterPlaylistPicker()" style="width:100%; padding:10px 14px 10px 36px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06); color:#fff; font-size:13px; outline:none;">
+                <svg class="icon" viewBox="0 0 24 24" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:18px; height:18px; color:var(--text-secondary); pointer-events:none;"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            </div>
+            <div id="playlistPickerList" class="modal-scroll-body"></div>
+            <div style="margin-top:10px; display:flex; gap:10px; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.08); padding-top:12px;">
         <header>
-            <h1>Library</h1>
-        </header>
-        <div class="container">
-            <div class="list-item" onclick="openLikedSongs()">
-                <div class="list-artwork"><div style="background:linear-gradient(135deg, #fa2d48, #ff9f0a); width:100%; height:100%; display:flex; align-items:center; justify-content:center;"><svg class="icon" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div></div>
-                <div class="list-info"><div class="card-title">Liked Songs</div><div class="card-subtitle">Auto-generated</div></div>
-            </div>
-
-            <div class="section-title">
-                <span>Playlists</span>
-                <div style="display:flex;">
-                    <button class="btn-text" onclick="document.getElementById('csvInput').click()">Import</button>
                     <div style="width:15px"></div>
                     <button class="btn-text" onclick="createPlaylist()">New</button>
                 </div>
@@ -4169,128 +4152,98 @@ h1 { font-size: 34px; font-weight: 800; }
             shareTrack(track.id, track.title || 'Unknown', track.artist?.name || 'Unknown');
         }
 
-        function openAddToPlaylistModal() {
-            const track = state.queue[state.currentIndex];
-            if (!track) {
-                alert('Nessuna traccia in riproduzione.');
+        let targetTrackForPlaylist = null;
+
+        function openAddToPlaylistModal(track = null) {
+            targetTrackForPlaylist = track || state.queue[state.currentIndex];
+            if (!targetTrackForPlaylist) {
+                showToast('Nessuna traccia in riproduzione.');
                 return;
             }
+            const sub = document.getElementById('playlistPickerSubtitle');
+            if (sub) {
+                const artistName = formatArtistName(targetTrackForPlaylist.artist?.name || targetTrackForPlaylist.artist || 'Artista');
+                sub.textContent = `${targetTrackForPlaylist.title} • ${artistName}`;
+            }
+            const searchInput = document.getElementById('playlistPickerSearch');
+            if (searchInput) searchInput.value = '';
+
             renderPlaylistPicker();
-            document.getElementById('playlistPickerOverlay').classList.remove('hidden');
+            const modal = document.getElementById('playlistPickerOverlay');
+            if (modal) modal.classList.remove('hidden');
         }
 
-        function closeAddToPlaylistModal() {
-            document.getElementById('playlistPickerOverlay').classList.add('hidden');
-        }
-
-        function renderPlaylistPicker() {
-            const container = document.getElementById('playlistPickerList');
-            const track = state.queue[state.currentIndex];
-            container.innerHTML = '';
+        function filterPlaylistPicker() {
+            const query = (document.getElementById('playlistPickerSearch')?.value || '').trim().toLowerCase();
 
             if (!state.playlists || state.playlists.length === 0) {
-                container.innerHTML = '<p style="color:var(--text-secondary); margin: 8px 0;">Nessuna playlist esistente. Creane una nuova.</p>';
-                return;
+                        <svg class="icon" viewBox="0 0 24 24" style="width:36px; height:36px; margin-bottom:8px; opacity:0.5;"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        <p style="font-size:13px;">Nessuna playlist creata.</p>
+                        <button class="btn-text" onclick="createPlaylistAndAdd()" style="color:var(--accent); font-weight:600; margin-top:8px;">+ Crea la tua prima playlist</button>
+                    </div>
+
+            let filtered = state.playlists.map((pl, idx) => ({ pl, idx }));
+            if (filterQuery) {
             }
 
-            state.playlists.forEach((pl, idx) => {
-                const already = pl.songs.some(t => t.id === track.id);
+                const already = track ? songs.some(t => t.id === track.id || (t.videoId && t.videoId === track.videoId)) : false;
+                const cover = formatArtworkUrl(pl.cover, '120x120') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
                 const item = document.createElement('div');
                 item.className = 'modal-list-item';
-                item.innerHTML = `
-                    <div>
-                        <span>${pl.name}</span><br>
-                        <small>${pl.songs.length} canzoni</small>
-                    </div>
-                    <button class="btn-text" style="padding:6px 10px; font-size:12px;" ${already ? 'disabled' : ''}>
-                        ${already ? 'Aggiunta' : 'Aggiungi'}
+                    <button class="btn-text" style="padding:6px 12px; font-size:12px; border-radius:100px; background:${already ? 'rgba(255,255,255,0.08)' : 'rgba(250,45,72,0.15)'}; color:${already ? 'var(--text-secondary)' : 'var(--accent)'}; font-weight:600; flex-shrink:0;" ${already ? 'disabled' : ''}>
+                        ${already ? '✓ Aggiunta' : '+ Aggiungi'}
                     </button>
                 `;
-                item.onclick = () => {
-                    if (already) {
-                        alert('Questa traccia è già presente in questa playlist.');
-                        return;
-                    }
-                    addCurrentTrackToPlaylist(idx);
-                };
-                container.appendChild(item);
-            });
-        }
-
-        function addCurrentTrackToPlaylist(playlistIndex) {
-            const track = state.queue[state.currentIndex];
-            if (!track) return;
-
+                item.onclick = (e) => {
             const pl = state.playlists[playlistIndex];
             if (!pl) return;
 
-            if (!pl.songs.some(t => t.id === track.id)) {
+            if (!pl.songs.some(t => t.id === track.id || (t.videoId && t.videoId === track.videoId))) {
                 pl.songs.push(track);
-                localStorage.setItem('playlists', JSON.stringify(state.playlists));
-                renderPlaylistPicker();
-                alert(`Traccia aggiunta a \"${pl.name}\"`);
+                pl.itemCount = pl.songs.length;
+                renderPlaylists();
+                renderPlaylistPicker(document.getElementById('playlistPickerSearch')?.value || '');
+                showToast(`Aggiunta a \"${pl.name || pl.title}\"!`);
+                }, 400);
             } else {
-                alert('La traccia è già presente in questa playlist.');
-            }
+                showToast('Questo brano è già presente nella playlist.');
         }
 
-        function createPlaylistAndAdd() {
             const name = prompt('Nome della nuova playlist:');
-            if (!name) return;
+            if (!name || !name.trim()) return;
 
-            const track = state.queue[state.currentIndex];
-            const newPl = { name, songs: track ? [track] : [] };
-            state.playlists.push(newPl);
+            const newPl = {
+                id: `pl_local_${Date.now()}`,
+                name: name.trim(),
+                title: name.trim(),
+                cover: track?.album?.cover || '',
+                itemCount: track ? 1 : 0,
+                songs: track ? [track] : []
             localStorage.setItem('playlists', JSON.stringify(state.playlists));
+            renderPlaylists();
             renderPlaylistPicker();
-            alert(`Playlist \"${name}\" creata e traccia aggiunta.`);
-        }
+            showToast(`Playlist \"${newPl.name}\" creata con successo!`);
 
         function openArtistPageFromCurrent() {
-            const track = state.queue[state.currentIndex];
             if (!track || !track.artist) return;
-            closeFullPlayer();
-            openArtistPage(track.artist);
-        }
-
         function showGlobalSpinner(message = '') {
             const overlay = document.getElementById('globalSpinner');
             if (!overlay) return;
-            overlay.querySelector('.spinner-text').textContent = message;
-            overlay.classList.remove('hidden');
-        }
-
-        function hideGlobalSpinner() {
-            const overlay = document.getElementById('globalSpinner');
             if (!overlay) return;
             overlay.classList.add('hidden');
-        }
 
         function openAlbumPageFromCurrent() {
             const track = state.queue[state.currentIndex];
             if (!track) return;
             const albumPayload = {
                 id: track.album?.browseId || track.album?.id || '',
-                browseId: track.album?.browseId || '',
                 title: track.album?.title || track.album?.name || track.title,
                 name: track.album?.title || track.album?.name || track.title,
                 artist: track.artist || { name: 'Unknown' },
                 cover: track.album?.cover || track.cover || ''
-            };
-            closeFullPlayer();
-            openAlbumPage(albumPayload);
-        }
-
-        // --- Artist Page ---
-        async function openArtistPage(artistOrId) {
-            let artistName = '';
-            let artistPicture = '';
-
             if (typeof artistOrId === 'string') {
-                artistName = artistOrId;
             } else if (typeof artistOrId === 'object' && artistOrId !== null) {
                 artistName = artistOrId.name || artistOrId.artist?.name || (typeof artistOrId.artist === 'string' ? artistOrId.artist : '');
-                artistPicture = artistOrId.picture || artistOrId.artist?.picture || '';
             }
 
             artistName = String(artistName || '').trim();
