@@ -9,7 +9,7 @@ class StreamResolutionService {
   }
 
   /**
-   * Extract direct YouTube audio stream directly from Google's YouTube CDN
+   * Extract direct YouTube audio stream directly from Google's YouTube CDN with ultra-fast parallel requests
    */
   async extractDirectYouTubeStream(videoId) {
     const clients = [
@@ -17,42 +17,28 @@ class StreamResolutionService {
         clientName: 'IOS',
         clientVersion: '19.45.4',
         deviceModel: 'iPhone16,2',
-        userAgent: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X; en_US)',
-        hl: 'en',
-        gl: 'US'
+        userAgent: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X; en_US)'
       },
       {
         clientName: 'ANDROID_MUSIC',
         clientVersion: '6.43.52',
-        androidSdkVersion: 34,
-        hl: 'en',
-        gl: 'US'
+        androidSdkVersion: 34
       },
       {
         clientName: 'ANDROID_VR',
         clientVersion: '1.50.28',
-        androidSdkVersion: 30,
-        hl: 'en',
-        gl: 'US'
+        androidSdkVersion: 30
       },
       {
         clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-        clientVersion: '2.0',
-        hl: 'en',
-        gl: 'US'
-      },
-      {
-        clientName: 'WEB_REMIX',
-        clientVersion: '1.20240101.01.00',
-        hl: 'en',
-        gl: 'US'
+        clientVersion: '2.0'
       }
     ];
 
-    for (const client of clients) {
+    const fetchClient = async (client) => {
       try {
         const payload = {
-          context: { client },
+          context: { client: { ...client, hl: 'en', gl: 'US' } },
           videoId
         };
 
@@ -64,7 +50,7 @@ class StreamResolutionService {
             'Origin': 'https://music.youtube.com'
           },
           body: JSON.stringify(payload),
-          timeout: 4500
+          timeout: 1800
         });
 
         const formats = [
@@ -72,8 +58,6 @@ class StreamResolutionService {
           ...(res?.streamingData?.formats || [])
         ];
         const audioFormats = formats.filter((f) => f.mimeType && f.mimeType.startsWith('audio/'));
-
-        // Sort by bitrate descending for highest audio quality
         const sorted = audioFormats.sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
         const withUrl = sorted.find((f) => Boolean(f.url));
 
@@ -83,8 +67,17 @@ class StreamResolutionService {
             mimeType: withUrl.mimeType ? withUrl.mimeType.split(';')[0] : 'audio/mp4'
           };
         }
+        return null;
       } catch (err) {
-        continue;
+        return null;
+      }
+    };
+
+    // Run in parallel with fast 1.8s timeout
+    const results = await Promise.allSettled(clients.map(c => fetchClient(c)));
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value) {
+        return r.value;
       }
     }
 

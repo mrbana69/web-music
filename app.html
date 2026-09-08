@@ -1397,13 +1397,22 @@ h1 { font-size: 34px; font-weight: 800; }
             }
             const trackId = track.id;
             const videoId = track.videoId || track.id;
+            
+            // 0. Cache in-memory immediata (0ms)
             if (streamUrlCache.has(trackId)) {
                 return streamUrlCache.get(trackId);
             }
 
-            // 1. Prova il proxy per l'URL audio diretto (/api/audio)
+            // 1. Prova il proxy /api/audio con timeout rapido di 2s (nessun blocco UI)
             try {
-                const audioRes = await apiFetch(`/audio?id=${encodeURIComponent(videoId)}`);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+                const audioRes = await apiFetch(`/audio?id=${encodeURIComponent(videoId)}`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
                 if (audioRes.ok) {
                     const audioData = await audioRes.json();
                     if (audioData && (audioData.url || audioData.directUrl)) {
@@ -1418,52 +1427,16 @@ h1 { font-size: 34px; font-weight: 800; }
                                 videoId
                             };
                             streamUrlCache.set(trackId, result);
-                            setTimeout(() => streamUrlCache.delete(trackId), 10 * 60 * 1000);
+                            setTimeout(() => streamUrlCache.delete(trackId), 15 * 60 * 1000);
                             return result;
                         }
                     }
                 }
             } catch (e) {
-                console.warn('Proxy /api/audio fallito, tento endpoint /track:', e);
+                // Timeout o errore di rete: fallback immediato al bridge
             }
 
-            // 2. Prova l'endpoint /api/track
-            try {
-                const manifestRes = await apiFetch(`/track?id=${encodeURIComponent(trackId)}&quality=LOSSLESS`);
-                if (manifestRes.ok) {
-                    const manifestData = await manifestRes.json();
-                    let streamUrl = manifestData.directUrl || null;
-                    let mimeType = manifestData.mimeType || 'audio/mp4';
-                    let source = manifestData.source || 'api';
-
-                    if (!streamUrl && manifestData.data?.manifest) {
-                        try {
-                            const streamManifest = JSON.parse(atob(manifestData.data.manifest));
-                            if (streamManifest.urls && streamManifest.urls.length > 0) {
-                                streamUrl = streamManifest.urls[0];
-                            }
-                        } catch (_) {}
-                    }
-
-                    if (streamUrl && !streamUrl.includes('youtube.com/watch')) {
-                        const result = {
-                            trackId,
-                            streamUrl,
-                            isDirectAudio: true,
-                            mimeType,
-                            source,
-                            videoId
-                        };
-                        streamUrlCache.set(trackId, result);
-                        setTimeout(() => streamUrlCache.delete(trackId), 10 * 60 * 1000);
-                        return result;
-                    }
-                }
-            } catch (e) {
-                console.warn('Risoluzione /track fallita:', e);
-            }
-
-            // 3. Fallback a YouTube embed bridge
+            // 2. Fallback istantaneo a YouTube embed bridge (latenza zero)
             const fallbackResult = {
                 trackId,
                 streamUrl: null,
@@ -1473,18 +1446,24 @@ h1 { font-size: 34px; font-weight: 800; }
                 videoId
             };
             streamUrlCache.set(trackId, fallbackResult);
-            setTimeout(() => streamUrlCache.delete(trackId), 5 * 60 * 1000);
+            setTimeout(() => streamUrlCache.delete(trackId), 10 * 60 * 1000);
             return fallbackResult;
         }
 
-        function prefetchNextTrack() {
-            const nextIndex = state.currentIndex + 1;
-            if (nextIndex < state.queue.length) {
-                const nextTrack = state.queue[nextIndex];
-                if (nextTrack && nextTrack.id && !streamUrlCache.has(nextTrack.id)) {
-                    resolveTrackAudio(nextTrack).catch(() => {});
+        // Prefetch intelligente dei successivi brani in coda
+        function prefetchNextTracks(count = 3) {
+            const start = state.currentIndex + 1;
+            const end = Math.min(start + count, state.queue.length);
+            for (let i = start; i < end; i++) {
+                const track = state.queue[i];
+                if (track && track.id && !streamUrlCache.has(track.id)) {
+                    resolveTrackAudio(track).catch(() => {});
                 }
             }
+        }
+
+        function prefetchNextTrack() {
+            prefetchNextTracks(3);
         }
 
         // --- 2. App State & Logic ---
