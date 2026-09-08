@@ -80,12 +80,16 @@ class MusicController {
         track = getTrackById(id);
       }
 
+      const authHeader = req.headers.authorization || '';
+      const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
+      const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
+
       // 2. Resolve to YouTube Music videoId
       const targetMetadata = track || { id, title: id, duration_ms: 220000 };
       const resolved = await trackResolverService.resolveTrack(targetMetadata);
 
       // 3. Resolve to direct audio stream URL
-      const streamInfo = await streamResolutionService.resolveStreamUrl(resolved.videoId);
+      const streamInfo = await streamResolutionService.resolveStreamUrl(resolved.videoId, userCookie);
 
       // 4. Generate base64 manifest
       const manifestPayload = createTrackManifest([streamInfo.directUrl], {
@@ -133,19 +137,50 @@ class MusicController {
    */
   async stream(req, res, next) {
     try {
-      const { id } = req.query || {};
+      const { id, proxy } = req.query || {};
       if (!id) {
         return res.status(400).json({ error: 'Missing track id' });
       }
 
+      const authHeader = req.headers.authorization || '';
+      const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
+      const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
+
       const resolved = await trackResolverService.resolveTrack({ id, title: id });
-      const streamInfo = await streamResolutionService.resolveStreamUrl(resolved.videoId);
+      const streamInfo = await streamResolutionService.resolveStreamUrl(resolved.videoId, userCookie);
 
       if (streamInfo && streamInfo.directUrl && !streamInfo.directUrl.includes('youtube.com/watch')) {
+        // If HTTP Range request or explicit proxy requested, pipe the audio stream directly
+        if (proxy === 'true' || req.headers.range) {
+          const range = req.headers.range;
+          const upstreamHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+          };
+          if (range) {
+            upstreamHeaders['Range'] = range;
+          }
+
+          const fetch = globalThis.fetch;
+          const upstreamRes = await fetch(streamInfo.directUrl, { headers: upstreamHeaders });
+
+          res.status(upstreamRes.status);
+          res.setHeader('Content-Type', streamInfo.mimeType || 'audio/mp4');
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+          if (upstreamRes.headers.get('content-range')) {
+            res.setHeader('Content-Range', upstreamRes.headers.get('content-range'));
+          }
+          if (upstreamRes.headers.get('content-length')) {
+            res.setHeader('Content-Length', upstreamRes.headers.get('content-length'));
+          }
+
+          const { Readable } = require('stream');
+          return Readable.fromWeb(upstreamRes.body).pipe(res);
+        }
+
         return res.redirect(302, streamInfo.directUrl);
       }
 
-      return res.redirect(302, streamInfo?.directUrl || `https://www.youtube.com/watch?v=${id}`);
     } catch (err) {
       next(err);
     }

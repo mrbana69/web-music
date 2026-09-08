@@ -950,11 +950,10 @@ h1 { font-size: 34px; font-weight: 800; }
             <div style="font-size: 38px; font-weight: 800; font-family: 'Syne', sans-serif; letter-spacing: -0.02em; margin-bottom: 8px;">Preluded</div>
             <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 30px; line-height: 1.4;">Accedi con il tuo account Google per sbloccare l'app e ascoltare musica in streaming.</div>
             
-            <button onclick="loginWithGoogle()" style="width: 100%; padding: 15px 20px; background: #ffffff; color: #000000; border: none; border-radius: 14px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: transform 0.15s ease;">
-                <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            <button onclick="loginWithGoogle()" style="width: 100%; padding: 15px 20px; background: #ffffff; color: #000000; border: none; border-radius: 14px; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: transform 0.15s ease; margin-bottom: 12px;">
                 <span>Accedi con Google</span>
             </button>
-        </div>
+            <button onclick="skipAuthModal()" style="width: 100%; padding: 10px; background: transparent; color: var(--text-secondary); border: none; font-size: 13px; font-weight: 500; cursor: pointer;">
     </div>
 
     <div id="deepLinkBanner" class="deep-link-banner hidden">
@@ -1141,9 +1140,9 @@ h1 { font-size: 34px; font-weight: 800; }
             <p style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:12px;">
                 Come su <strong>SimpMusic</strong> e <strong>ViMusic</strong>, collegando la sessione del tuo account YouTube Music potrai avere le <strong>Scelte Rapide, i Mix e "Di nuovo all'ascolto" identici al 100%</strong> alla tua pagina reale di YouTube Music!
             </p>
-            <div id="electron1ClickLoginBox" style="display:none; margin-bottom:14px; background:linear-gradient(135deg, rgba(250,45,72,0.15), rgba(255,107,0,0.15)); border:1px solid rgba(250,45,72,0.4); border-radius:12px; padding:12px; text-align:center;">
+            <div id="desktop1ClickLoginBox" style="display:none; margin-bottom:14px; background:linear-gradient(135deg, rgba(250,45,72,0.15), rgba(255,107,0,0.15)); border:1px solid rgba(250,45,72,0.4); border-radius:12px; padding:12px; text-align:center;">
                 <p style="margin:0 0 10px 0; font-size:13px; font-weight:600; color:#fff;">✨ Accesso Automatico 1-Click Desktop (SimpMusic)</p>
-                <button class="btn-primary" onclick="if(window.desktopAPI) window.desktopAPI.openSimpMusicLogin()" style="width:100%; padding:10px; border-radius:20px; font-weight:bold; cursor:pointer; background:var(--accent-gradient);">🔑 Accedi con Google Automaticamente</button>
+                <button class="btn-primary" onclick="triggerDesktopLogin()" style="width:100%; padding:10px; border-radius:20px; font-weight:bold; cursor:pointer; background:var(--accent-gradient);">🔑 Accedi con Google Automaticamente</button>
             </div>
             <div id="manualCookieGuide" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px; margin-bottom:14px; font-size:12px; color:var(--text-secondary); line-height:1.6;">
                 <strong style="color:var(--text-primary);">Come ottenere il cookie in 3 passi:</strong><br>
@@ -1427,15 +1426,15 @@ h1 { font-size: 34px; font-weight: 800; }
                 }
             }
 
-            if (!streamUrl) {
-                throw new Error("Nessun URL stream disponibile per questo brano.");
+            if (!streamUrl || streamUrl.includes('youtube.com/watch')) {
+                streamUrl = `${APP_SERVER_ORIGIN}/api/stream?id=${encodeURIComponent(trackId)}`;
             }
 
-            const isDirectAudio = !streamUrl.includes('youtube.com/watch');
+            const isDirectAudio = true;
             const result = {
                 trackId,
                 streamUrl,
-                mimeType,
+                mimeType: mimeType || 'audio/mp4',
                 source,
                 videoId,
                 isDirectAudio
@@ -1459,9 +1458,9 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         // --- 2. App State & Logic ---
-        // Local Vercel backend: this project now uses its own serverless API instead
-        // of the previous third-party Tidal mirrors.
-        const APP_BACKEND_BASE = '/api';
+        const isTauriEnv = Boolean(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.location.origin.includes('tauri.localhost') || window.location.protocol === 'tauri:');
+        const APP_SERVER_ORIGIN = isTauriEnv ? 'http://localhost:3000' : '';
+        const APP_BACKEND_BASE = `${APP_SERVER_ORIGIN}/api`;
 
         let currentApiIndex = localStorage.getItem('currentApiIndex') || 0;
         let workingApiUrl = localStorage.getItem('workingApiUrl') || APP_BACKEND_BASE;
@@ -1479,7 +1478,8 @@ h1 { font-size: 34px; font-weight: 800; }
             const apiUrl = await getWorkingApiUrl();
             const cleanEndpoint = endpoint.startsWith('/api/') ? endpoint.substring(4) : (endpoint === '/api' ? '' : endpoint);
             const normalizedEndpoint = cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`;
-            const response = await fetch(`${apiUrl}${normalizedEndpoint}`, {
+            const targetUrl = apiUrl.startsWith('http') ? `${apiUrl}${normalizedEndpoint}` : `${APP_SERVER_ORIGIN}${apiUrl}${normalizedEndpoint}`;
+            const response = await fetch(targetUrl, {
                 ...options,
                 headers: {
                     'Accept': 'application/json',
@@ -1889,32 +1889,6 @@ h1 { font-size: 34px; font-weight: 800; }
                 releaseWakeLock();
             }
         });
-        
-        // Error handler: fallback to /api/stream or YouTube Audio Bridge
-        nativeAudio.addEventListener('error', (e) => {
-            console.warn('Native audio stream error:', e);
-            const currentTrack = state.queue[state.currentIndex];
-            if (currentTrack) {
-                const streamFallbackUrl = `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
-                if (nativeAudio.src && !nativeAudio.src.includes('/api/stream?id=')) {
-                    nativeAudio.src = streamFallbackUrl;
-                    nativeAudio.load();
-                    nativeAudio.play().catch(() => {
-                        const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                        if (!isMobile) {
-                            const videoId = currentTrack.videoId || currentTrack.id;
-                            ytAudioPlayer.loadVideo(videoId);
-                        }
-                    });
-                    return;
-                }
-                const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                if (!isMobile) {
-                    const videoId = currentTrack.videoId || currentTrack.id;
-                    ytAudioPlayer.loadVideo(videoId);
-                }
-            }
-        });
 
         nativeAudio.addEventListener('timeupdate', () => {
             const cur = nativeAudio.currentTime || 0;
@@ -1922,30 +1896,81 @@ h1 { font-size: 34px; font-weight: 800; }
             if (dur > 30 && dur - cur <= 20) {
                 prefetchNextTrack();
             }
+            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && dur > 0) {
+                try {
+                    navigator.mediaSession.setPositionState({
+                        duration: dur,
+                        playbackRate: nativeAudio.playbackRate || 1.0,
+                        position: Math.min(cur, dur)
+                    });
+                } catch (_) {}
+            }
         });
-
-        // Error handler: fallback to YouTube Audio Bridge if available or graceful notify
+        
+        // Error handler: fallback to proxy stream or next track
         nativeAudio.addEventListener('error', (e) => {
             console.warn('Native audio stream error:', e);
             const currentTrack = state.queue[state.currentIndex];
-            if (currentTrack && (!nativeAudio.src || nativeAudio.networkState === 3 || nativeAudio.error)) {
-                const videoId = currentTrack.videoId || currentTrack.id;
-                if (videoId && (!state.currentStreamUrl || !state.currentStreamUrl.includes('youtube.com/watch'))) {
-                    ytAudioPlayer.loadVideo(videoId);
-                    showToast("Riproduzione via YouTube fallback (background non supportato su iOS in modalità video)", 4000);
-                } else {
-                    showToast("Questo brano non può essere riprodotto tramite Preluded.", 3500, 'error');
-                    setTimeout(() => { nextTrack(); }, 1200);
+            if (currentTrack) {
+                const proxyFallbackUrl = `${APP_SERVER_ORIGIN}/api/stream?id=${encodeURIComponent(currentTrack.id)}&proxy=true`;
+                if (nativeAudio.src && !nativeAudio.src.includes('&proxy=true')) {
+                    nativeAudio.src = proxyFallbackUrl;
+                    nativeAudio.load();
+                    nativeAudio.play().catch(() => {});
+                    return;
+                }
+                showToast("Errore durante la riproduzione del brano. Passaggio al successivo...", 2500);
+                setTimeout(() => { nextTrack(); }, 1200);
+            }
+        });
+
+        // Background & Visibility Change Handler for Mobile PWA (iOS Safari & Android)
+        let bgWasPlaying = false;
+        let bgSavedTime = 0;
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                bgSavedTime = nativeAudio.currentTime || 0;
+                bgWasPlaying = !nativeAudio.paused && state.isPlaying;
+                if ('mediaSession' in navigator && bgWasPlaying) {
+                    navigator.mediaSession.playbackState = 'playing';
+                }
+            } else {
+                if (bgWasPlaying) {
+                    if (nativeAudio.paused) {
+                        nativeAudio.play().then(() => {
+                            state.isPlaying = true;
+                            updatePlayIcons();
+                        }).catch((err) => {
+                            console.warn('[Audio] Background resume required user interaction:', err);
+                            showResumeBanner();
+                        });
+                    }
+                    if (state.isPlaying && !wakeLock) {
+                        requestWakeLock();
+                    }
                 }
             }
         });
 
-        // Re-check wake lock when returning from background
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && state.isPlaying) {
-                if (!wakeLock) requestWakeLock();
+        function showResumeBanner() {
+            let banner = document.getElementById('resumeAudioBanner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'resumeAudioBanner';
+                banner.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1ed760;color:#000000;padding:10px 20px;border-radius:25px;font-weight:700;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.6);z-index:9999;cursor:pointer;display:flex;align-items:center;gap:8px;animation:fadeIn 0.2s ease;';
+                banner.innerHTML = '<span>▶ Riprendi riproduzione</span>';
+                banner.onclick = () => {
+                    nativeAudio.play().then(() => {
+                        banner.remove();
+                        state.isPlaying = true;
+                        updatePlayIcons();
+                    }).catch(() => banner.remove());
+                };
+                document.body.appendChild(banner);
+                setTimeout(() => banner && banner.remove(), 8000);
             }
-        });
+        }
 
         // --- 3. UI Interactions ---
 
@@ -2125,44 +2150,30 @@ h1 { font-size: 34px; font-weight: 800; }
                 state.currentStreamUrl = streamData.streamUrl;
 
                 const isWatchUrl = streamData.streamUrl && streamData.streamUrl.includes('youtube.com/watch');
-                const directPlayUrl = (!isWatchUrl && streamData.streamUrl) ? streamData.streamUrl : `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
+                const directPlayUrl = (!isWatchUrl && streamData.streamUrl) ? streamData.streamUrl : `${APP_SERVER_ORIGIN}/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
 
-                // 1. Try Native HTML5 Audio
-                if (!isWatchUrl || isMobile || isIOS) {
-                    try {
-                        nativeAudio.pause();
-                        nativeAudio.src = directPlayUrl;
-                        nativeAudio.load();
-                        const playPromise = nativeAudio.play();
-                        if (playPromise !== undefined) {
-                            await playPromise;
-                        }
-                        started = !nativeAudio.paused;
-                    } catch (playError) {
-                        console.warn('Native audio play error, trying backend stream fallback:', playError);
-                        try {
-                            const proxyUrl = `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
-                            if (nativeAudio.src !== proxyUrl) {
-                                nativeAudio.src = proxyUrl;
-                                nativeAudio.load();
-                                await nativeAudio.play();
-                                started = !nativeAudio.paused;
-                            }
-                        } catch(proxyErr) {
-                            console.warn('Proxy stream failed:', proxyErr);
-                        }
+                // 1. Play Native HTML5 Audio
+                try {
+                    nativeAudio.pause();
+                    nativeAudio.src = directPlayUrl;
+                    nativeAudio.load();
+                    const playPromise = nativeAudio.play();
+                    if (playPromise !== undefined) {
+                        await playPromise;
                     }
-                }
-
-                // 2. Fallback to YouTube Audio Bridge if native audio did not start
-                if (!started && streamData.videoId) {
+                    started = !nativeAudio.paused;
+                } catch (playError) {
+                    console.warn('Native audio direct stream error, trying proxy stream:', playError);
                     try {
-                        nativeAudio.pause();
-                        nativeAudio.removeAttribute('src');
-                        ytAudioPlayer.loadVideo(streamData.videoId);
-                        started = true;
-                    } catch(ytErr) {
-                        console.warn('YouTube audio bridge fallback failed:', ytErr);
+                        const proxyUrl = `${APP_SERVER_ORIGIN}/api/stream?id=${encodeURIComponent(currentTrack.id)}&proxy=true`;
+                        if (nativeAudio.src !== proxyUrl) {
+                            nativeAudio.src = proxyUrl;
+                            nativeAudio.load();
+                            await nativeAudio.play();
+                            started = !nativeAudio.paused;
+                        }
+                    } catch(proxyErr) {
+                        console.warn('Proxy stream failed:', proxyErr);
                     }
                 }
 
@@ -2170,7 +2181,6 @@ h1 { font-size: 34px; font-weight: 800; }
                 if (started) {
                     requestWakeLock();
                     prefetchNextTrack();
-                    backgroundAudioManager.start();
                 } else {
                     showToast('Impossibile avviare il brano.', 3000, 'error');
                 }
@@ -4071,27 +4081,35 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         // --- Authentication & YouTube Music Session (SimpMusic Style) ---
-        if (window.desktopAPI && window.desktopAPI.isElectron) {
-            window.desktopAPI.onSimpMusicAuthSuccess((data) => {
-                if (data && data.cookieString) {
-                    localStorage.setItem('ytm_cookie', data.cookieString);
-                    updateAccountUI();
-                    showToast('Accesso a YouTube Music completato con successo!', 4000);
-                    closeYtmCookieModal();
-                    loadRecommendations();
+        const isTauriDesktop = Boolean(window.__TAURI__ || window.__TAURI_INTERNALS__);
+
+        async function triggerDesktopLogin() {
+            if (window.__TAURI__ && window.__TAURI__.core) {
+                try {
+                    showToast('Apertura finestra di accesso Google...', 2500);
+                    const res = await window.__TAURI__.core.invoke('open_google_login');
+                    if (res && res.cookie_string) {
+                        localStorage.setItem('ytm_cookie', res.cookie_string);
+                        updateAccountUI();
+                        showToast('Accesso a YouTube Music completato con successo!', 4000);
+                        closeYtmCookieModal();
+                        loadRecommendations();
+                    }
+                } catch (err) {
+                    console.warn('[DesktopLogin] Error:', err);
+                    showToast('Accesso annullato o non riuscito', 3000, 'error');
                 }
-            });
-            window.desktopAPI.onSimpMusicAuthError((err) => {
-                showToast('Accesso annullato o non riuscito', 3000, 'error');
-            });
+            } else {
+                loginWithGoogle();
+            }
         }
 
         function openYtmCookieModal() {
             const modal = document.getElementById('ytmCookieModal');
             const input = document.getElementById('ytmCookieInput');
             const btnRemove = document.getElementById('btnRemoveYtmCookie');
-            const box = document.getElementById('electron1ClickLoginBox');
-            if (box && window.desktopAPI && window.desktopAPI.isElectron) {
+            const box = document.getElementById('desktop1ClickLoginBox');
+            if (box && (isTauriDesktop || window.desktopAPI)) {
                 box.style.display = 'block';
             }
             const current = localStorage.getItem('ytm_cookie') || '';
@@ -4196,13 +4214,25 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function loginWithGoogle() {
-            window.location.href = '/api/auth/google/login?redirect=true';
+            if (isTauriDesktop || window.__TAURI__ || isTauriEnv) {
+                triggerDesktopLogin();
+            } else {
+                openYtmCookieModal();
+            }
+        }
+
+        function skipAuthModal() {
+            const authModal = document.getElementById('authModal');
+            if (authModal) authModal.classList.add('hidden');
+            localStorage.setItem('auth_modal_dismissed', 'true');
         }
 
         async function checkAuthOnStartup() {
             const user = localStorage.getItem('google_user');
+            const ytmCookie = localStorage.getItem('ytm_cookie');
+            const dismissed = localStorage.getItem('auth_modal_dismissed');
             const authModal = document.getElementById('authModal');
-            if (!user) {
+            if (!user && !ytmCookie && !dismissed) {
                 if (authModal) authModal.classList.remove('hidden');
             } else {
                 if (authModal) authModal.classList.add('hidden');

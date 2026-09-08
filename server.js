@@ -28,11 +28,6 @@ app.use('/health', healthRoutes);
 // Static assets (PWA frontend)
 app.use(express.static(__dirname));
 
-// App route
-app.get(['/app', '/app.html'], (req, res) => {
-  res.sendFile(path.join(__dirname, 'app.html'));
-});
-
 // SPA Fallback: serve index.html for all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
@@ -43,6 +38,9 @@ app.use(errorHandler);
 
 if (require.main === module && !process.env.VERCEL && process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
+    const fs = require('fs');
+    const logLine = `[${new Date().toISOString()}] [Server] Preluded Music API listening on http://localhost:${PORT}\n`;
+    try { fs.appendFileSync(path.join(__dirname, 'server.log'), logLine, 'utf8'); } catch(_) {}
     console.log(`====================================================`);
     console.log(`  Preluded Music API running at http://localhost:${PORT}`);
     console.log(`  Environment: ${config.nodeEnv}`);

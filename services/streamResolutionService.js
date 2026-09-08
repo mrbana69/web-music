@@ -11,59 +11,70 @@ class StreamResolutionService {
   /**
    * Extract direct YouTube audio stream directly from Google's YouTube CDN
    */
-  async extractDirectYouTubeStream(videoId) {
+  async extractDirectYouTubeStream(videoId, userCookie = null) {
+    const { buildInnertubeAuthHeaders } = require('../lib/sapisid');
+    const authHeaders = userCookie ? buildInnertubeAuthHeaders(userCookie) : {};
+
     const clients = [
       {
-        clientName: 'IOS',
-        clientVersion: '19.45.4',
-        deviceModel: 'iPhone16,2',
-        userAgent: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X; en_US)',
-        hl: 'en',
-        gl: 'US'
+        name: 'ANDROID_VR',
+        endpoint: 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
+        origin: 'https://www.youtube.com',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        },
+        payload: {
+          context: {
+            client: {
+              clientName: 'ANDROID_VR',
+              clientVersion: '1.50.28',
+              deviceModel: 'Quest 3',
+              osName: 'Android',
+              osVersion: '12',
+              androidSdkVersion: 32,
+              hl: 'en',
+              gl: 'US'
+            }
+          },
+          videoId,
+          contentCheckOk: true,
+          racyCheckOk: true
+        }
       },
       {
-        clientName: 'ANDROID_MUSIC',
-        clientVersion: '6.43.52',
-        androidSdkVersion: 34,
-        hl: 'en',
-        gl: 'US'
-      },
-      {
-        clientName: 'ANDROID_VR',
-        clientVersion: '1.50.28',
-        androidSdkVersion: 30,
-        hl: 'en',
-        gl: 'US'
-      },
-      {
-        clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-        clientVersion: '2.0',
-        hl: 'en',
-        gl: 'US'
-      },
-      {
-        clientName: 'WEB_REMIX',
-        clientVersion: '1.20240101.01.00',
-        hl: 'en',
-        gl: 'US'
+        name: 'WEB_REMIX',
+        endpoint: 'https://music.youtube.com/youtubei/v1/player?prettyPrint=false',
+        origin: 'https://music.youtube.com',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': 'https://music.youtube.com',
+          'Referer': 'https://music.youtube.com/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          ...authHeaders
+        },
+        payload: {
+          context: {
+            client: {
+              clientName: 'WEB_REMIX',
+              clientVersion: '1.20240101.01.00',
+              hl: 'en',
+              gl: 'US'
+            }
+          },
+          videoId,
+          contentCheckOk: true,
+          racyCheckOk: true
+        }
       }
     ];
 
-    for (const client of clients) {
+    for (const c of clients) {
       try {
-        const payload = {
-          context: { client },
-          videoId
-        };
-
-        const res = await fetchJson(this.innertubeEndpoint, {
+        const res = await fetchJson(c.endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': client.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Origin': 'https://music.youtube.com'
-          },
-          body: JSON.stringify(payload),
+          headers: c.headers,
+          body: JSON.stringify(c.payload),
           timeout: 4500
         });
 
@@ -72,15 +83,19 @@ class StreamResolutionService {
           ...(res?.streamingData?.formats || [])
         ];
         const audioFormats = formats.filter((f) => f.mimeType && f.mimeType.startsWith('audio/'));
+        const withDirectUrl = audioFormats.filter((f) => Boolean(f.url));
 
-        // Sort by bitrate descending for highest audio quality
-        const sorted = audioFormats.sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
-        const withUrl = sorted.find((f) => Boolean(f.url));
+        if (withDirectUrl.length > 0) {
+          // Prioritize M4A / AAC for maximum iOS & Android native audio background support
+          const m4aFormats = withDirectUrl.filter(f => f.mimeType.includes('mp4') || f.mimeType.includes('m4a'));
+          const best = m4aFormats.length > 0
+            ? m4aFormats.reduce((a, b) => ((b.bitrate || 0) > (a.bitrate || 0) ? b : a))
+            : withDirectUrl.reduce((a, b) => ((b.bitrate || 0) > (a.bitrate || 0) ? b : a));
 
-        if (withUrl && withUrl.url) {
           return {
-            url: withUrl.url,
-            mimeType: withUrl.mimeType ? withUrl.mimeType.split(';')[0] : 'audio/mp4'
+            url: best.url,
+            mimeType: best.mimeType ? best.mimeType.split(';')[0] : 'audio/mp4',
+            bitrate: best.bitrate || 128000
           };
         }
       } catch (err) {
@@ -94,12 +109,13 @@ class StreamResolutionService {
   /**
    * Resolve a videoId into a direct playable audio stream URL
    */
-  async resolveStreamUrl(videoId) {
+  async resolveStreamUrl(videoId, userCookie = null) {
     if (!videoId) {
       throw new Error('Missing videoId for stream resolution');
     }
 
-    const cacheKey = `stream_${videoId}`;
+    const cookieHash = userCookie ? `_u_${userCookie.length}` : '';
+    const cacheKey = `stream_${videoId}${cookieHash}`;
     const cached = cacheService.get(cacheKey);
     if (cached) {
       return cached;
@@ -120,7 +136,7 @@ class StreamResolutionService {
     }
 
     // 2. Extract directly from YouTube Google CDN (zero third-party mirrors)
-    const directStream = await this.extractDirectYouTubeStream(videoId);
+    const directStream = await this.extractDirectYouTubeStream(videoId, userCookie);
     if (directStream && directStream.url) {
       const result = {
         videoId,
@@ -133,7 +149,6 @@ class StreamResolutionService {
       return result;
     }
 
-    // 3. If direct stream URL requires embedded player bridge, return clean videoId pointer
     const result = {
       videoId,
       directUrl: `https://www.youtube.com/watch?v=${videoId}`,

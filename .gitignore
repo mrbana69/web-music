@@ -8,4 +8,6 @@ yarn-debug.log*
 yarn-error.log*
 .vercel
 dist/
+src-tauri/target/
+*.log
 

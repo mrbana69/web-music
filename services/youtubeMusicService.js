@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const config = require('../config/env');
 const cacheService = require('./cacheService');
 const { fetchJson, fetchText } = require('../lib/httpClient');
@@ -7,60 +6,6 @@ class YouTubeMusicService {
   constructor() {
     this.cookie = config.youtubeMusic.cookie;
     this.innertubeEndpoint = 'https://music.youtube.com/youtubei/v1';
-  }
-
-  /**
-   * Generates authentic SAPISIDHASH for YouTube Music (SimpMusic / ViMusic standard)
-   * SAPISIDHASH <timestamp>_<sha1(timestamp + " " + sapisid + " " + origin)>
-   */
-  generateSapisidHash(cookieString, origin = 'https://music.youtube.com') {
-    if (!cookieString || typeof cookieString !== 'string') return null;
-
-    let sapisid = '';
-    const match1 = cookieString.match(/(?:__Secure-3PAPISID|SAPISID|__Secure-1PAPISID)=([^;]+)/i);
-    if (match1 && match1[1]) {
-      sapisid = match1[1].trim();
-    } else if (cookieString.length >= 20 && !cookieString.includes('=')) {
-      sapisid = cookieString.trim();
-    }
-
-    if (!sapisid) return null;
-
-    const timestamp = Math.floor(Date.now() / 1000);
-    const sha1 = crypto.createHash('sha1');
-    sha1.update(`${timestamp} ${sapisid} ${origin}`);
-    const hash = sha1.digest('hex');
-    return `SAPISIDHASH ${timestamp}_${hash}`;
-  }
-
-  /**
-   * Build complete headers for YouTube Music Innertube API
-   */
-  buildInnertubeHeaders(userCookie = null) {
-    const activeCookie = userCookie || this.cookie || '';
-    const headers = {
-      'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-      'Accept': '*/*',
-      'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Origin': 'https://music.youtube.com',
-      'Referer': 'https://music.youtube.com/',
-      'Sec-Fetch-Dest': 'empty',
-      'Sec-Fetch-Mode': 'cors',
-      'Sec-Fetch-Site': 'same-origin',
-      'X-Origin': 'https://music.youtube.com',
-      'X-Goog-AuthUser': '0'
-    };
-
-    if (activeCookie) {
-      headers['Cookie'] = activeCookie;
-      const sapisidHash = this.generateSapisidHash(activeCookie);
-      if (sapisidHash) {
-        headers['Authorization'] = sapisidHash;
-      }
-    }
-
-    return headers;
   }
 
   parseDuration(durationStr = '') {
@@ -995,167 +940,272 @@ class YouTubeMusicService {
   }
 
   /**
-   * Get authentic YouTube Music "Scelte rapide" (Quick Picks / Listen Again / Heavy Rotation)
-   * Uses SAPISIDHASH authentication when userCookie is provided (identical to SimpMusic / ViMusic)
-  /**
-   * Get authentic YouTube Music "Scelte rapide" (Quick Picks / Listen Again / Heavy Rotation)
-   * Seamlessly handles both Google OAuth 1-Click Tokens and Session Cookies
+   * Get Full YouTube Music Home Feed (SimpMusic style)
+   * Parses all shelves: Quick Picks, Listen Again, Recommended Playlists, New Releases
    */
-  async getQuickPicks(authParam = null, limit = 20) {
-    const cacheKey = `yt_quick_picks_${authParam ? authParam.substring(0, 16) : 'guest'}_${limit}`;
+  async getHome(userCookie = null) {
+    const cacheKey = `yt_home_${userCookie ? userCookie.substring(0, 16) : 'guest'}`;
     const cached = cacheService.get(cacheKey);
     if (cached) return cached;
 
-    let quickPicks = [];
-    let isPersonalized = Boolean(authParam);
+    const SapisidAuth = require('../lib/sapisid');
+    const headers = SapisidAuth.getHeaders(userCookie || this.cookie || '');
 
-    // 1. If Google OAuth token is passed (1-Click Google Login)
-    if (authParam && (authParam.startsWith('ya29') || !authParam.includes('='))) {
+    const payload = {
+      context: {
+        client: {
+          clientName: 'WEB_REMIX',
+          clientVersion: '1.20240401.01.00',
+          hl: 'it',
+          gl: 'IT'
+        }
+      },
+      browseId: 'FEmusic_home'
+    };
+
+    const sections = [];
+
+    try {
+      const homeRes = await fetchJson(`${this.innertubeEndpoint}/browse`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        timeout: 7000
+      });
+
+      const traverse = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.musicCarouselShelfRenderer) {
+          const shelf = node.musicCarouselShelfRenderer;
+          const headerText = shelf.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || 'Musica consigliata';
+          const lowerHeader = headerText.toLowerCase();
+
+          // Skip shorts, clips
+          if (lowerHeader.includes('shorts') || lowerHeader.includes('clip') || lowerHeader.includes('campionati') || lowerHeader.includes('momenti musicali') || lowerHeader.includes('brevi')) {
+            return;
+          }
+
+          const contents = shelf.contents || [];
+          const items = [];
+
+          for (const item of contents) {
+            const renderer = item.musicResponsiveListItemRenderer || item.musicTwoRowItemRenderer;
+            if (renderer) {
+              const flex = renderer.flexColumns || [];
+              const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.title?.runs?.[0]?.text;
+              const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.subtitle?.runs?.[0]?.text || 'Artist';
+              const tArtist = this.formatArtistName(rawArtist);
+
+              const navEndpoint = renderer.playlistItemData?.navigationEndpoint ||
+                renderer.navigationEndpoint ||
+                renderer.doubleTapCommand ||
+                renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint;
+              const musicVideoType = navEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType;
+
+              if (musicVideoType === 'MUSIC_VIDEO_TYPE_UGC') continue;
+
+              const isSong = musicVideoType === 'MUSIC_VIDEO_TYPE_ATV' || !musicVideoType;
+              const isMusicVideo = musicVideoType === 'MUSIC_VIDEO_TYPE_OMV';
+
+              const vId = renderer.playlistItemData?.videoId ||
+                navEndpoint?.watchEndpoint?.videoId ||
+                renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+              const rawThumb = renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url ||
+                renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
+              const thumb = this.formatThumb(rawThumb);
+
+              if (tTitle && vId && !items.some(p => p.id === vId || p.videoId === vId)) {
+                items.push({
+                  id: vId,
+                  videoId: vId,
+                  title: tTitle,
+                  artist: { id: `art_${encodeURIComponent(tArtist)}`, name: tArtist, picture: thumb },
+                  artists: [{ id: `art_${encodeURIComponent(tArtist)}`, name: tArtist }],
+                  album: { id: `alb_${vId}`, title: tTitle, cover: thumb },
+                  duration: 210,
+                  duration_ms: 210000,
+                  thumbnail: thumb,
+                  cover: thumb,
+                  itemType: isSong ? 'song' : (isMusicVideo ? 'video' : 'song'),
+                  musicVideoType: musicVideoType || 'MUSIC_VIDEO_TYPE_ATV',
+                  isOfficial: true,
+                  source: 'ytmusic-home'
+                });
+              }
+            }
+          }
+
+          if (items.length > 0) {
+            sections.push({
+              title: headerText,
+              items
+            });
+          }
+        }
+        for (const k of Object.keys(node)) traverse(node[k]);
+      };
+
+      traverse(homeRes);
+    } catch (e) {
+      console.warn('[YouTubeMusicService] getHome browse failed:', e.message);
+    }
+
+    if (sections.length === 0) {
+      // Fallback: fetch quick picks
+      const qp = await this.getQuickPicks(userCookie);
+      sections.push({
+        title: 'Scelte rapide',
+        items: qp.items || []
+      });
+    }
+
+    const result = {
+      ok: true,
+      sections,
+      totalSections: sections.length,
+      source: 'youtube-music-simpmusic'
+    };
+
+    cacheService.set(cacheKey, result, 300); // 5 min cache
+    return result;
+  }
+
+  /**
+   * Get YouTube Music "Scelte rapide" (Quick Picks / Listen Again / Heavy Rotation)
+   * If accessToken is provided, fetches the user's authentic personalized quick picks from their account
+   */
+  async getQuickPicks(accessToken = null, limit = 20) {
+    const cacheKey = `yt_quick_picks_${accessToken ? accessToken.substring(0, 16) : 'guest'}_${limit}`;
+    const cached = cacheService.get(cacheKey);
+    if (cached) return cached;
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'Origin': 'https://music.youtube.com',
+      'Referer': 'https://music.youtube.com/'
+    };
+
+    if (accessToken && accessToken !== 'demo_google_access_token') {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    } else if (this.cookie) {
+      headers['Cookie'] = this.cookie;
+    }
+
+    const payload = {
+      context: {
+        client: {
+          clientName: 'WEB_REMIX',
+          clientVersion: '1.20240101.01.00',
+          hl: 'it',
+          gl: 'IT'
+        }
+      },
+      browseId: 'FEmusic_home'
+    };
+
+    let quickPicks = [];
+    let isPersonalized = false;
+
+    try {
+      const homeRes = await fetchJson(`${this.innertubeEndpoint}/browse`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        timeout: 6000
+      });
+
+      const traverse = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.musicCarouselShelfRenderer) {
+          const headerText = node.musicCarouselShelfRenderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || '';
+          const lowerHeader = headerText.toLowerCase();
+
+          // Strictly ignore any shelves for Shorts, Clips, or Samples
+          if (lowerHeader.includes('shorts') || lowerHeader.includes('clip') || lowerHeader.includes('campionati') || lowerHeader.includes('momenti musicali') || lowerHeader.includes('brevi')) {
+            return;
+          }
+
+          if (/scelte rapide|quick picks|listen again|di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta|heavy rotation/i.test(headerText)) {
+            if (/di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta/i.test(headerText)) {
+              isPersonalized = true;
+            }
+            const contents = node.musicCarouselShelfRenderer.contents || [];
+            for (const item of contents) {
+              const renderer = item.musicResponsiveListItemRenderer || item.musicTwoRowItemRenderer;
+              if (renderer) {
+                const flex = renderer.flexColumns || [];
+                const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.title?.runs?.[0]?.text;
+                const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.subtitle?.runs?.[0]?.text || 'Artist';
+                const tArtist = this.formatArtistName(rawArtist);
+                
+                const navEndpoint = renderer.playlistItemData?.navigationEndpoint ||
+                  renderer.navigationEndpoint ||
+                  renderer.doubleTapCommand ||
+                  renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint;
+                const musicVideoType = navEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType;
+
+                // If explicitly UGC (User Generated Content non-music video) or shorts, skip it
+                if (musicVideoType === 'MUSIC_VIDEO_TYPE_UGC') {
+                  continue;
+                }
+
+                const isSong = musicVideoType === 'MUSIC_VIDEO_TYPE_ATV' || !musicVideoType;
+                const isMusicVideo = musicVideoType === 'MUSIC_VIDEO_TYPE_OMV';
+
+                const vId = renderer.playlistItemData?.videoId ||
+                  navEndpoint?.watchEndpoint?.videoId ||
+                  renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+                const rawThumb = renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url ||
+                  renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
+                const thumb = this.formatThumb(rawThumb);
+
+                if (tTitle && vId && !quickPicks.some(p => p.id === vId || p.videoId === vId)) {
+                  quickPicks.push({
+                    id: vId,
+                    videoId: vId,
+                    title: tTitle,
+                    artist: { id: `art_${encodeURIComponent(tArtist)}`, name: tArtist, picture: thumb },
+                    artists: [{ id: `art_${encodeURIComponent(tArtist)}`, name: tArtist }],
+                    album: { id: `alb_${vId}`, title: tTitle, cover: thumb },
+                    duration: 210,
+                    duration_ms: 210000,
+                    thumbnail: thumb,
+                    cover: thumb,
+                    itemType: isSong ? 'song' : (isMusicVideo ? 'video' : 'song'),
+                    musicVideoType: musicVideoType || 'MUSIC_VIDEO_TYPE_ATV',
+                    isOfficial: true,
+                    source: 'ytmusic-quick-picks'
+                  });
+                }
+              }
+            }
+          }
+        }
+        for (const k of Object.keys(node)) traverse(node[k]);
+      };
+
+      traverse(homeRes);
+    } catch (e) {
+      console.warn('[YouTubeMusicService] getQuickPicks browse failed:', e.message);
+    }
+
+    // If authenticated user provided and we want to ensure their library liked music is present
+    if (accessToken && accessToken !== 'demo_google_access_token' && quickPicks.length < limit) {
       try {
         const authService = require('./authService');
-        const userLib = await authService.getUserLibrary(authParam);
-        const userTracks = [];
-
-        if (userLib && Array.isArray(userLib.likedSongs) && userLib.likedSongs.length > 0) {
-          userTracks.push(...userLib.likedSongs);
-        }
-
-        if (userLib && Array.isArray(userLib.playlists)) {
-          for (const pl of userLib.playlists) {
-            if (Array.isArray(pl.songs)) {
-              for (const s of pl.songs) {
-                if (!userTracks.some(u => u.id === s.id || u.videoId === s.id)) {
-                  userTracks.push(s);
-                }
-              }
-            }
-          }
-        }
-
-        if (userTracks.length > 0) {
+        const userLib = await authService.getUserLibrary(accessToken);
+        if (userLib && userLib.likedSongs && userLib.likedSongs.length > 0) {
           isPersonalized = true;
-          // Add user's real frequent tracks
-          for (const t of userTracks) {
-            if (!quickPicks.some(q => q.id === t.id || q.videoId === t.id)) {
-              quickPicks.push(t);
-            }
-          }
-
-          // Generate algorithmic Radio recommendations from their top 2 tracks
-          const seedTracks = userTracks.slice(0, 2);
-          for (const seed of seedTracks) {
-            if (seed.videoId || seed.id) {
-              try {
-                const radioRes = await this.getRadio(seed.videoId || seed.id);
-                if (Array.isArray(radioRes)) {
-                  for (const r of radioRes) {
-                    if (!quickPicks.some(q => q.id === r.id || q.videoId === r.id)) {
-                      quickPicks.push(r);
-                    }
-                  }
-                }
-              } catch (re) {}
+          for (const s of userLib.likedSongs) {
+            if (!quickPicks.some(p => p.id === s.id || p.videoId === s.id)) {
+              quickPicks.unshift(s);
             }
           }
         }
-      } catch (err) {
-        console.warn('[YouTubeMusicService] Google OAuth QuickPicks extraction error:', err.message);
-      }
+      } catch (err) {}
     }
 
-    // 2. If Cookie session is passed or if quickPicks is empty, query Innertube browse FEmusic_home
-    if (quickPicks.length < limit) {
-      try {
-        const headers = this.buildInnertubeHeaders(authParam && authParam.includes('=') ? authParam : null);
-        const payload = {
-          context: {
-            client: {
-              clientName: 'WEB_REMIX',
-              clientVersion: '1.20241101.01.00',
-              hl: 'it',
-              gl: 'IT'
-            }
-          },
-          browseId: 'FEmusic_home'
-        };
-
-        const homeRes = await fetchJson(`${this.innertubeEndpoint}/browse`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
-          timeout: 7000
-        });
-
-        const traverse = (node) => {
-          if (!node || typeof node !== 'object') return;
-          if (node.musicCarouselShelfRenderer) {
-            const headerText = node.musicCarouselShelfRenderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || '';
-            const lowerHeader = headerText.toLowerCase();
-
-            if (lowerHeader.includes('shorts') || lowerHeader.includes('clip') || lowerHeader.includes('campionati') || lowerHeader.includes('momenti musicali') || lowerHeader.includes('brevi')) {
-              return;
-            }
-
-            if (/scelte rapide|quick picks|listen again|di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta|heavy rotation|mix per te|mixed for you/i.test(headerText)) {
-              const contents = node.musicCarouselShelfRenderer.contents || [];
-              for (const item of contents) {
-                const renderer = item.musicResponsiveListItemRenderer || item.musicTwoRowItemRenderer;
-                if (renderer) {
-                  const flex = renderer.flexColumns || [];
-                  const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.title?.runs?.[0]?.text;
-                  const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.subtitle?.runs?.[0]?.text || 'Artist';
-                  const tArtist = this.formatArtistName(rawArtist);
-
-                  const navEndpoint = renderer.playlistItemData?.navigationEndpoint ||
-                    renderer.navigationEndpoint ||
-                    renderer.doubleTapCommand ||
-                    renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint;
-                  const musicVideoType = navEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType;
-
-                  if (musicVideoType === 'MUSIC_VIDEO_TYPE_UGC') continue;
-
-                  const isSong = musicVideoType === 'MUSIC_VIDEO_TYPE_ATV' || !musicVideoType;
-                  const isMusicVideo = musicVideoType === 'MUSIC_VIDEO_TYPE_OMV';
-
-                  const vId = renderer.playlistItemData?.videoId ||
-                    navEndpoint?.watchEndpoint?.videoId ||
-                    renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
-                  const rawThumb = renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url ||
-                    renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
-                  const thumb = this.formatThumb(rawThumb);
-
-                  if (tTitle && vId && !quickPicks.some(p => p.id === vId || p.videoId === vId)) {
-                    quickPicks.push({
-                      id: vId,
-                      videoId: vId,
-                      title: tTitle,
-                      artist: { id: `art_${encodeURIComponent(tArtist)}`, name: tArtist, picture: thumb },
-                      artists: [{ id: `art_${encodeURIComponent(tArtist)}`, name: tArtist }],
-                      album: { id: `alb_${vId}`, title: tTitle, cover: thumb },
-                      duration: 210,
-                      duration_ms: 210000,
-                      thumbnail: thumb,
-                      cover: thumb,
-                      itemType: isSong ? 'song' : (isMusicVideo ? 'video' : 'song'),
-                      musicVideoType: musicVideoType || 'MUSIC_VIDEO_TYPE_ATV',
-                      isOfficial: true,
-                      source: 'ytmusic-quick-picks'
-                    });
-                  }
-                }
-              }
-            }
-          }
-          for (const k of Object.keys(node)) traverse(node[k]);
-        };
-
-        traverse(homeRes);
-      } catch (e) {
-        console.warn('[YouTubeMusicService] getQuickPicks browse failed:', e.message);
-      }
-    }
-
-    // 3. Fallback if still empty: search trending hits
+    // Fallback if still empty: search trending hits
     if (quickPicks.length === 0) {
       const topHits = await this.search('Top Hits 2025', 'track', limit);
       quickPicks = topHits?.tracks?.items || [];
@@ -1164,120 +1214,12 @@ class YouTubeMusicService {
     const result = {
       items: quickPicks.slice(0, limit),
       total: Math.min(quickPicks.length, limit),
-      personalized: isPersonalized,
+      personalized: Boolean(accessToken && isPersonalized),
       source: 'ytmusic'
     };
 
     cacheService.set(cacheKey, result, 1200);
     return result;
-  }
-
-  /**
-   * Fetch live Home feed from YouTube Music (FEmusic_home) with full user session support
-   */
-  async getHome(userCookie = null) {
-    const cacheKey = `ytm_home_feed_${userCookie ? userCookie.substring(0, 16) : 'guest'}`;
-    const cached = cacheService.get(cacheKey);
-    if (cached) return cached;
-
-    try {
-      const headers = this.buildInnertubeHeaders(userCookie);
-      const browsePayload = {
-        context: {
-          client: {
-            clientName: 'WEB_REMIX',
-            clientVersion: '1.20241101.01.00',
-            hl: 'it',
-            gl: 'IT'
-          }
-        },
-        browseId: 'FEmusic_home'
-      };
-
-      const browseRes = await fetchJson('https://music.youtube.com/youtubei/v1/browse', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(browsePayload),
-        timeout: 7000
-      });
-
-      const sections = [];
-      const traverse = (node) => {
-        if (!node || typeof node !== 'object') return;
-        if (node.musicCarouselShelfRenderer) {
-          const header = node.musicCarouselShelfRenderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || 'Consigliati';
-          const items = [];
-          const itemNodes = node.musicCarouselShelfRenderer.contents || [];
-          for (const it of itemNodes) {
-            if (it.musicResponsiveListItemRenderer) {
-              const item = it.musicResponsiveListItemRenderer;
-              const flex = item.flexColumns || [];
-              const title = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-              const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || 'Artist';
-              const artist = this.formatArtistName(rawArtist);
-              const videoId = item.playlistItemData?.videoId || flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId;
-              const rawThumb = item.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
-              const thumb = this.formatThumb(rawThumb);
-              if (title && videoId) {
-                items.push({
-                  id: videoId,
-                  videoId,
-                  title,
-                  artist: { id: `art_${encodeURIComponent(artist)}`, name: artist, picture: thumb },
-                  artists: [{ id: `art_${encodeURIComponent(artist)}`, name: artist }],
-                  album: { id: `alb_${videoId}`, title, cover: thumb },
-                  duration: 210,
-                  duration_ms: 210000,
-                  source: 'youtube-home'
-                });
-              }
-            } else if (it.musicTwoRowItemRenderer) {
-              const item = it.musicTwoRowItemRenderer;
-              const title = item.title?.runs?.[0]?.text;
-              const rawArtist = item.subtitle?.runs?.[0]?.text || 'Artist';
-              const artist = this.formatArtistName(rawArtist);
-              const videoId = item.navigationEndpoint?.watchEndpoint?.videoId;
-              const browseId = item.navigationEndpoint?.browseEndpoint?.browseId;
-              const rawThumb = item.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
-              const thumb = this.formatThumb(rawThumb);
-              const finalId = videoId || browseId;
-              if (title && finalId) {
-                items.push({
-                  id: finalId,
-                  videoId: videoId || finalId,
-                  browseId,
-                  title,
-                  artist: { id: `art_${encodeURIComponent(artist)}`, name: artist, picture: thumb },
-                  artists: [{ id: `art_${encodeURIComponent(artist)}`, name: artist }],
-                  album: { id: `alb_${finalId}`, title, cover: thumb },
-                  duration: 210,
-                  duration_ms: 210000,
-                  source: 'youtube-home'
-                });
-              }
-            }
-          }
-          if (items.length > 0) {
-            sections.push({ title: header, items });
-          }
-        }
-        for (const k of Object.keys(node)) traverse(node[k]);
-      };
-
-      traverse(browseRes);
-
-      const result = {
-        ok: true,
-        sections: sections.slice(0, 10),
-        personalized: Boolean(userCookie),
-        source: 'ytmusic'
-      };
-      cacheService.set(cacheKey, result, 1200);
-      return result;
-    } catch (e) {
-      console.warn('[YouTubeMusicService] getHome failed:', e.message);
-      return { ok: false, sections: [], error: e.message };
-    }
   }
 }
 
