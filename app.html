@@ -1937,48 +1937,23 @@ h1 { font-size: 34px; font-weight: 800; }
         // Background & Visibility Change Handler for Mobile PWA (iOS Safari & Android)
         let savedState = { time: 0, wasPlaying: false, trackId: null };
 
+        // Background & Visibility Change Handler for Mobile PWA (iOS Safari & Android) & Desktop
         document.addEventListener('visibilitychange', async () => {
             if (document.hidden) {
-                // Stiamo andando in background / schermo bloccato
-                const player = getActiveAudioPlayer();
-                savedState.time = (player && typeof player.currentTime === 'number') ? player.currentTime : (nativeAudio.currentTime || ytAudioPlayer.getCurrentTime() || 0);
-                savedState.wasPlaying = state.isPlaying && (!nativeAudio.paused || (ytAudioPlayer.isInit && !ytAudioPlayer.paused));
-                savedState.trackId = state.queue[state.currentIndex]?.id || null;
-                if ('mediaSession' in navigator && savedState.wasPlaying) {
+                // Pagina in background / finestra senza focus
+                if ('mediaSession' in navigator && state.isPlaying) {
                     navigator.mediaSession.playbackState = 'playing';
                 }
             } else {
-                // Tornati in primo piano / schermo sbloccato
-                if (savedState.wasPlaying && savedState.trackId) {
-                    const currentTrack = state.queue[state.currentIndex];
-                    if (currentTrack && currentTrack.id === savedState.trackId) {
-                        if (nativeAudio.src && !nativeAudio.paused) {
-                            // L'audio nativo ha continuato a suonare in background!
-                            state.isPlaying = true;
-                            updatePlayIcons();
-                        } else if (nativeAudio.src && nativeAudio.paused) {
-                            // L'audio nativo è stato messo in pausa dal browser, tenta resume
-                            if (savedState.time > 0) {
-                                try { nativeAudio.currentTime = savedState.time; } catch (_) {}
-                            }
-                            nativeAudio.play().then(() => {
-                                state.isPlaying = true;
-                                updatePlayIcons();
-                            }).catch(() => showResumeButton());
-                        } else if (ytAudioPlayer.isInit) {
-                            // YouTube bridge era sospeso: riprendi e sincronizza tempo
-                            ytAudioPlayer.play();
-                            if (savedState.time > 0) {
-                                try { ytAudioPlayer.seekTo(savedState.time); } catch (_) {}
-                            }
-                            setTimeout(() => {
-                                if (ytAudioPlayer.paused && state.isPlaying) {
-                                    showResumeButton();
-                                }
-                            }, 400);
-                        }
+                // Tornati in primo piano / finestra con focus: sincronizza UI e riprendi se sospeso
+                if (state.isPlaying) {
+                    if (nativeAudio.src && nativeAudio.paused) {
+                        nativeAudio.play().catch(() => showResumeButton());
+                    } else if (ytAudioPlayer.isInit && ytAudioPlayer.paused) {
+                        ytAudioPlayer.play();
                     }
-                    savedState.wasPlaying = false;
+                    updatePlayIcons();
+                    updateProgress();
                 }
                 if (state.isPlaying && !wakeLock) {
                     requestWakeLock();
@@ -1996,22 +1971,15 @@ h1 { font-size: 34px; font-weight: 800; }
             btn.onclick = async () => {
                 const currentTrack = state.queue[state.currentIndex];
                 if (nativeAudio.src) {
-                    if (savedState.time > 0) {
-                        try { nativeAudio.currentTime = savedState.time; } catch (_) {}
-                    }
                     await nativeAudio.play().catch(() => {});
                 } else if (ytAudioPlayer.isInit) {
                     ytAudioPlayer.play();
-                    if (savedState.time > 0) {
-                        try { ytAudioPlayer.seekTo(savedState.time); } catch (_) {}
-                    }
                 } else if (currentTrack) {
                     playTrack(currentTrack, true);
                 }
                 state.isPlaying = true;
                 updatePlayIcons();
                 btn.remove();
-                savedState.wasPlaying = false;
             };
             document.body.appendChild(btn);
             setTimeout(() => btn && btn.remove(), 8000);
