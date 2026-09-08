@@ -1403,51 +1403,18 @@ h1 { font-size: 34px; font-weight: 800; }
                 return streamUrlCache.get(trackId);
             }
 
-            // 1. Prova il proxy /api/audio con timeout rapido di 2s (nessun blocco UI)
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2000);
-
-                const audioRes = await apiFetch(`/audio?id=${encodeURIComponent(videoId)}`, {
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-
-                if (audioRes.ok) {
-                    const audioData = await audioRes.json();
-                    if (audioData && (audioData.url || audioData.directUrl)) {
-                        const streamUrl = audioData.url || audioData.directUrl;
-                        if (!streamUrl.includes('youtube.com/watch')) {
-                            const result = {
-                                trackId,
-                                streamUrl,
-                                isDirectAudio: true,
-                                mimeType: audioData.mimeType || 'audio/mp4',
-                                source: audioData.source || 'proxy',
-                                videoId
-                            };
-                            streamUrlCache.set(trackId, result);
-                            setTimeout(() => streamUrlCache.delete(trackId), 15 * 60 * 1000);
-                            return result;
-                        }
-                    }
-                }
-            } catch (e) {
-                // Timeout o errore di rete: fallback immediato al bridge
-            }
-
-            // 2. Fallback istantaneo a YouTube embed bridge (latenza zero)
-            const fallbackResult = {
+            // Always use our own /api/stream proxy endpoint for 100% reliable iOS Safari & Android background playback
+            const result = {
                 trackId,
-                streamUrl: null,
-                isDirectAudio: false,
+                streamUrl: `/api/stream?id=${encodeURIComponent(videoId)}`,
+                isDirectAudio: true,
                 mimeType: 'audio/mp4',
-                source: 'youtube-embed-bridge',
+                source: 'server-stream-proxy',
                 videoId
             };
-            streamUrlCache.set(trackId, fallbackResult);
-            setTimeout(() => streamUrlCache.delete(trackId), 10 * 60 * 1000);
-            return fallbackResult;
+            streamUrlCache.set(trackId, result);
+            setTimeout(() => streamUrlCache.delete(trackId), 15 * 60 * 1000);
+            return result;
         }
 
         // Prefetch intelligente dei successivi brani in coda

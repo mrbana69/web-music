@@ -130,7 +130,7 @@ class MusicController {
   }
 
   /**
-   * GET /api/audio - Extract direct audio stream URL with fast in-memory cache and 2s timeout
+   * GET /api/audio - Return stream URL for native background playback
    */
   async audio(req, res, next) {
     try {
@@ -140,62 +140,39 @@ class MusicController {
         return res.status(400).json({ error: 'Missing id' });
       }
 
-      // 1. In-memory cache check (instant 0ms response)
-      const cacheKey = `audio_url_${targetId}`;
-      const cached = cacheService.get(cacheKey);
-      if (cached) {
-        return res.status(200).json(cached);
-      }
-
-      const authHeader = req.headers.authorization || '';
-      const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
-      const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
-
       let resolvedVideoId = targetId;
       try {
         const resolved = await trackResolverService.resolveTrack({ id: targetId, title: targetId });
         if (resolved && resolved.videoId) resolvedVideoId = resolved.videoId;
       } catch (_) {}
 
-      // 2. Fast parallel stream resolution (< 1.8s)
-      const streamInfo = await streamResolutionService.resolveStreamUrl(resolvedVideoId, userCookie);
-      if (streamInfo && streamInfo.directUrl && !streamInfo.directUrl.includes('youtube.com/watch')) {
-        const payload = {
-          url: streamInfo.directUrl,
-          directUrl: streamInfo.directUrl,
-          mimeType: streamInfo.mimeType || 'audio/mp4',
-          source: streamInfo.source || 'innertube',
-          videoId: resolvedVideoId,
-          trackId: targetId
-        };
-        cacheService.set(cacheKey, payload, 900); // Cache for 15 minutes
-        return res.status(200).json(payload);
-      }
-
-      // 3. Instant clean response with fallback to YouTube embed bridge
-      const fallbackPayload = {
-        url: null,
-        directUrl: null,
-        fallback: 'youtube-embed',
+      // Fast stream proxy endpoint for native HTML5 audio
+      const streamProxyUrl = `/api/stream?id=${encodeURIComponent(resolvedVideoId)}`;
+      const payload = {
+        url: streamProxyUrl,
+        streamUrl: streamProxyUrl,
+        directUrl: streamProxyUrl,
+        mimeType: 'audio/mp4',
+        source: 'stream-proxy',
         videoId: resolvedVideoId,
         trackId: targetId
       };
-      cacheService.set(cacheKey, fallbackPayload, 600); // Cache fallback for 10 minutes
-      return res.status(200).json(fallbackPayload);
+      return res.status(200).json(payload);
     } catch (err) {
       if (!res.headersSent) {
-        return res.status(200).json({ url: null, fallback: 'youtube-embed', videoId: req.query?.id });
+        const fallbackId = req.query?.id || req.query?.videoId || '';
+        return res.status(200).json({ url: `/api/stream?id=${encodeURIComponent(fallbackId)}`, fallback: 'stream-proxy', videoId: fallbackId });
       }
       next(err);
     }
   }
 
   /**
-   * GET /api/stream - Direct audio stream redirection / proxy for mobile background playback
+   * GET /api/stream - Direct audio stream proxy with Range support for iOS Safari & Android background playback
    */
   async stream(req, res, next) {
     try {
-      const { id, videoId, proxy } = req.query || {};
+      const { id, videoId } = req.query || {};
       const targetId = id || videoId;
       if (!targetId) {
         return res.status(400).json({ error: 'Missing track id' });
@@ -214,38 +191,35 @@ class MusicController {
       const streamInfo = await streamResolutionService.resolveStreamUrl(resolvedVideoId, userCookie);
 
       if (streamInfo && streamInfo.directUrl && !streamInfo.directUrl.includes('youtube.com/watch')) {
-        // If HTTP Range request or explicit proxy requested, pipe the audio stream directly
-        if (proxy === 'true' || req.headers.range) {
-          const range = req.headers.range;
-          const upstreamHeaders = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-          };
-          if (range) {
-            upstreamHeaders['Range'] = range;
-          }
-
-          const fetch = globalThis.fetch;
-          const upstreamRes = await fetch(streamInfo.directUrl, { headers: upstreamHeaders });
-
-          res.status(upstreamRes.status);
-          res.setHeader('Content-Type', streamInfo.mimeType || 'audio/mp4');
-          res.setHeader('Accept-Ranges', 'bytes');
-          res.setHeader('Cache-Control', 'public, max-age=3600');
-          if (upstreamRes.headers.get('content-range')) {
-            res.setHeader('Content-Range', upstreamRes.headers.get('content-range'));
-          }
-          if (upstreamRes.headers.get('content-length')) {
-            res.setHeader('Content-Length', upstreamRes.headers.get('content-length'));
-          }
-
-          const { Readable } = require('stream');
-          return Readable.fromWeb(upstreamRes.body).pipe(res);
+        const range = req.headers.range;
+        const upstreamHeaders = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Origin': 'https://music.youtube.com',
+          'Referer': 'https://music.youtube.com/'
+        };
+        if (range) {
+          upstreamHeaders['Range'] = range;
         }
 
-        return res.redirect(302, streamInfo.directUrl);
+        const fetch = globalThis.fetch;
+        const upstreamRes = await fetch(streamInfo.directUrl, { headers: upstreamHeaders });
+
+        res.status(upstreamRes.status);
+        res.setHeader('Content-Type', streamInfo.mimeType || 'audio/mp4');
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        if (upstreamRes.headers.get('content-range')) {
+          res.setHeader('Content-Range', upstreamRes.headers.get('content-range'));
+        }
+        if (upstreamRes.headers.get('content-length')) {
+          res.setHeader('Content-Length', upstreamRes.headers.get('content-length'));
+        }
+
+        const { Readable } = require('stream');
+        return Readable.fromWeb(upstreamRes.body).pipe(res);
       }
 
-      // If no direct stream available, respond immediately with structured 404 (NEVER HANG)
+      // If direct stream resolution did not find audio, return clean 404
       return res.status(404).json({
         ok: false,
         error: 'Direct stream not available',
