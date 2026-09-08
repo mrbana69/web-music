@@ -1895,45 +1895,32 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         });
         
-        // Error handler: fallback to /api/stream or YouTube Audio Bridge
+        // Error handler: fallback to /api/stream proxy or YouTube Audio Bridge
         nativeAudio.addEventListener('error', (e) => {
-            console.warn('Native audio stream error:', e);
+            console.warn('Native audio direct stream error, trying stream proxy fallback:', e);
             const currentTrack = state.queue[state.currentIndex];
             if (currentTrack) {
-                const streamFallbackUrl = `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
+                const streamProxyUrl = `/api/stream?id=${encodeURIComponent(currentTrack.id || currentTrack.videoId)}&proxy=true`;
                 if (nativeAudio.src && !nativeAudio.src.includes('/api/stream?id=')) {
-                    nativeAudio.src = streamFallbackUrl;
+                    nativeAudio.src = streamProxyUrl;
                     nativeAudio.load();
-                    nativeAudio.play().catch(() => {
-                        const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                        if (!isMobile) {
-                            const videoId = currentTrack.videoId || currentTrack.id;
-                            ytAudioPlayer.loadVideo(videoId);
+                    nativeAudio.play().then(() => {
+                        state.isPlaying = true;
+                        updatePlayIcons();
+                    }).catch(() => {
+                        const videoId = currentTrack.videoId || currentTrack.id;
+                        if (videoId && ytAudioPlayer) {
+                            try {
+                                nativeAudio.pause();
+                                nativeAudio.removeAttribute('src');
+                                ytAudioPlayer.loadVideo(videoId);
+                                state.isPlaying = true;
+                                updatePlayIcons();
+                            } catch (_) {}
                         }
                     });
                     return;
                 }
-                const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                if (!isMobile) {
-                    const videoId = currentTrack.videoId || currentTrack.id;
-                    ytAudioPlayer.loadVideo(videoId);
-                }
-            }
-        });
-
-        nativeAudio.addEventListener('timeupdate', () => {
-            const cur = nativeAudio.currentTime || 0;
-            const dur = nativeAudio.duration || 0;
-            if (dur > 30 && dur - cur <= 20) {
-                prefetchNextTrack();
-            }
-        });
-
-        // Error handler: graceful fallback to YouTube Audio Bridge
-        nativeAudio.addEventListener('error', (e) => {
-            console.warn('Native audio stream error, fallback to YouTube embed:', e);
-            const currentTrack = state.queue[state.currentIndex];
-            if (currentTrack) {
                 const videoId = currentTrack.videoId || currentTrack.id;
                 if (videoId && ytAudioPlayer) {
                     try {
@@ -1942,7 +1929,7 @@ h1 { font-size: 34px; font-weight: 800; }
                         ytAudioPlayer.loadVideo(videoId);
                         state.isPlaying = true;
                         updatePlayIcons();
-                    } catch (err) {}
+                    } catch (_) {}
                 }
             }
         });

@@ -57,14 +57,19 @@ class StreamResolutionService {
           ...(res?.streamingData?.adaptiveFormats || []),
           ...(res?.streamingData?.formats || [])
         ];
-        const audioFormats = formats.filter((f) => f.mimeType && f.mimeType.startsWith('audio/'));
-        const sorted = audioFormats.sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
-        const withUrl = sorted.find((f) => Boolean(f.url));
+        const audioFormats = formats.filter((f) => f.mimeType && f.mimeType.startsWith('audio/') && Boolean(f.url));
+        
+        // Prioritize audio/mp4 (AAC / itag 140) for 100% universal iOS Safari & Android mobile background playback
+        const mp4Formats = audioFormats.filter(f => f.mimeType.includes('audio/mp4') || f.mimeType.includes('mp4a'));
+        const sortedMp4 = mp4Formats.sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
+        const sortedAll = audioFormats.sort((a, b) => (Number(b.bitrate) || 0) - (Number(a.bitrate) || 0));
 
-        if (withUrl && withUrl.url) {
+        const chosen = sortedMp4[0] || sortedAll[0];
+
+        if (chosen && chosen.url) {
           return {
-            url: withUrl.url,
-            mimeType: withUrl.mimeType ? withUrl.mimeType.split(';')[0] : 'audio/mp4'
+            url: chosen.url,
+            mimeType: chosen.mimeType ? chosen.mimeType.split(';')[0] : 'audio/mp4'
           };
         }
         return null;
