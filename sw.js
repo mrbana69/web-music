@@ -1,25 +1,24 @@
-const CACHE_NAME = 'Preluded-Music-v12';
+const CACHE_NAME = 'Preluded-Music-v15';
 const ASSETS_TO_CACHE = [
-  './',
-  './index.html',
-  './manifest.json'
+  './manifest.json',
+  './icons/512x512.png'
 ];
 
 // Install Event: Cache the app shell and force activation
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return cache.addAll(ASSETS_TO_CACHE).catch(() => {});
     })
   );
   self.skipWaiting();
 });
 
-// Fetch Event: Only cache same-origin static assets
+// Fetch Event: Network-First for HTML/Navigations, Cache-First for static assets
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
 
-  // 1. Bypass Service Worker entirely for media (audio/video) or cross-origin requests
+  // 1. Bypass Service Worker entirely for media (audio/video), streaming or API requests
   if (
     event.request.destination === 'audio' ||
     event.request.destination === 'video' ||
@@ -27,20 +26,29 @@ self.addEventListener('fetch', (event) => {
     requestUrl.pathname.startsWith('/api') ||
     requestUrl.pathname.startsWith('/health')
   ) {
-    // Let browser handle media and API requests natively
     return;
   }
 
-  // 2. Same-origin app shell caching
+  // 2. Network-First for HTML navigations (always fetch the latest code from Vercel)
+  if (event.request.mode === 'navigate' || requestUrl.pathname.endsWith('.html') || requestUrl.pathname === '/' || requestUrl.pathname === '/app') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.ok) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // 3. Cache-First fallback for static icons/assets
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      return (
-        cachedResponse ||
-        fetch(event.request).catch((err) => {
-          console.warn('SW fetch failed for same-origin request:', event.request.url, err);
-          return Response.error();
-        })
-      );
+      return cachedResponse || fetch(event.request);
     }).catch(() => fetch(event.request))
   );
 });

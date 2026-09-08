@@ -1243,6 +1243,22 @@ h1 { font-size: 34px; font-weight: 800; }
                     <div class="card-subtitle">Condizioni d'uso e conformità YouTube</div>
                 </div>
             </a>
+
+            <div class="section-title" style="margin-top: 30px;">
+                <span>Versione & Build</span>
+            </div>
+            <div class="list-item" style="cursor:default; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; margin-bottom: 32px;">
+                <div class="list-artwork" style="display:flex; align-items:center; justify-content:center; background: linear-gradient(135deg, #0284c7, #38bdf8); border-radius: 8px;">
+                    <svg class="icon" viewBox="0 0 24 24" style="color:#fff;"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                </div>
+                <div class="list-info">
+                    <div class="card-title" style="display:flex; align-items:center; gap:8px;">
+                        <span>Preluded PWA v2.0.0</span>
+                        <span id="appCommitBadge" style="background:#0284c7; color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; font-family:monospace; font-weight:700;">aceed2c</span>
+                    </div>
+                    <div class="card-subtitle" id="appCommitSubtitle">Build Commit: aceed2c · PWA Online</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2014,30 +2030,43 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         }, { passive: true });
 
-        // --- 4. Audio Control Wrapper ---
+        // --- 4. Audio Control Wrapper & Build Info ---
+
+        const APP_BUILD_INFO = {
+            version: '2.0.0',
+            commit: 'aceed2c',
+            buildTime: '08/09/2026, 16:20'
+        };
+
+        function initAppBuildInfo() {
+            const commitBadge = document.getElementById('appCommitBadge');
+            const commitSubtitle = document.getElementById('appCommitSubtitle');
+            if (commitBadge) {
+                commitBadge.textContent = APP_BUILD_INFO.commit;
+            }
+            if (commitSubtitle) {
+                commitSubtitle.textContent = `Build: ${APP_BUILD_INFO.buildTime} · PWA Online`;
+            }
+        }
 
         async function clearCacheAndUpdate() {
-            if ('serviceWorker' in navigator) {
-                try {
+            try {
+                if ('serviceWorker' in navigator) {
                     const registrations = await navigator.serviceWorker.getRegistrations();
-                    if (registrations.length) {
-                        for (const registration of registrations) {
-                            await registration.unregister();
-                        }
+                    for (const registration of registrations) {
+                        await registration.unregister();
                     }
-
+                }
+                if ('caches' in window) {
                     const keys = await caches.keys();
                     await Promise.all(keys.map(key => caches.delete(key)));
-
-                    alert('Cache cleared successfully! The application will now reload.');
-                    window.location.reload(true);
-
-                } catch (error) {
-                    console.error('Failed to clear cache:', error);
-                    alert('Error clearing cache. Please try clearing your browser cache manually.');
                 }
-            } else {
-                alert('Service workers are not supported in this browser.');
+                sessionStorage.clear();
+                alert('Aggiornamento forzato completato! Ricarico con l\'ultima versione...');
+                window.location.href = window.location.pathname + '?v=' + Date.now();
+            } catch (error) {
+                console.error('Failed to clear cache:', error);
+                window.location.href = window.location.pathname + '?v=' + Date.now();
             }
         }
 
@@ -4196,12 +4225,14 @@ h1 { font-size: 34px; font-weight: 800; }
         loadRecommendations();
         renderPlaylists();
         updateAccountUI();
+        initAppBuildInfo();
 
         // Hide splash screen once initial rendering is done (at least 2 seconds)
         setTimeout(() => {
             const splash = document.getElementById('splashOverlay');
             if (splash) splash.classList.add('hidden');
             checkAuthOnStartup();
+            initAppBuildInfo();
         }, 2200);
 
         // --- Deep Linking / Invite Banner ---
