@@ -146,8 +146,8 @@ class MusicController {
         if (resolved && resolved.videoId) resolvedVideoId = resolved.videoId;
       } catch (_) {}
 
-      // Fast stream proxy endpoint for native HTML5 audio
-      const streamProxyUrl = `/api/stream?id=${encodeURIComponent(resolvedVideoId)}`;
+      // Fast stream proxy endpoint for native HTML5 audio with .mp4 extension for iOS AVPlayer
+      const streamProxyUrl = `/api/stream.mp4?id=${encodeURIComponent(resolvedVideoId)}`;
       const payload = {
         url: streamProxyUrl,
         streamUrl: streamProxyUrl,
@@ -161,7 +161,7 @@ class MusicController {
     } catch (err) {
       if (!res.headersSent) {
         const fallbackId = req.query?.id || req.query?.videoId || '';
-        return res.status(200).json({ url: `/api/stream?id=${encodeURIComponent(fallbackId)}`, fallback: 'stream-proxy', videoId: fallbackId });
+        return res.status(200).json({ url: `/api/stream.mp4?id=${encodeURIComponent(fallbackId)}`, fallback: 'stream-proxy', videoId: fallbackId });
       }
       next(err);
     }
@@ -193,7 +193,7 @@ class MusicController {
       if (streamInfo && streamInfo.directUrl && !streamInfo.directUrl.includes('youtube.com/watch')) {
         const range = req.headers.range;
         const upstreamHeaders = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1',
           'Origin': 'https://music.youtube.com',
           'Referer': 'https://music.youtube.com/'
         };
@@ -205,9 +205,13 @@ class MusicController {
         const upstreamRes = await fetch(streamInfo.directUrl, { headers: upstreamHeaders });
 
         res.status(upstreamRes.status);
-        res.setHeader('Content-Type', streamInfo.mimeType || 'audio/mp4');
+        res.setHeader('Content-Type', 'audio/mp4');
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
+
         if (upstreamRes.headers.get('content-range')) {
           res.setHeader('Content-Range', upstreamRes.headers.get('content-range'));
         }

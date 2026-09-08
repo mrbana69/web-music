@@ -8,8 +8,10 @@ router.get('/info', (req, res, next) => musicController.info(req, res, next));
 // /api/track
 router.get('/track', (req, res, next) => musicController.track(req, res, next));
 
-// /api/stream
+// /api/stream and iOS-friendly aliases
 router.get('/stream', (req, res, next) => musicController.stream(req, res, next));
+router.get('/stream.mp4', (req, res, next) => musicController.stream(req, res, next));
+router.get('/stream.m4a', (req, res, next) => musicController.stream(req, res, next));
 
 // /api/audio
 router.get('/audio', (req, res, next) => musicController.audio(req, res, next));

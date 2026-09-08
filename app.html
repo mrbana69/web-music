@@ -1419,10 +1419,10 @@ h1 { font-size: 34px; font-weight: 800; }
                 return streamUrlCache.get(trackId);
             }
 
-            // Always use our own /api/stream proxy endpoint for 100% reliable iOS Safari & Android background playback
+            // Always use .mp4 stream proxy URL for iOS AVPlayer & mobile background audio
             const result = {
                 trackId,
-                streamUrl: `/api/stream?id=${encodeURIComponent(videoId)}`,
+                streamUrl: `/api/stream.mp4?id=${encodeURIComponent(videoId)}`,
                 isDirectAudio: true,
                 mimeType: 'audio/mp4',
                 source: 'server-stream-proxy',
@@ -2154,27 +2154,27 @@ h1 { font-size: 34px; font-weight: 800; }
 
                 if (streamData.isDirectAudio && streamData.streamUrl) {
                     // Engine 1: Native HTML5 Audio (background & lock screen enabled)
-                    try {
-                        if (ytAudioPlayer && ytAudioPlayer.isInit) {
-                            ytAudioPlayer.pause();
-                        }
-                        nativeAudio.pause();
-                        nativeAudio.src = streamData.streamUrl;
-                        nativeAudio.load();
-                        const playPromise = nativeAudio.play();
-                        if (playPromise !== undefined) {
-                            await playPromise;
-                        }
-                        started = !nativeAudio.paused;
-                    } catch (nativeErr) {
-                        console.warn('Native audio direct stream error, fallback to YouTube embed:', nativeErr);
-                        try {
-                            nativeAudio.pause();
-                            nativeAudio.removeAttribute('src');
-                        } catch (_) {}
-                        ytAudioPlayer.loadVideo(streamData.videoId || currentTrack.id);
-                        started = true;
+                    if (ytAudioPlayer && ytAudioPlayer.isInit) {
+                        ytAudioPlayer.pause();
                     }
+                    if (nativeAudio.src !== streamData.streamUrl && !nativeAudio.src.endsWith(streamData.streamUrl)) {
+                        nativeAudio.src = streamData.streamUrl;
+                    }
+                    const playPromise = nativeAudio.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            state.isPlaying = true;
+                            updatePlayIcons();
+                        }).catch((nativeErr) => {
+                            console.warn('Native audio play error:', nativeErr);
+                            setTimeout(() => {
+                                if (nativeAudio.paused && state.isPlaying) {
+                                    nativeAudio.play().catch(() => {});
+                                }
+                            }, 300);
+                        });
+                    }
+                    started = true;
                 } else {
                     // Engine 2: YouTube Embed Bridge
                     try {
