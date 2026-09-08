@@ -1545,9 +1545,13 @@ h1 { font-size: 34px; font-weight: 800; }
             try {
                 const params = new URLSearchParams(window.location.search);
                 const token = params.get('access_token');
+                const refreshToken = params.get('refresh_token');
                 const provider = params.get('provider');
                 if (token && provider) {
                     localStorage.setItem(`${provider}_token`, token);
+                    if (refreshToken) {
+                        localStorage.setItem(`${provider}_refresh_token`, refreshToken);
+                    }
                     if (params.get('user_name')) {
                         localStorage.setItem(`${provider}_user`, params.get('user_name'));
                     }
@@ -1555,6 +1559,7 @@ h1 { font-size: 34px; font-weight: 800; }
                         sessionStorage.setItem('open_google_import_on_load', 'true');
                     }
                     params.delete('access_token');
+                    params.delete('refresh_token');
                     params.delete('provider');
                     params.delete('user_name');
                     const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');

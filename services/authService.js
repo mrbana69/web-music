@@ -168,6 +168,25 @@ class AuthService {
     };
   }
 
+  async refreshGoogleToken(refreshToken) {
+    if (!config.google.clientId || !config.google.clientSecret) {
+      return { access_token: 'demo_google_refreshed_token', expires_in: 3600 };
+    }
+
+    const body = new URLSearchParams({
+      client_id: config.google.clientId,
+      client_secret: config.google.clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
+    });
+
+    return await fetchJson('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+  }
+
   async getUserLibrary(accessToken) {
     if (!accessToken || accessToken === 'demo_google_access_token') {
       return {

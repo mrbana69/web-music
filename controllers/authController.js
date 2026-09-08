@@ -126,6 +126,7 @@ class AuthController {
       const tokenParams = new URLSearchParams({
         provider: 'google',
         access_token: tokenData.access_token || '',
+        refresh_token: tokenData.refresh_token || '',
         user_name: tokenData.user?.name || ''
       });
 
@@ -135,6 +136,20 @@ class AuthController {
       }
 
       return res.redirect(`/app?${tokenParams.toString()}`);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async googleRefresh(req, res, next) {
+    try {
+      const { refresh_token } = req.body || req.query || {};
+      if (!refresh_token) {
+        return res.status(400).json({ error: 'Missing refresh_token' });
+      }
+
+      const refreshed = await authService.refreshGoogleToken(refresh_token);
+      return res.status(200).json(refreshed);
     } catch (err) {
       next(err);
     }
