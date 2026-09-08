@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const config = require('../config/env');
 const cacheService = require('./cacheService');
 const { fetchJson } = require('../lib/httpClient');
@@ -6,51 +7,139 @@ const { getTrackById } = require('../lib/catalogData');
 class StreamResolutionService {
   constructor() {
     this.innertubeEndpoint = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+    this.ytmEndpoint = 'https://music.youtube.com/youtubei/v1/player';
+  }
+
+  /**
+   * Generates authentic SAPISIDHASH for YouTube Music
+   */
+  generateSapisidHash(cookieString, origin = 'https://music.youtube.com') {
+    if (!cookieString || typeof cookieString !== 'string') return null;
+    let sapisid = '';
+    const match1 = cookieString.match(/(?:__Secure-3PAPISID|SAPISID|__Secure-1PAPISID)=([^;]+)/i);
+    if (match1 && match1[1]) {
+      sapisid = match1[1].trim();
+    } else if (cookieString.length >= 20 && !cookieString.includes('=')) {
+      sapisid = cookieString.trim();
+    }
+    if (!sapisid) return null;
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const sha1 = crypto.createHash('sha1');
+    sha1.update(`${timestamp} ${sapisid} ${origin}`);
+    const hash = sha1.digest('hex');
+    return `SAPISIDHASH ${timestamp}_${hash}`;
   }
 
   /**
    * Extract direct YouTube audio stream directly from Google's YouTube CDN with ultra-fast parallel requests
    */
-  async extractDirectYouTubeStream(videoId) {
+  async extractDirectYouTubeStream(videoId, userCookie = null) {
+    const activeCookie = userCookie || config.youtubeMusic.cookie || '';
+    const sapisidHash = this.generateSapisidHash(activeCookie);
+
     const clients = [
+      ...(activeCookie ? [
+        {
+          name: 'YTM_AUTHENTICATED',
+          endpoint: this.ytmEndpoint,
+          client: {
+            clientName: 'WEB_REMIX',
+            clientVersion: '1.20241101.01.00',
+            hl: 'en',
+            gl: 'US'
+          },
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+            'Origin': 'https://music.youtube.com',
+            'Referer': 'https://music.youtube.com/',
+            'Cookie': activeCookie,
+            ...(sapisidHash ? { 'Authorization': sapisidHash } : {})
+          }
+        },
+        {
+          name: 'IOS_AUTHENTICATED',
+          endpoint: this.innertubeEndpoint,
+          client: {
+            clientName: 'IOS',
+            clientVersion: '19.45.4',
+            deviceModel: 'iPhone16,2',
+            hl: 'en',
+            gl: 'US'
+          },
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X; en_US)',
+            'Cookie': activeCookie,
+            ...(sapisidHash ? { 'Authorization': sapisidHash } : {})
+          }
+        }
+      ] : []),
       {
-        clientName: 'IOS',
-        clientVersion: '19.45.4',
-        deviceModel: 'iPhone16,2',
-        userAgent: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X; en_US)'
+        name: 'ANDROID_VR',
+        endpoint: this.innertubeEndpoint,
+        client: {
+          clientName: 'ANDROID_VR',
+          clientVersion: '1.50.28',
+          androidSdkVersion: 30,
+          hl: 'en',
+          gl: 'US'
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Origin': 'https://music.youtube.com'
+        }
       },
       {
-        clientName: 'ANDROID_MUSIC',
-        clientVersion: '6.43.52',
-        androidSdkVersion: 34
+        name: 'ANDROID_MUSIC',
+        endpoint: this.innertubeEndpoint,
+        client: {
+          clientName: 'ANDROID_MUSIC',
+          clientVersion: '6.43.52',
+          androidSdkVersion: 34,
+          hl: 'en',
+          gl: 'US'
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Origin': 'https://music.youtube.com'
+        }
       },
       {
-        clientName: 'ANDROID_VR',
-        clientVersion: '1.50.28',
-        androidSdkVersion: 30
-      },
-      {
-        clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-        clientVersion: '2.0'
+        name: 'TV_EMBEDDED',
+        endpoint: this.innertubeEndpoint,
+        client: {
+          clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+          clientVersion: '2.0',
+          hl: 'en',
+          gl: 'US'
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1',
+          'Origin': 'https://music.youtube.com'
+        }
       }
     ];
 
-    const fetchClient = async (client) => {
+    const fetchClient = async (entry) => {
       try {
         const payload = {
-          context: { client: { ...client, hl: 'en', gl: 'US' } },
+          context: { client: entry.client },
           videoId
         };
 
-        const res = await fetchJson(this.innertubeEndpoint, {
+        const res = await fetchJson(entry.endpoint || this.innertubeEndpoint, {
           method: 'POST',
-          headers: {
+          headers: entry.headers || {
             'Content-Type': 'application/json',
-            'User-Agent': client.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Origin': 'https://music.youtube.com'
           },
           body: JSON.stringify(payload),
-          timeout: 1800
+          timeout: 2500
         });
 
         const formats = [
@@ -78,7 +167,7 @@ class StreamResolutionService {
       }
     };
 
-    // Run in parallel with fast 1.8s timeout
+    // Run in parallel with fast timeout
     const results = await Promise.allSettled(clients.map(c => fetchClient(c)));
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value) {
@@ -92,7 +181,7 @@ class StreamResolutionService {
   /**
    * Resolve a videoId into a direct playable audio stream URL
    */
-  async resolveStreamUrl(videoId) {
+  async resolveStreamUrl(videoId, userCookie = null) {
     if (!videoId) {
       throw new Error('Missing videoId for stream resolution');
     }
@@ -118,7 +207,7 @@ class StreamResolutionService {
     }
 
     // 2. Extract directly from YouTube Google CDN (zero third-party mirrors)
-    const directStream = await this.extractDirectYouTubeStream(videoId);
+    const directStream = await this.extractDirectYouTubeStream(videoId, userCookie);
     if (directStream && directStream.url) {
       const result = {
         videoId,

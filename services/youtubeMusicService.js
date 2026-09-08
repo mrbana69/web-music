@@ -35,9 +35,10 @@ class YouTubeMusicService {
 
   /**
    * Build complete headers for YouTube Music Innertube API
+   * allowServerFallback: only true when making generic searches/streams, false for user feeds
    */
-  buildInnertubeHeaders(userCookie = null) {
-    const activeCookie = userCookie || this.cookie || '';
+  buildInnertubeHeaders(userCookie = null, allowServerFallback = false) {
+    const activeCookie = userCookie || (allowServerFallback ? this.cookie : '') || '';
     const headers = {
       'Content-Type': 'application/json',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
@@ -1066,7 +1067,8 @@ class YouTubeMusicService {
     // 2. If Cookie session is passed or if quickPicks is empty, query Innertube browse FEmusic_home
     if (quickPicks.length < limit) {
       try {
-        const headers = this.buildInnertubeHeaders(authParam && authParam.includes('=') ? authParam : null);
+        const userProvidedCookie = authParam && authParam.includes('=') ? authParam : null;
+        const headers = this.buildInnertubeHeaders(userProvidedCookie, false);
         const payload = {
           context: {
             client: {
@@ -1086,6 +1088,10 @@ class YouTubeMusicService {
           timeout: 7000
         });
 
+        const sectionPattern = isPersonalized
+          ? /scelte rapide|quick picks|listen again|di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta|heavy rotation|mix per te|mixed for you/i
+          : /in primo piano|hit del momento|tendenze|classifiche|nuove uscite|popolari|scelte rapide|quick picks/i;
+
         const traverse = (node) => {
           if (!node || typeof node !== 'object') return;
           if (node.musicCarouselShelfRenderer) {
@@ -1096,7 +1102,7 @@ class YouTubeMusicService {
               return;
             }
 
-            if (/scelte rapide|quick picks|listen again|di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta|heavy rotation|mix per te|mixed for you/i.test(headerText)) {
+            if (sectionPattern.test(headerText)) {
               const contents = node.musicCarouselShelfRenderer.contents || [];
               for (const item of contents) {
                 const renderer = item.musicResponsiveListItemRenderer || item.musicTwoRowItemRenderer;
@@ -1181,7 +1187,7 @@ class YouTubeMusicService {
     if (cached) return cached;
 
     try {
-      const headers = this.buildInnertubeHeaders(userCookie);
+      const headers = this.buildInnertubeHeaders(userCookie, false);
       const browsePayload = {
         context: {
           client: {
