@@ -1,0 +1,40 @@
+﻿name: Build iOS App (IPA)
+
+on:
+  push:
+    branches: [ ios ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build iOS Release IPA
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build iOS Framework & App
+        run: flutter build ios --release --no-codesign
+
+      - name: Package Unsigned IPA for Sideloading
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r -9 Preluded-iOS.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Preluded-iOS-IPA
+          path: Preluded-iOS.ipa
+          retention-days: 14
