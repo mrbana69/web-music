@@ -7,4 +7,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .vercel
+server.log
+src-tauri/target/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
 
