@@ -107,7 +107,7 @@ class StreamResolutionService {
 
     // 1. Check local catalog
     const demoTrack = getTrackById(videoId);
-    if (demoTrack && demoTrack.streamUrl && !demoTrack.streamUrl.includes('soundhelix')) {
+    if (demoTrack && demoTrack.streamUrl) {
       const result = {
         videoId,
         directUrl: demoTrack.streamUrl,

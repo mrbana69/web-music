@@ -11,6 +11,9 @@ router.get('/track', (req, res, next) => musicController.track(req, res, next));
 // /api/stream
 router.get('/stream', (req, res, next) => musicController.stream(req, res, next));
 
+// /api/audio
+router.get('/audio', (req, res, next) => musicController.audio(req, res, next));
+
 // /api/mix
 router.get('/mix', (req, res, next) => musicController.mix(req, res, next));
 

@@ -9,4 +9,7 @@ yarn-error.log*
 .vercel
 native-docs/
 dist/
+*.log
+*-player-script.js
+src-tauri/
 

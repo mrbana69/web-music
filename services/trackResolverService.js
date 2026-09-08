@@ -42,7 +42,7 @@ class TrackResolverService {
 
     // If it's a known demo track ID
     const demoMatch = getTrackById(id);
-    if (demoMatch && (!title || demoMatch.title.toLowerCase() === title.toLowerCase())) {
+    if (demoMatch && (!title || title === id || demoMatch.title.toLowerCase() === title.toLowerCase())) {
       const result = {
         videoId: demoMatch.id,
         title: demoMatch.title,
