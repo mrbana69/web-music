@@ -133,12 +133,78 @@ class MusicController {
   }
 
   /**
+   * GET /api/audio - Extract direct audio stream URL with ytdl / stream resolver
+   */
+  async audio(req, res, next) {
+    try {
+      const { id, videoId } = req.query || {};
+      const targetId = id || videoId;
+      if (!targetId) {
+        return res.status(400).json({ error: 'Missing id' });
+      }
+
+      const authHeader = req.headers.authorization || '';
+      const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
+      const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
+
+      let resolvedVideoId = targetId;
+      try {
+        const resolved = await trackResolverService.resolveTrack({ id: targetId, title: targetId });
+        if (resolved && resolved.videoId) resolvedVideoId = resolved.videoId;
+      } catch (_) {}
+
+      // 1. Try streamResolutionService
+      const streamInfo = await streamResolutionService.resolveStreamUrl(resolvedVideoId, userCookie);
+      if (streamInfo && streamInfo.directUrl && !streamInfo.directUrl.includes('youtube.com/watch')) {
+        return res.status(200).json({
+          url: streamInfo.directUrl,
+          directUrl: streamInfo.directUrl,
+          mimeType: streamInfo.mimeType || 'audio/mp4',
+          source: streamInfo.source || 'innertube',
+          videoId: resolvedVideoId,
+          trackId: targetId
+        });
+      }
+
+      // 2. Try @distube/ytdl-core
+      try {
+        const ytdl = require('@distube/ytdl-core');
+        const info = await ytdl.getInfo(resolvedVideoId);
+        const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+        if (format && format.url) {
+          return res.status(200).json({
+            url: format.url,
+            directUrl: format.url,
+            mimeType: format.mimeType ? format.mimeType.split(';')[0] : 'audio/mp4',
+            source: 'ytdl',
+            videoId: resolvedVideoId,
+            trackId: targetId
+          });
+        }
+      } catch (_) {}
+
+      return res.status(404).json({
+        error: 'Direct stream not available',
+        fallback: 'youtube-embed',
+        videoId: resolvedVideoId,
+        trackId: targetId
+      });
+    } catch (err) {
+      if (!res.headersSent) {
+        return res.status(500).json({ error: err.message, fallback: 'youtube-embed', videoId: req.query?.id });
+      }
+      next(err);
+    }
+  }
+
+  /**
    * GET /api/stream - Direct audio stream redirection / proxy for mobile background playback
    */
   async stream(req, res, next) {
     try {
-      const { id, proxy } = req.query || {};
-      if (!id) {
+      const { id, videoId, proxy } = req.query || {};
+      const targetId = id || videoId;
+      if (!targetId) {
         return res.status(400).json({ error: 'Missing track id' });
       }
 
@@ -146,8 +212,13 @@ class MusicController {
       const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
       const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
 
-      const resolved = await trackResolverService.resolveTrack({ id, title: id });
-      const streamInfo = await streamResolutionService.resolveStreamUrl(resolved.videoId, userCookie);
+      let resolvedVideoId = targetId;
+      try {
+        const resolved = await trackResolverService.resolveTrack({ id: targetId, title: targetId });
+        if (resolved && resolved.videoId) resolvedVideoId = resolved.videoId;
+      } catch (_) {}
+
+      const streamInfo = await streamResolutionService.resolveStreamUrl(resolvedVideoId, userCookie);
 
       if (streamInfo && streamInfo.directUrl && !streamInfo.directUrl.includes('youtube.com/watch')) {
         // If HTTP Range request or explicit proxy requested, pipe the audio stream directly
@@ -181,7 +252,19 @@ class MusicController {
         return res.redirect(302, streamInfo.directUrl);
       }
 
+      // If no direct stream available, respond immediately with structured 404 (NEVER HANG)
+      return res.status(404).json({
+        ok: false,
+        error: 'Direct stream not available',
+        fallback: 'youtube-embed',
+        videoId: resolvedVideoId,
+        trackId: targetId
+      });
+
     } catch (err) {
+      if (!res.headersSent) {
+        return res.status(500).json({ error: err.message, fallback: 'youtube-embed' });
+      }
       next(err);
     }
   }

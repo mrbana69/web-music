@@ -1399,52 +1399,85 @@ h1 { font-size: 34px; font-weight: 800; }
                 throw new Error("Dati brano non validi");
             }
             const trackId = track.id;
+            const videoId = track.videoId || track.id;
             if (streamUrlCache.has(trackId)) {
                 return streamUrlCache.get(trackId);
             }
 
-            const manifestRes = await apiFetch(`/track?id=${encodeURIComponent(trackId)}&quality=LOSSLESS`);
-            if (!manifestRes.ok) {
-                throw new Error(`Risoluzione brano fallita: ${manifestRes.status}`);
-            }
-            const manifestData = await manifestRes.json();
-
-            let streamUrl = manifestData.directUrl || null;
-            let mimeType = manifestData.mimeType || 'audio/mp4';
-            let source = manifestData.source || 'api';
-            let videoId = manifestData.videoId || track.videoId || track.id;
-
-            // Backward compatibility if directUrl wasn't at top level
-            if (!streamUrl && manifestData.data?.manifest) {
-                try {
-                    const streamManifest = JSON.parse(atob(manifestData.data.manifest));
-                    if (streamManifest.urls && streamManifest.urls.length > 0) {
-                        streamUrl = streamManifest.urls[0];
+            // 1. Prova il proxy per l'URL audio diretto (/api/audio)
+            try {
+                const audioRes = await apiFetch(`/audio?id=${encodeURIComponent(videoId)}`);
+                if (audioRes.ok) {
+                    const audioData = await audioRes.json();
+                    if (audioData && (audioData.url || audioData.directUrl)) {
+                        const streamUrl = audioData.url || audioData.directUrl;
+                        if (!streamUrl.includes('youtube.com/watch')) {
+                            const result = {
+                                trackId,
+                                streamUrl,
+                                isDirectAudio: true,
+                                mimeType: audioData.mimeType || 'audio/mp4',
+                                source: audioData.source || 'proxy',
+                                videoId
+                            };
+                            streamUrlCache.set(trackId, result);
+                            setTimeout(() => streamUrlCache.delete(trackId), 10 * 60 * 1000);
+                            return result;
+                        }
                     }
-                } catch (e) {
-                    console.warn("Decodifica manifest fallback:", e);
                 }
+            } catch (e) {
+                console.warn('Proxy /api/audio fallito, tento endpoint /track:', e);
             }
 
-            if (!streamUrl || streamUrl.includes('youtube.com/watch')) {
-                streamUrl = `${APP_SERVER_ORIGIN}/api/stream?id=${encodeURIComponent(trackId)}`;
+            // 2. Prova l'endpoint /api/track
+            try {
+                const manifestRes = await apiFetch(`/track?id=${encodeURIComponent(trackId)}&quality=LOSSLESS`);
+                if (manifestRes.ok) {
+                    const manifestData = await manifestRes.json();
+                    let streamUrl = manifestData.directUrl || null;
+                    let mimeType = manifestData.mimeType || 'audio/mp4';
+                    let source = manifestData.source || 'api';
+
+                    if (!streamUrl && manifestData.data?.manifest) {
+                        try {
+                            const streamManifest = JSON.parse(atob(manifestData.data.manifest));
+                            if (streamManifest.urls && streamManifest.urls.length > 0) {
+                                streamUrl = streamManifest.urls[0];
+                            }
+                        } catch (_) {}
+                    }
+
+                    if (streamUrl && !streamUrl.includes('youtube.com/watch')) {
+                        const result = {
+                            trackId,
+                            streamUrl,
+                            isDirectAudio: true,
+                            mimeType,
+                            source,
+                            videoId
+                        };
+                        streamUrlCache.set(trackId, result);
+                        setTimeout(() => streamUrlCache.delete(trackId), 10 * 60 * 1000);
+                        return result;
+                    }
+                }
+            } catch (e) {
+                console.warn('Risoluzione /track fallita:', e);
             }
 
-            const isDirectAudio = true;
-            const result = {
+            // 3. Fallback a YouTube embed bridge
+            const fallbackResult = {
                 trackId,
-                streamUrl,
-                mimeType: mimeType || 'audio/mp4',
-                source,
-                videoId,
-                isDirectAudio
+                streamUrl: null,
+                isDirectAudio: false,
+                mimeType: 'audio/mp4',
+                source: 'youtube-embed-bridge',
+                videoId
             };
-
-            // Cache for 10 minutes to speed up repeats and pre-fetching
-            streamUrlCache.set(trackId, result);
-            setTimeout(() => streamUrlCache.delete(trackId), 10 * 60 * 1000);
-
-            return result;
+            streamUrlCache.set(trackId, fallbackResult);
+            setTimeout(() => streamUrlCache.delete(trackId), 5 * 60 * 1000);
+            return fallbackResult;
         }
 
         function prefetchNextTrack() {
@@ -1925,51 +1958,86 @@ h1 { font-size: 34px; font-weight: 800; }
         });
 
         // Background & Visibility Change Handler for Mobile PWA (iOS Safari & Android)
-        let bgWasPlaying = false;
-        let bgSavedTime = 0;
+        let savedState = { time: 0, wasPlaying: false, trackId: null };
 
-        document.addEventListener('visibilitychange', () => {
+        document.addEventListener('visibilitychange', async () => {
             if (document.hidden) {
-                bgSavedTime = nativeAudio.currentTime || 0;
-                bgWasPlaying = !nativeAudio.paused && state.isPlaying;
-                if ('mediaSession' in navigator && bgWasPlaying) {
+                // Stiamo andando in background / schermo bloccato
+                const player = getActiveAudioPlayer();
+                savedState.time = (player && typeof player.currentTime === 'number') ? player.currentTime : (nativeAudio.currentTime || ytAudioPlayer.getCurrentTime() || 0);
+                savedState.wasPlaying = state.isPlaying && (!nativeAudio.paused || (ytAudioPlayer.isInit && !ytAudioPlayer.paused));
+                savedState.trackId = state.queue[state.currentIndex]?.id || null;
+                if ('mediaSession' in navigator && savedState.wasPlaying) {
                     navigator.mediaSession.playbackState = 'playing';
                 }
             } else {
-                if (bgWasPlaying) {
-                    if (nativeAudio.paused) {
-                        nativeAudio.play().then(() => {
+                // Tornati in primo piano / schermo sbloccato
+                if (savedState.wasPlaying && savedState.trackId) {
+                    const currentTrack = state.queue[state.currentIndex];
+                    if (currentTrack && currentTrack.id === savedState.trackId) {
+                        if (nativeAudio.src && !nativeAudio.paused) {
+                            // L'audio nativo ha continuato a suonare in background!
                             state.isPlaying = true;
                             updatePlayIcons();
-                        }).catch((err) => {
-                            console.warn('[Audio] Background resume required user interaction:', err);
-                            showResumeBanner();
-                        });
+                        } else if (nativeAudio.src && nativeAudio.paused) {
+                            // L'audio nativo è stato messo in pausa dal browser, tenta resume
+                            if (savedState.time > 0) {
+                                try { nativeAudio.currentTime = savedState.time; } catch (_) {}
+                            }
+                            nativeAudio.play().then(() => {
+                                state.isPlaying = true;
+                                updatePlayIcons();
+                            }).catch(() => showResumeButton());
+                        } else if (ytAudioPlayer.isInit) {
+                            // YouTube bridge era sospeso: riprendi e sincronizza tempo
+                            ytAudioPlayer.play();
+                            if (savedState.time > 0) {
+                                try { ytAudioPlayer.seekTo(savedState.time); } catch (_) {}
+                            }
+                            setTimeout(() => {
+                                if (ytAudioPlayer.paused && state.isPlaying) {
+                                    showResumeButton();
+                                }
+                            }, 400);
+                        }
                     }
-                    if (state.isPlaying && !wakeLock) {
-                        requestWakeLock();
-                    }
+                    savedState.wasPlaying = false;
+                }
+                if (state.isPlaying && !wakeLock) {
+                    requestWakeLock();
                 }
             }
         });
 
-        function showResumeBanner() {
-            let banner = document.getElementById('resumeAudioBanner');
-            if (!banner) {
-                banner = document.createElement('div');
-                banner.id = 'resumeAudioBanner';
-                banner.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1ed760;color:#000000;padding:10px 20px;border-radius:25px;font-weight:700;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,0.6);z-index:9999;cursor:pointer;display:flex;align-items:center;gap:8px;animation:fadeIn 0.2s ease;';
-                banner.innerHTML = '<span>▶ Riprendi riproduzione</span>';
-                banner.onclick = () => {
-                    nativeAudio.play().then(() => {
-                        banner.remove();
-                        state.isPlaying = true;
-                        updatePlayIcons();
-                    }).catch(() => banner.remove());
-                };
-                document.body.appendChild(banner);
-                setTimeout(() => banner && banner.remove(), 8000);
-            }
+        function showResumeButton() {
+            let btn = document.getElementById('resumeAudioBanner');
+            if (btn) btn.remove();
+            btn = document.createElement('button');
+            btn.id = 'resumeAudioBanner';
+            btn.innerHTML = '<span>▶ Riprendi riproduzione</span>';
+            btn.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg, #FA2D48 0%, #FF6B00 100%);color:#ffffff;padding:12px 26px;border:none;border-radius:30px;font-weight:700;font-size:15px;box-shadow:0 8px 25px rgba(250,45,72,0.45);z-index:99999;cursor:pointer;display:flex;align-items:center;gap:8px;animation:fadeIn 0.25s ease;font-family:Inter,-apple-system,sans-serif;';
+            btn.onclick = async () => {
+                const currentTrack = state.queue[state.currentIndex];
+                if (nativeAudio.src) {
+                    if (savedState.time > 0) {
+                        try { nativeAudio.currentTime = savedState.time; } catch (_) {}
+                    }
+                    await nativeAudio.play().catch(() => {});
+                } else if (ytAudioPlayer.isInit) {
+                    ytAudioPlayer.play();
+                    if (savedState.time > 0) {
+                        try { ytAudioPlayer.seekTo(savedState.time); } catch (_) {}
+                    }
+                } else if (currentTrack) {
+                    playTrack(currentTrack, true);
+                }
+                state.isPlaying = true;
+                updatePlayIcons();
+                btn.remove();
+                savedState.wasPlaying = false;
+            };
+            document.body.appendChild(btn);
+            setTimeout(() => btn && btn.remove(), 8000);
         }
 
         // --- 3. UI Interactions ---
@@ -2149,40 +2217,43 @@ h1 { font-size: 34px; font-weight: 800; }
                 const streamData = await resolveTrackAudio(currentTrack);
                 state.currentStreamUrl = streamData.streamUrl;
 
-                const isWatchUrl = streamData.streamUrl && streamData.streamUrl.includes('youtube.com/watch');
-                const directPlayUrl = (!isWatchUrl && streamData.streamUrl) ? streamData.streamUrl : `${APP_SERVER_ORIGIN}/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
-
-                // 1. Play Native HTML5 Audio
-                try {
-                    nativeAudio.pause();
-                    nativeAudio.src = directPlayUrl;
-                    nativeAudio.load();
-                    const playPromise = nativeAudio.play();
-                    if (playPromise !== undefined) {
-                        await playPromise;
-                    }
-                    started = !nativeAudio.paused;
-                } catch (playError) {
-                    console.warn('Native audio direct stream error, trying proxy stream:', playError);
+                if (streamData.isDirectAudio && streamData.streamUrl) {
+                    // Engine 1: Native HTML5 Audio (background & lock screen enabled)
                     try {
-                        const proxyUrl = `${APP_SERVER_ORIGIN}/api/stream?id=${encodeURIComponent(currentTrack.id)}&proxy=true`;
-                        if (nativeAudio.src !== proxyUrl) {
-                            nativeAudio.src = proxyUrl;
-                            nativeAudio.load();
-                            await nativeAudio.play();
-                            started = !nativeAudio.paused;
+                        if (ytAudioPlayer && ytAudioPlayer.isInit) {
+                            ytAudioPlayer.pause();
                         }
-                    } catch(proxyErr) {
-                        console.warn('Proxy stream failed:', proxyErr);
+                        nativeAudio.pause();
+                        nativeAudio.src = streamData.streamUrl;
+                        nativeAudio.load();
+                        const playPromise = nativeAudio.play();
+                        if (playPromise !== undefined) {
+                            await playPromise;
+                        }
+                        started = !nativeAudio.paused;
+                    } catch (nativeErr) {
+                        console.warn('Native audio direct stream error, fallback to YouTube embed:', nativeErr);
+                        try {
+                            nativeAudio.pause();
+                            nativeAudio.removeAttribute('src');
+                        } catch (_) {}
+                        ytAudioPlayer.loadVideo(streamData.videoId || currentTrack.id);
+                        started = true;
                     }
+                } else {
+                    // Engine 2: YouTube Embed Bridge
+                    try {
+                        nativeAudio.pause();
+                        nativeAudio.removeAttribute('src');
+                    } catch (_) {}
+                    ytAudioPlayer.loadVideo(streamData.videoId || currentTrack.id);
+                    started = true;
                 }
 
                 state.isPlaying = started;
                 if (started) {
                     requestWakeLock();
                     prefetchNextTrack();
-                } else {
-                    showToast('Impossibile avviare il brano.', 3000, 'error');
                 }
                 updatePlayIcons();
 

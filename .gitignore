@@ -10,4 +10,5 @@ yarn-error.log*
 dist/
 src-tauri/target/
 *.log
+*-player-script.js
 
