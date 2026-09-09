@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/track.dart';
 import '../theme/app_theme.dart';
-import 'glass_container.dart';
 
 class QuickPickCard extends StatelessWidget {
   final Track track;

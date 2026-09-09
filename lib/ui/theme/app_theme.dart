@@ -45,7 +45,6 @@ class AppTheme {
         primary: primaryAccent,
         secondary: primaryAccentLight,
         surface: surface,
-        background: background,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,

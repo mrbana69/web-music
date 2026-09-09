@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/player_state.dart';
 import '../theme/app_theme.dart';
-import '../widgets/glass_container.dart';
 
 class LyricsView extends StatefulWidget {
   const LyricsView({super.key});

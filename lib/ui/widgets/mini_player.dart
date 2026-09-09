@@ -98,7 +98,7 @@ class MiniPlayer extends StatelessWidget {
                                   style: const TextStyle(
                                     color: AppTheme.textPrimary,
                                     fontSize: 14,
-                                    fontWeight: FontWeight.w640,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                   scrollAxis: Axis.horizontal,
                                   blankSpace: 30.0,

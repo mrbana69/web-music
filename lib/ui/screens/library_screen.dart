@@ -301,7 +301,7 @@ class LibraryScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Incolla il valore del cookie SAPISID per sbloccare l'estrazione audio diretta e le tue Scelte Rapide:',
+              "Incolla il valore del cookie SAPISID per sbloccare l'estrazione audio diretta e le tue Scelte Rapide:",
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 12),

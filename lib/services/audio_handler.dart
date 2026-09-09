@@ -18,7 +18,7 @@ Future<AudioHandler> initAudioService(ApiService apiService, StorageService stor
   );
 }
 
-class PreludedAudioHandler extends BaseAudioHandler with QueueAudioHandler, SeekHandler {
+class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
   final ApiService _api;
   final StorageService _storage;
   final AudioPlayer _player = AudioPlayer();

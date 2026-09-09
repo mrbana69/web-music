@@ -13,4 +13,6 @@ src-tauri/target/
 .flutter-plugins
 .flutter-plugins-dependencies
 build/
-
+android/.gradle/
+android/local.properties
+*.apk

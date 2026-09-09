@@ -5,7 +5,6 @@ import '../../services/api_service.dart';
 import '../../models/track.dart';
 import '../../models/artist.dart';
 import '../../models/album.dart';
-import '../../providers/player_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/track_tile.dart';
 

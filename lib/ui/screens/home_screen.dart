@@ -126,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (library.history.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: SectionHeader(
-                    title: 'Di nuovo all'ascolto',
+                    title: "Di nuovo all'ascolto",
                     subtitle: 'I tuoi ascolti recenti',
                   ),
                 ),
