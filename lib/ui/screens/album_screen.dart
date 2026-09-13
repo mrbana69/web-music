@@ -79,6 +79,8 @@ class _AlbumScreenState extends State<AlbumScreen> {
                   CachedNetworkImage(
                     imageUrl: _album.coverUrl,
                     fit: BoxFit.cover,
+                    memCacheWidth: 400,
+                    memCacheHeight: 400,
                     errorWidget: (c, u, e) => Container(
                       color: AppTheme.surfaceContainerHighest,
                       child: const Icon(Icons.album_rounded, size: 64, color: AppTheme.textSecondary),

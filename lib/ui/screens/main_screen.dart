@@ -24,6 +24,40 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isApple = Theme.of(context).platform == TargetPlatform.iOS || Theme.of(context).platform == TargetPlatform.macOS;
+
+    Widget navContainer = Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceContainerLowest.withOpacity(isApple ? 0.85 : 0.96),
+        border: Border(top: BorderSide(color: AppTheme.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (index) => setState(() => _currentIndex = index),
+          backgroundColor: Colors.transparent,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.search_rounded),
+              selectedIcon: Icon(Icons.search_rounded),
+              label: 'Cerca',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.library_music_outlined),
+              selectedIcon: Icon(Icons.library_music_rounded),
+              label: 'Libreria',
+            ),
+          ],
+        ),
+      ),
+    );
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: Stack(
@@ -40,42 +74,14 @@ class _MainScreenState extends State<MainScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const MiniPlayer(),
-                ClipRRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceContainerLowest.withOpacity(0.85),
-                        border: Border(top: BorderSide(color: AppTheme.border)),
-                      ),
-                      child: SafeArea(
-                        top: false,
-                        child: NavigationBar(
-                          selectedIndex: _currentIndex,
-                          onDestinationSelected: (index) => setState(() => _currentIndex = index),
-                          backgroundColor: Colors.transparent,
-                          destinations: const [
-                            NavigationDestination(
-                              icon: Icon(Icons.home_outlined),
-                              selectedIcon: Icon(Icons.home_rounded),
-                              label: 'Home',
-                            ),
-                            NavigationDestination(
-                              icon: Icon(Icons.search_rounded),
-                              selectedIcon: Icon(Icons.search_rounded),
-                              label: 'Cerca',
-                            ),
-                            NavigationDestination(
-                              icon: Icon(Icons.library_music_outlined),
-                              selectedIcon: Icon(Icons.library_music_rounded),
-                              label: 'Libreria',
-                            ),
-                          ],
+                isApple
+                    ? ClipRRect(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                          child: navContainer,
                         ),
-                      ),
-                    ),
-                  ),
-                ),
+                      )
+                    : navContainer,
               ],
             ),
           ),

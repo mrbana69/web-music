@@ -19,7 +19,6 @@ class _LyricsViewState extends State<LyricsView> {
   Widget build(BuildContext context) {
     final player = context.watch<PlayerState>();
     final lyrics = player.lyrics;
-    final currentMs = player.position.inMilliseconds;
 
     if (player.isLoadingLyrics) {
       return Center(
@@ -86,90 +85,96 @@ class _LyricsViewState extends State<LyricsView> {
 
     // If synced karaoke lyrics are available
     if (lyrics.isSynced) {
-      final activeIndex = lyrics.findActiveIndex(currentMs);
+      return ValueListenableBuilder<Duration>(
+        valueListenable: player.positionNotifier,
+        builder: (context, pos, _) {
+          final currentMs = pos.inMilliseconds;
+          final activeIndex = lyrics.findActiveIndex(currentMs);
 
-      // Auto-scroll to active line
-      if (activeIndex != _lastActiveIndex && activeIndex >= 0) {
-        _lastActiveIndex = activeIndex;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            final targetOffset = (activeIndex * 60.0) - 140.0;
-            _scrollController.animateTo(
-              targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic,
-            );
-          }
-        });
-      }
-
-      return Column(
-        children: [
-          // Translation toggle if available
-          if (lyrics.translation != null && lyrics.translation!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  FilterChip(
-                    label: const Text('Traduzione'),
-                    selected: _showTranslation,
-                    onSelected: (val) => setState(() => _showTranslation = val),
-                    backgroundColor: AppTheme.surfaceContainerLow,
-                    selectedColor: AppTheme.primaryAccent,
-                    labelStyle: AppTheme.inter(
-                      color: _showTranslation ? Colors.white : AppTheme.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                ],
-              ),
-            ),
-
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-              itemCount: lyrics.syncedLines.length,
-              itemBuilder: (context, i) {
-                final line = lyrics.syncedLines[i];
-                final isActive = i == activeIndex;
-                final isPassed = i < activeIndex;
-
-                return InkWell(
-                  onTap: () {
-                    player.seek(Duration(milliseconds: line.timestampMs));
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isActive ? player.ambientColor.withOpacity(0.18) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      line.text,
-                      style: AppTheme.syne(
-                        color: isActive
-                            ? Colors.white
-                            : (isPassed ? Colors.white.withOpacity(0.45) : Colors.white.withOpacity(0.25)),
-                        fontSize: isActive ? 20 : 15.5,
-                        fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                  ),
+          // Auto-scroll to active line
+          if (activeIndex != _lastActiveIndex && activeIndex >= 0) {
+            _lastActiveIndex = activeIndex;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_scrollController.hasClients) {
+                final targetOffset = (activeIndex * 60.0) - 140.0;
+                _scrollController.animateTo(
+                  targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOutCubic,
                 );
-              },
-            ),
-          ),
-        ],
+              }
+            });
+          }
+
+          return Column(
+            children: [
+              // Translation toggle if available
+              if (lyrics.translation != null && lyrics.translation!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      FilterChip(
+                        label: const Text('Traduzione'),
+                        selected: _showTranslation,
+                        onSelected: (val) => setState(() => _showTranslation = val),
+                        backgroundColor: AppTheme.surfaceContainerLow,
+                        selectedColor: AppTheme.primaryAccent,
+                        labelStyle: AppTheme.inter(
+                          color: _showTranslation ? Colors.white : AppTheme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                    ],
+                  ),
+                ),
+
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                  itemCount: lyrics.syncedLines.length,
+                  itemBuilder: (context, i) {
+                    final line = lyrics.syncedLines[i];
+                    final isActive = i == activeIndex;
+                    final isPassed = i < activeIndex;
+
+                    return InkWell(
+                      onTap: () {
+                        player.seek(Duration(milliseconds: line.timestampMs));
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isActive ? player.ambientColor.withOpacity(0.18) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          line.text,
+                          style: AppTheme.syne(
+                            color: isActive
+                                ? Colors.white
+                                : (isPassed ? Colors.white.withOpacity(0.45) : Colors.white.withOpacity(0.25)),
+                            fontSize: isActive ? 20 : 15.5,
+                            fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
       );
     }
 

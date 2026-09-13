@@ -20,10 +20,6 @@ class MiniPlayer extends StatelessWidget {
     final library = context.watch<LibraryState>();
     final isLiked = library.isLiked(track.id);
 
-    final progress = player.duration.inMilliseconds > 0
-        ? (player.position.inMilliseconds / player.duration.inMilliseconds).clamp(0.0, 1.0)
-        : 0.0;
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: GestureDetector(
@@ -89,6 +85,8 @@ class MiniPlayer extends StatelessWidget {
                         child: CachedNetworkImage(
                           imageUrl: track.coverUrl,
                           fit: BoxFit.cover,
+                          memCacheWidth: 120,
+                          memCacheHeight: 120,
                           placeholder: (c, u) => Container(color: AppTheme.surfaceContainerLowest),
                           errorWidget: (c, u, e) => Container(
                             color: AppTheme.surfaceContainerLowest,
@@ -205,11 +203,19 @@ class MiniPlayer extends StatelessWidget {
               ),
 
               // 6. Micro Progress Indicator
-              LinearProgressIndicator(
-                value: progress,
-                minHeight: 2.5,
-                backgroundColor: Colors.white.withOpacity(0.06),
-                valueColor: AlwaysStoppedAnimation<Color>(player.ambientColor),
+              ValueListenableBuilder<Duration>(
+                valueListenable: player.positionNotifier,
+                builder: (context, pos, _) {
+                  final progress = player.duration.inMilliseconds > 0
+                      ? (pos.inMilliseconds / player.duration.inMilliseconds).clamp(0.0, 1.0)
+                      : 0.0;
+                  return LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 2.5,
+                    backgroundColor: Colors.white.withOpacity(0.06),
+                    valueColor: AlwaysStoppedAnimation<Color>(player.ambientColor),
+                  );
+                },
               ),
             ],
           ),

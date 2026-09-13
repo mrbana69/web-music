@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/track.dart';
 import '../../providers/player_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/track_tile.dart';
@@ -9,9 +10,9 @@ class QueueView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final player = context.watch<PlayerState>();
-    final queue = player.queue;
-    final currentIndex = player.currentIndex;
+    final queue = context.select<PlayerState, List<Track>>((p) => p.queue);
+    final currentIndex = context.select<PlayerState, int>((p) => p.currentIndex);
+    final player = context.read<PlayerState>();
 
     return Column(
       children: [

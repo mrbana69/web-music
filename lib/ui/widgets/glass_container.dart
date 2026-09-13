@@ -30,30 +30,40 @@ class GlassContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget content = ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: Container(
-          width: width,
-          height: height,
-          padding: padding,
-          decoration: BoxDecoration(
-            color: color ?? AppTheme.card.withOpacity(0.65),
-            borderRadius: BorderRadius.circular(borderRadius),
-            border: border ?? Border.all(color: AppTheme.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.25),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
+    final isApple = Theme.of(context).platform == TargetPlatform.iOS || Theme.of(context).platform == TargetPlatform.macOS;
+    final enableBlur = isApple && blur > 0;
+
+    Widget container = Container(
+      width: width,
+      height: height,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: color ?? (enableBlur ? AppTheme.card.withOpacity(0.65) : AppTheme.surfaceContainerHigh.withOpacity(0.85)),
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: border ?? Border.all(color: AppTheme.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(enableBlur ? 0.25 : 0.18),
+            blurRadius: enableBlur ? 16 : 10,
+            offset: const Offset(0, 4),
           ),
-          child: child,
-        ),
+        ],
       ),
+      child: child,
     );
+
+    Widget content = enableBlur
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+              child: container,
+            ),
+          )
+        : ClipRRect(
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: container,
+          );
 
     if (margin != null) {
       content = Padding(padding: margin!, child: content);

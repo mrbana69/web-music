@@ -41,12 +41,11 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
     final library = context.watch<LibraryState>();
     final isLiked = library.isLiked(track.id);
 
-    final currentSeconds = player.position.inSeconds.toDouble();
     final maxSeconds = player.duration.inSeconds > 0
         ? player.duration.inSeconds.toDouble()
         : (track.durationMs / 1000).toDouble();
 
-    final remaining = Duration(seconds: (maxSeconds - currentSeconds).clamp(0, 999999).toInt());
+    final isApple = Theme.of(context).platform == TargetPlatform.iOS || Theme.of(context).platform == TargetPlatform.macOS;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -76,12 +75,14 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
               ),
             ),
 
-            // 2. Blur Backdrop Layer
+            // 2. Blur Backdrop Layer (Apple only to avoid GPU lag on Android)
             Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 45, sigmaY: 45),
-                child: Container(color: Colors.black.withOpacity(0.35)),
-              ),
+              child: isApple
+                  ? BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 45, sigmaY: 45),
+                      child: Container(color: Colors.black.withOpacity(0.35)),
+                    )
+                  : Container(color: Colors.black.withOpacity(0.35)),
             ),
 
             // 3. Main Content
@@ -131,7 +132,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                         ? const LyricsView()
                         : (_activeSheetIndex == 2
                             ? const QueueView()
-                            : _buildPlayerBody(context, player, track, isLiked, currentSeconds, maxSeconds, remaining)),
+                            : _buildPlayerBody(context, player, track, isLiked, maxSeconds)),
                   ),
 
                   // --- Bottom Material 3 Pill Action Bar ---
@@ -193,9 +194,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
     PlayerState player,
     dynamic track,
     bool isLiked,
-    double currentSeconds,
     double maxSeconds,
-    Duration remaining,
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -250,6 +249,8 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                       child: CachedNetworkImage(
                         imageUrl: track.coverUrl,
                         fit: BoxFit.cover,
+                        memCacheWidth: 600,
+                        memCacheHeight: 600,
                         placeholder: (c, u) => Container(color: AppTheme.surfaceContainerLowest),
                         errorWidget: (c, u, e) => Container(
                           color: AppTheme.surfaceContainerLowest,
@@ -315,36 +316,47 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
 
 
               // 4. Material You Scrubber Slider
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 4.5,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6, elevation: 3),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                  activeTrackColor: player.ambientColor,
-                  inactiveTrackColor: Colors.white.withOpacity(0.15),
-                  thumbColor: player.ambientColor,
-                ),
-                child: Slider(
-                  value: currentSeconds.clamp(0.0, maxSeconds > 0 ? maxSeconds : 1.0),
-                  max: maxSeconds > 0 ? maxSeconds : 1.0,
-                  onChanged: (val) => player.seek(Duration(seconds: val.toInt())),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _formatDuration(player.position),
-                      style: AppTheme.inter(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      '-${_formatDuration(remaining)}',
-                      style: AppTheme.inter(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
+              ValueListenableBuilder<Duration>(
+                valueListenable: player.positionNotifier,
+                builder: (context, pos, _) {
+                  final curSec = pos.inSeconds.toDouble();
+                  final rem = Duration(seconds: (maxSeconds - curSec).clamp(0, 999999).toInt());
+                  return Column(
+                    children: [
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 4.5,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6, elevation: 3),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                          activeTrackColor: player.ambientColor,
+                          inactiveTrackColor: Colors.white.withOpacity(0.15),
+                          thumbColor: player.ambientColor,
+                        ),
+                        child: Slider(
+                          value: curSec.clamp(0.0, maxSeconds > 0 ? maxSeconds : 1.0),
+                          max: maxSeconds > 0 ? maxSeconds : 1.0,
+                          onChanged: (val) => player.seek(Duration(seconds: val.toInt())),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _formatDuration(pos),
+                              style: AppTheme.inter(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              '-${_formatDuration(rem)}',
+                              style: AppTheme.inter(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               SizedBox(height: isCompact ? 10 : 16),
 
