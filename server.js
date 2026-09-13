@@ -28,6 +28,11 @@ app.use('/health', healthRoutes);
 // Static assets (PWA frontend)
 app.use(express.static(__dirname));
 
+// App route for PWA and deep links
+app.get(['/app', '/app/*'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'app.html'));
+});
+
 // SPA Fallback: serve index.html for all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));

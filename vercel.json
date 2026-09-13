@@ -6,6 +6,10 @@
       "destination": "/app.html"
     },
     {
+      "source": "/app/(.*)",
+      "destination": "/app.html"
+    },
+    {
       "source": "/player",
       "destination": "/app.html"
     },

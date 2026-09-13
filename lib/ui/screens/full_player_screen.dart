@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:just_audio/just_audio.dart' hide PlayerState;
 import '../../providers/player_state.dart';
 import '../../providers/library_state.dart';
+import '../../config/app_config.dart';
 import '../theme/app_theme.dart';
 import 'lyrics_view.dart';
 import 'queue_view.dart';
@@ -159,7 +160,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                           icon: Icons.share_rounded,
                           isSelected: false,
                           ambientColor: player.ambientColor,
-                          onTap: () => Share.share('Ascolta ${track.title} di ${track.artistName} su Preluded!'),
+                          onTap: () => Share.share('Ascolta "${track.title}" di ${track.artistName} su Preluded!\n${AppConfig.getShareUrl(track.id)}'),
                         ),
                       ],
                     ),
@@ -499,7 +500,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
               title: const Text('Condividi brano', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(ctx);
-                Share.share('Ascolta ${track.title} di ${track.artistName} su Preluded!');
+                Share.share('Ascolta "${track.title}" di ${track.artistName} su Preluded!\n${AppConfig.getShareUrl(track.id)}');
               },
             ),
           ],
