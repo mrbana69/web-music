@@ -80,6 +80,8 @@ class _ArtistScreenState extends State<ArtistScreen> {
                   CachedNetworkImage(
                     imageUrl: _artist.picture,
                     fit: BoxFit.cover,
+                    memCacheWidth: 400,
+                    memCacheHeight: 400,
                     errorWidget: (c, u, e) => Container(
                       color: AppTheme.surfaceContainerHighest,
                       child: const Icon(Icons.person_rounded, size: 64, color: AppTheme.textSecondary),
@@ -169,6 +171,8 @@ class _ArtistScreenState extends State<ArtistScreen> {
                                       width: 120,
                                       height: 120,
                                       fit: BoxFit.cover,
+                                      memCacheWidth: 240,
+                                      memCacheHeight: 240,
                                       placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
                                       errorWidget: (c, u, e) => Container(
                                         color: AppTheme.surfaceContainerHighest,

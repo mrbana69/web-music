@@ -19,6 +19,7 @@ class PlayerState extends ChangeNotifier {
   bool _isBuffering = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  final ValueNotifier<Duration> positionNotifier = ValueNotifier<Duration>(Duration.zero);
   Lyrics? _lyrics;
   bool _isLoadingLyrics = false;
   Color _ambientColor = const Color(0xFFFA2D48);
@@ -51,6 +52,7 @@ class PlayerState extends ChangeNotifier {
       _isBuffering = state.processingState == AudioProcessingState.buffering ||
           state.processingState == AudioProcessingState.loading;
       _position = state.position;
+      positionNotifier.value = state.position;
       _queue = _audioHandler.currentQueue;
       _currentIndex = _audioHandler.currentIndex;
       notifyListeners();
@@ -80,10 +82,10 @@ class PlayerState extends ChangeNotifier {
       }
     });
 
-    // 3. Position Updates
+    // 3. Position Updates (Updates ValueNotifier without triggering expensive tree-wide rebuilds)
     _positionSub = _audioHandler.player.positionStream.listen((pos) {
       _position = pos;
-      notifyListeners();
+      positionNotifier.value = pos;
     });
   }
 
@@ -122,7 +124,11 @@ class PlayerState extends ChangeNotifier {
 
   Future<void> nextTrack() async => await _audioHandler.skipToNext();
   Future<void> previousTrack() async => await _audioHandler.skipToPrevious();
-  Future<void> seek(Duration pos) async => await _audioHandler.seek(pos);
+  Future<void> seek(Duration pos) async {
+    _position = pos;
+    positionNotifier.value = pos;
+    await _audioHandler.seek(pos);
+  }
 
   void toggleShuffle() {
     _audioHandler.toggleShuffle();
@@ -175,6 +181,7 @@ class PlayerState extends ChangeNotifier {
     _playbackStateSub?.cancel();
     _mediaItemSub?.cancel();
     _positionSub?.cancel();
+    positionNotifier.dispose();
     super.dispose();
   }
 }

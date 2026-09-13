@@ -448,6 +448,8 @@ class _SearchScreenState extends State<SearchScreen> {
                             width: 120,
                             height: 120,
                             fit: BoxFit.cover,
+                            memCacheWidth: 240,
+                            memCacheHeight: 240,
                             placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
                             errorWidget: (c, u, e) => Container(
                               width: 120,
@@ -527,6 +529,8 @@ class _SearchScreenState extends State<SearchScreen> {
                             width: 120,
                             height: 120,
                             fit: BoxFit.cover,
+                            memCacheWidth: 240,
+                            memCacheHeight: 240,
                             placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
                             errorWidget: (c, u, e) => Container(
                               width: 120,

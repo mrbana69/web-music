@@ -48,6 +48,8 @@ class QuickPickCard extends StatelessWidget {
                         width: 148,
                         height: 148,
                         fit: BoxFit.cover,
+                        memCacheWidth: 280,
+                        memCacheHeight: 280,
                         placeholder: (c, u) => Container(
                           color: AppTheme.surfaceContainerHighest,
                           child: const Center(

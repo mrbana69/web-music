@@ -25,9 +25,13 @@ class TrackTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final player = context.watch<PlayerState>();
-    final isCurrent = player.currentTrack?.id == track.id || player.currentTrack?.videoId == track.id;
-    final isPlaying = isCurrent && player.isPlaying;
+    final isCurrent = context.select<PlayerState, bool>(
+      (p) => p.currentTrack?.id == track.id || p.currentTrack?.videoId == track.id,
+    );
+    final isPlaying = context.select<PlayerState, bool>(
+      (p) => isCurrent && p.isPlaying,
+    );
+    final player = context.read<PlayerState>();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -85,6 +89,8 @@ class TrackTile extends StatelessWidget {
                           width: 48,
                           height: 48,
                           fit: BoxFit.cover,
+                          memCacheWidth: 120,
+                          memCacheHeight: 120,
                           placeholder: (c, u) => Container(
                             color: AppTheme.surfaceContainerHighest,
                           ),
@@ -234,6 +240,8 @@ class TrackTile extends StatelessWidget {
                           width: 48,
                           height: 48,
                           fit: BoxFit.cover,
+                          memCacheWidth: 120,
+                          memCacheHeight: 120,
                         ),
                       ),
                       const SizedBox(width: 14),
