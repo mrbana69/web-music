@@ -5,7 +5,12 @@ class AppConfig {
   static const String buildTime = '08/09/2026, 17:00';
 
   // Default Backend URL on Vercel
-  static const String defaultBaseUrl = 'https://web-music-pi.vercel.app';
+  static const String defaultBaseUrl = 'https://preluded.vercel.app';
+
+  // Share Base URL
+  static const String shareBaseUrl = 'https://preluded.vercel.app/app';
+
+  static String getShareUrl(String trackId) => '$shareBaseUrl/$trackId';
 
   static String formatArtwork(String? rawUrl, {String size = '500x500'}) {
     if (rawUrl == null || rawUrl.isEmpty) {

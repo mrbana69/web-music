@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../models/track.dart';
 import '../../providers/player_state.dart';
 import '../../providers/library_state.dart';
+import '../../config/app_config.dart';
 import '../theme/app_theme.dart';
 
 class TrackTile extends StatelessWidget {
@@ -305,7 +306,7 @@ class TrackTile extends StatelessWidget {
                   title: const Text('Condividi brano', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Share.share('Ascolta "${track.title}" di ${track.artistName} su Preluded Music!');
+                    Share.share('Ascolta "${track.title}" di ${track.artistName} su Preluded!\n${AppConfig.getShareUrl(track.id)}');
                   },
                 ),
               ],

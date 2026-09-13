@@ -2377,7 +2377,7 @@ h1 { font-size: 34px; font-weight: 800; }
             const title = `${track.title} • ${formatArtistName(track.artist?.name || track.artist)} | Preluded`;
             const description = track?.artist?.name ? `Ascolta ${track.title} di ${formatArtistName(track.artist.name)} su Preluded` : 'Ascolta i tuoi brani preferiti su Preluded';
             const artwork = formatArtworkUrl(track.album?.cover, '640x640') || 'https://preluded.vercel.app/logo.png';
-            const shareUrl = `https://preluded.vercel.app/app?track=${track.id}`;
+            const shareUrl = `https://preluded.vercel.app/app/${track.id}`;
 
             const ogTitle = document.getElementById('ogTitle');
             const ogDesc = document.getElementById('ogDesc');
@@ -4290,7 +4290,13 @@ h1 { font-size: 34px; font-weight: 800; }
 
         function initDeepLinking() {
             const params = new URLSearchParams(window.location.search);
-            const trackId = params.get('track');
+            let trackId = params.get('track');
+            if (!trackId) {
+                const match = window.location.pathname.match(/^\/app\/([a-zA-Z0-9_\-]+)/);
+                if (match) {
+                    trackId = match[1];
+                }
+            }
             if (trackId) {
                 playTrackById(trackId);
             }
@@ -4317,13 +4323,12 @@ h1 { font-size: 34px; font-weight: 800; }
 
         // --- Sharing / Copy Link ---
         function shareTrack(trackId, title, artist) {
-            const url = new URL(window.location.href);
-            url.searchParams.set('track', trackId);
+            const shareUrl = `https://preluded.vercel.app/app/${trackId}`;
 
             const shareData = {
                 title: `${title} • ${artist}`,
-                text: `Ascolta "${title}" di ${artist} su Preluded.`,
-                url: url.toString(),
+                text: `Ascolta "${title}" di ${artist} su Preluded!`,
+                url: shareUrl,
             };
 
             if (navigator.share) {
