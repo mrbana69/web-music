@@ -16,3 +16,7 @@ build/
 android/.gradle/
 android/local.properties
 *.apk
+*.ipa
+.idea/
+*.iml
+.metadata

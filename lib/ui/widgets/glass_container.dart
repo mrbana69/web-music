@@ -21,8 +21,8 @@ class GlassContainer extends StatelessWidget {
     this.height,
     this.padding,
     this.margin,
-    this.borderRadius = 18,
-    this.blur = 20,
+    this.borderRadius = 20,
+    this.blur = 25,
     this.color,
     this.border,
     this.onTap,
@@ -39,13 +39,17 @@ class GlassContainer extends StatelessWidget {
           height: height,
           padding: padding,
           decoration: BoxDecoration(
-            color: color ?? AppTheme.card.withOpacity(0.65),
+            color: color ?? AppTheme.card.withOpacity(0.60),
             borderRadius: BorderRadius.circular(borderRadius),
-            border: border ?? Border.all(color: AppTheme.border),
+            border: border ??
+                Border.all(
+                  color: Colors.white.withOpacity(0.14),
+                  width: 0.8,
+                ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.25),
-                blurRadius: 16,
+                color: Colors.black.withOpacity(0.20),
+                blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
             ],
@@ -60,7 +64,11 @@ class GlassContainer extends StatelessWidget {
     }
 
     if (onTap != null) {
-      return GestureDetector(onTap: onTap, child: content);
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: content,
+      );
     }
     return content;
   }
