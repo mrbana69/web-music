@@ -6,10 +6,12 @@ import '../../services/api_service.dart';
 import '../../models/track.dart';
 import '../../models/artist.dart';
 import '../../models/album.dart';
+import '../../models/playlist.dart';
 import '../theme/app_theme.dart';
 import '../widgets/track_tile.dart';
 import 'artist_screen.dart';
 import 'album_screen.dart';
+import 'playlist_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -27,6 +29,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Track> _tracks = [];
   List<Artist> _artists = [];
   List<Album> _albums = [];
+  List<Playlist> _playlists = [];
 
   final List<String> _trendingSearches = [
     'Sfera Ebbasta',
@@ -57,6 +60,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _tracks = [];
         _artists = [];
         _albums = [];
+        _playlists = [];
         _isLoading = false;
       });
       return;
@@ -72,9 +76,10 @@ class _SearchScreenState extends State<SearchScreen> {
       final res = await api.search(query, filter: _selectedFilter);
       if (mounted) {
         setState(() {
-          _tracks = res['tracks'] as List<Track>;
-          _artists = res['artists'] as List<Artist>;
-          _albums = res['albums'] as List<Album>;
+          _tracks = (res['tracks'] as List<Track>?) ?? [];
+          _artists = (res['artists'] as List<Artist>?) ?? [];
+          _albums = (res['albums'] as List<Album>?) ?? [];
+          _playlists = (res['playlists'] as List<Playlist>?) ?? [];
           _isLoading = false;
         });
       }
@@ -158,6 +163,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         _buildFilterChip('Brani', 'tracks'),
                         _buildFilterChip('Artisti', 'artists'),
                         _buildFilterChip('Album', 'albums'),
+                        _buildFilterChip('Playlist', 'playlists'),
                       ],
                     ),
                   ),
@@ -323,7 +329,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSearchResults() {
-    if (_tracks.isEmpty && _artists.isEmpty && _albums.isEmpty) {
+    if (_tracks.isEmpty && _artists.isEmpty && _albums.isEmpty && _playlists.isEmpty) {
       return const Center(
         child: Text('Nessun risultato trovato', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
       );
@@ -471,8 +477,87 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ],
 
+        // Playlists Carousel if any
+        if (_playlists.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'playlists')) ...[
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Text(
+              'Playlist',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 165,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: _playlists.length,
+              itemBuilder: (context, i) {
+                final pl = _playlists[i];
+                return Container(
+                  width: 120,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PlaylistScreen(
+                            title: pl.title,
+                            subtitle: pl.subtitle,
+                            tracks: const [],
+                            playlistId: pl.id,
+                          ),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: CachedNetworkImage(
+                            imageUrl: pl.coverUrl,
+                            width: 120,
+                            height: 120,
+                            fit: BoxFit.cover,
+                            placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
+                            errorWidget: (c, u, e) => Container(
+                              width: 120,
+                              height: 120,
+                              color: AppTheme.surfaceContainerHighest,
+                              child: const Icon(Icons.playlist_play_rounded, color: AppTheme.textSecondary),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          pl.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+
         // Tracks List
-        if (_tracks.isNotEmpty) ...[
+        if (_tracks.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'tracks')) ...[
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Text(

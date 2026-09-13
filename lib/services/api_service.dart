@@ -313,6 +313,7 @@ class ApiService {
     final tracks = <Track>[];
     final artists = <Artist>[];
     final albums = <Album>[];
+    final playlists = <Playlist>[];
 
     try {
       String? params;
@@ -420,6 +421,7 @@ class ApiService {
           final subLower = subFull.toLowerCase();
           final isArtist = pageType == 'MUSIC_PAGE_TYPE_ARTIST' || subLower.startsWith('artista') || subLower.startsWith('artist');
           final isAlbum = pageType == 'MUSIC_PAGE_TYPE_ALBUM' || subLower.startsWith('album') || subLower.startsWith('singolo') || subLower.startsWith('ep');
+          final isPlaylist = pageType == 'MUSIC_PAGE_TYPE_PLAYLIST' || subLower.startsWith('playlist');
           final isTrack = vId.isNotEmpty || subLower.startsWith('brano') || subLower.startsWith('canzone') || subLower.startsWith('song') || subLower.startsWith('video');
 
           if (isArtist && (browseId.startsWith('UC') || browseId.isNotEmpty)) {
@@ -445,6 +447,16 @@ class ApiService {
                 title: title,
                 artistName: AppConfig.sanitizeArtist(albArtist.isNotEmpty ? albArtist : 'Artista'),
                 coverUrl: AppConfig.formatArtwork(thumb),
+              ));
+            }
+          } else if (isPlaylist && (browseId.startsWith('VL') || browseId.startsWith('PL') || browseId.startsWith('RD') || browseId.isNotEmpty)) {
+            if (!playlists.any((p) => p.id == browseId || p.title.toLowerCase() == title.toLowerCase())) {
+              playlists.add(Playlist(
+                id: browseId,
+                title: title,
+                subtitle: subFull,
+                coverUrl: AppConfig.formatArtwork(thumb),
+                isLocal: false,
               ));
             }
           } else if (isTrack && vId.isNotEmpty) {
@@ -491,6 +503,11 @@ class ApiService {
             albums.add(alb);
             continue;
           }
+          final pl = _parsePlaylistFromItem(node);
+          if (pl != null && !playlists.any((x) => x.id == pl.id)) {
+            playlists.add(pl);
+            continue;
+          }
         }
       }
     } catch (e) {
@@ -501,6 +518,7 @@ class ApiService {
       'tracks': tracks.take(limit).toList(),
       'artists': artists.take(limit).toList(),
       'albums': albums.take(limit).toList(),
+      'playlists': playlists.take(limit).toList(),
     };
   }
 
@@ -694,18 +712,47 @@ class ApiService {
         'browseId': artistId,
       });
 
-      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 8));
+      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final header = data['header']?['musicImmersiveHeaderRenderer'] ?? data['header']?['musicVisualHeaderRenderer'] ?? data['header']?['musicResponsiveHeaderRenderer'];
-        final name = header?['title']?['runs']?[0]?['text']?.toString() ?? 'Artist';
-        final thumbs = header?['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List? ?? [];
+        final header = data['header']?['musicImmersiveHeaderRenderer'] ??
+                       data['header']?['musicVisualHeaderRenderer'] ??
+                       data['header']?['musicResponsiveHeaderRenderer'];
+        final name = header?['title']?['runs']?[0]?['text']?.toString() ?? 'Artista';
+        final thumbs = (header?['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                        header?['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
         final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
+        final desc = header?['description']?['runs']?[0]?['text']?.toString() ?? '';
+
+        // Extract top tracks
+        final rawTracks = _findNodes(data, 'musicResponsiveListItemRenderer');
+        final topTracks = <Track>[];
+        for (final item in rawTracks) {
+          final t = _parseTrackFromItem(item);
+          if (t != null) {
+            topTracks.add(t.copyWith(
+              artistName: t.artistName == 'Artista' || t.artistName.isEmpty ? name : t.artistName,
+            ));
+          }
+        }
+
+        // Extract albums and singles
+        final rawAlbums = _findNodes(data, 'musicTwoRowItemRenderer');
+        final albums = <Album>[];
+        for (final item in rawAlbums) {
+          final al = _parseAlbumFromTwoRow(item, name);
+          if (al != null && !albums.any((a) => a.id == al.id)) {
+            albums.add(al);
+          }
+        }
 
         return Artist(
           id: artistId,
           name: AppConfig.sanitizeArtist(name),
           picture: AppConfig.formatArtwork(thumb),
+          bio: desc,
+          topTracks: topTracks,
+          albums: albums,
         );
       }
     } catch (e) {
@@ -723,27 +770,37 @@ class ApiService {
         'browseId': albumId,
       });
 
-      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 8));
+      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final header = data['header']?['musicDetailHeaderRenderer'] ?? data['header']?['musicResponsiveHeaderRenderer'];
+        final header = data['header']?['musicDetailHeaderRenderer'] ??
+                       data['header']?['musicResponsiveHeaderRenderer'];
         final title = header?['title']?['runs']?[0]?['text']?.toString() ?? 'Album';
-        final artist = header?['straplineTextOne']?['runs']?[0]?['text']?.toString() ?? header?['subtitle']?['runs']?[0]?['text']?.toString() ?? 'Artist';
-        final thumbs = header?['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] as List? ?? [];
+        final artist = header?['straplineTextOne']?['runs']?[0]?['text']?.toString() ??
+                       header?['subtitle']?['runs']?[0]?['text']?.toString() ?? 'Artista';
+        final subRuns = header?['subtitle']?['runs'] as List? ?? [];
+        String year = '';
+        for (final r in subRuns) {
+          final txt = r['text']?.toString() ?? '';
+          if (txt.contains('202') || txt.contains('201') || txt.contains('199') || txt.contains('198')) {
+            year = txt;
+            break;
+          }
+        }
+        final thumbs = (header?['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                        header?['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
         final cover = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
 
+        final rawTracks = _findNodes(data, 'musicResponsiveListItemRenderer');
         final tracks = <Track>[];
-        final secList = data['contents']?['singleColumnBrowseResultsRenderer']?['tabs']?[0]?['tabRenderer']?['content']?['sectionListRenderer']?['contents'] as List? ?? [];
-        for (final sec in secList) {
-          final shelf = (sec as Map)['musicShelfRenderer'];
-          if (shelf != null) {
-            final contents = shelf['contents'] as List? ?? [];
-            for (final item in contents) {
-              final track = _parseTrackFromItem(item as Map);
-              if (track != null) {
-                tracks.add(track.copyWith(albumName: title));
-              }
-            }
+        for (final item in rawTracks) {
+          final t = _parseTrackFromItem(item);
+          if (t != null) {
+            tracks.add(t.copyWith(
+              albumName: title,
+              artistName: t.artistName == 'Artista' || t.artistName.isEmpty ? artist : t.artistName,
+              coverUrl: t.coverUrl.isEmpty ? cover : t.coverUrl,
+            ));
           }
         }
 
@@ -752,6 +809,7 @@ class ApiService {
           title: title,
           artistName: AppConfig.sanitizeArtist(artist),
           coverUrl: AppConfig.formatArtwork(cover),
+          year: year,
           tracks: tracks,
         );
       }
@@ -759,6 +817,87 @@ class ApiService {
       print('ApiService fetchAlbum error: $e');
     }
     return null;
+  }
+
+  // --- 9. Playlist Details ---
+  Future<Playlist?> fetchPlaylist(String playlistId) async {
+    try {
+      final browseId = playlistId.startsWith('VL') ? playlistId : 'VL$playlistId';
+      final uri = Uri.parse('$_innertubeEndpoint/browse?prettyPrint=false');
+      final payload = jsonEncode({
+        'context': _buildClientContext(),
+        'browseId': browseId,
+      });
+
+      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final header = data['header']?['musicDetailHeaderRenderer'] ??
+                       data['header']?['musicResponsiveHeaderRenderer'] ??
+                       data['header']?['musicEditablePlaylistDetailHeaderRenderer']?['header']?['musicResponsiveHeaderRenderer'];
+        final title = header?['title']?['runs']?[0]?['text']?.toString() ?? 'Playlist';
+        final subtitle = header?['straplineTextOne']?['runs']?[0]?['text']?.toString() ??
+                         header?['subtitle']?['runs']?[0]?['text']?.toString() ?? '';
+        final thumbs = (header?['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                        header?['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
+        final cover = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
+
+        final rawTracks = _findNodes(data, 'musicResponsiveListItemRenderer');
+        final tracks = <Track>[];
+        for (final item in rawTracks) {
+          final t = _parseTrackFromItem(item);
+          if (t != null) {
+            tracks.add(t);
+          }
+        }
+
+        return Playlist(
+          id: playlistId,
+          title: title,
+          subtitle: subtitle.isNotEmpty ? subtitle : '${tracks.length} brani',
+          coverUrl: AppConfig.formatArtwork((cover != null && cover.isNotEmpty) ? cover : (tracks.isNotEmpty ? tracks.first.coverUrl : '')),
+          tracks: tracks,
+          isLocal: false,
+        );
+      }
+    } catch (e) {
+      print('ApiService fetchPlaylist error: $e');
+    }
+    return null;
+  }
+
+  Album? _parseAlbumFromTwoRow(Map item, String defaultArtist) {
+    try {
+      final renderer = item['musicTwoRowItemRenderer'] ?? item;
+      final nav = renderer['navigationEndpoint'] ?? renderer['title']?['runs']?[0]?['navigationEndpoint'];
+      final bId = nav?['browseEndpoint']?['browseId']?.toString();
+      if (bId == null || bId.isEmpty) return null;
+
+      final title = renderer['title']?['runs']?[0]?['text']?.toString() ?? 'Album';
+      final thumbs = (renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                      renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
+      final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
+
+      final subRuns = renderer['subtitle']?['runs'] as List? ?? [];
+      String year = '';
+      for (final r in subRuns) {
+        final txt = r['text']?.toString() ?? '';
+        if (txt.contains('202') || txt.contains('201') || txt.contains('199') || txt.contains('198')) {
+          year = txt;
+          break;
+        }
+      }
+
+      return Album(
+        id: bId,
+        title: title,
+        artistName: defaultArtist,
+        coverUrl: AppConfig.formatArtwork(thumb),
+        year: year,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   // --- 9. Innertube & Google Library Sync ---

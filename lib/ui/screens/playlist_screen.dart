@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/track.dart';
 import '../../providers/player_state.dart';
+import '../../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/track_tile.dart';
 
-class PlaylistScreen extends StatelessWidget {
+class PlaylistScreen extends StatefulWidget {
   final String title;
   final String subtitle;
   final List<Track> tracks;
@@ -20,6 +21,46 @@ class PlaylistScreen extends StatelessWidget {
     this.playlistId,
     this.isLikedSongs = false,
   });
+
+  @override
+  State<PlaylistScreen> createState() => _PlaylistScreenState();
+}
+
+class _PlaylistScreenState extends State<PlaylistScreen> {
+  late List<Track> _tracks;
+  late String _title;
+  late String _subtitle;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tracks = List<Track>.from(widget.tracks);
+    _title = widget.title;
+    _subtitle = widget.subtitle;
+
+    if (_tracks.isEmpty && widget.playlistId != null && widget.playlistId!.isNotEmpty) {
+      _loadPlaylist();
+    }
+  }
+
+  Future<void> _loadPlaylist() async {
+    setState(() => _isLoading = true);
+    try {
+      final api = context.read<ApiService>();
+      final fullPlaylist = await api.fetchPlaylist(widget.playlistId!);
+      if (fullPlaylist != null && mounted) {
+        setState(() {
+          _tracks = fullPlaylist.tracks;
+          if (_title.isEmpty || _title == 'Playlist') _title = fullPlaylist.title;
+          _subtitle = fullPlaylist.subtitle;
+          _isLoading = false;
+        });
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,17 +88,17 @@ class PlaylistScreen extends StatelessWidget {
             ),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
+                _title,
+                style: AppTheme.syne(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
                   letterSpacing: -0.3,
                 ),
               ),
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: isLikedSongs
+                    colors: widget.isLikedSongs
                         ? [const Color(0xFFFA2D48), const Color(0xFF7928CA).withOpacity(0.6), AppTheme.background]
                         : [AppTheme.primaryAccent, const Color(0xFFFF6B6B).withOpacity(0.5), AppTheme.background],
                     begin: Alignment.topLeft,
@@ -80,7 +121,7 @@ class PlaylistScreen extends StatelessWidget {
                       ],
                     ),
                     child: Icon(
-                      isLikedSongs ? Icons.favorite_rounded : Icons.queue_music_rounded,
+                      widget.isLikedSongs ? Icons.favorite_rounded : Icons.queue_music_rounded,
                       size: 48,
                       color: Colors.white,
                     ),
@@ -96,8 +137,8 @@ class PlaylistScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    subtitle,
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+                    _subtitle,
+                    style: AppTheme.inter(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 14),
                   Row(
@@ -112,12 +153,12 @@ class PlaylistScreen extends StatelessWidget {
                             shadowColor: AppTheme.primaryAccent.withOpacity(0.4),
                           ),
                           icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-                          label: const Text(
+                          label: Text(
                             'Riproduci',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+                            style: AppTheme.syne(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14.5),
                           ),
-                          onPressed: tracks.isNotEmpty
-                              ? () => player.playTrack(tracks.first, newQueue: tracks, index: 0)
+                          onPressed: _tracks.isNotEmpty
+                              ? () => player.playTrack(_tracks.first, newQueue: _tracks, index: 0)
                               : null,
                         ),
                       ),
@@ -130,13 +171,13 @@ class PlaylistScreen extends StatelessWidget {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                           ),
                           icon: const Icon(Icons.shuffle_rounded, color: AppTheme.textPrimary, size: 20),
-                          label: const Text(
+                          label: Text(
                             'Casuale',
-                            style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 15),
+                            style: AppTheme.syne(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 14.5),
                           ),
-                          onPressed: tracks.isNotEmpty
+                          onPressed: _tracks.isNotEmpty
                               ? () {
-                                  final shuffled = List<Track>.from(tracks)..shuffle();
+                                  final shuffled = List<Track>.from(_tracks)..shuffle();
                                   player.playTrack(shuffled.first, newQueue: shuffled, index: 0);
                                 }
                               : null,
@@ -148,7 +189,13 @@ class PlaylistScreen extends StatelessWidget {
               ),
             ),
           ),
-          if (tracks.isEmpty)
+          if (_isLoading)
+            const SliverFillRemaining(
+              child: Center(
+                child: CircularProgressIndicator(color: AppTheme.primaryAccent),
+              ),
+            )
+          else if (_tracks.isEmpty)
             const SliverFillRemaining(
               child: Center(
                 child: Text('Nessun brano in questa playlist', style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
@@ -158,10 +205,10 @@ class PlaylistScreen extends StatelessWidget {
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
-                  final track = tracks[i];
-                  return TrackTile(track: track, queue: tracks, index: i, showIndex: true);
+                  final track = _tracks[i];
+                  return TrackTile(track: track, queue: _tracks, index: i, showIndex: true);
                 },
-                childCount: tracks.length,
+                childCount: _tracks.length,
               ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
@@ -170,4 +217,3 @@ class PlaylistScreen extends StatelessWidget {
     );
   }
 }
-
