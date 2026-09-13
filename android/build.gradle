@@ -15,6 +15,27 @@ subprojects {
     project.evaluationDependsOn(':app')
 }
 
+subprojects {
+    def configureNamespace = { p ->
+        if (p.plugins.hasPlugin("com.android.application") ||
+            p.plugins.hasPlugin("com.android.library")) {
+            p.android {
+                if (namespace == null) {
+                    namespace p.group ? p.group : "com.plugin.${p.name.replace('-', '_')}"
+                }
+            }
+        }
+    }
+    if (project.state.executed) {
+        configureNamespace(project)
+    } else {
+        project.afterEvaluate { p ->
+            configureNamespace(p)
+        }
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+

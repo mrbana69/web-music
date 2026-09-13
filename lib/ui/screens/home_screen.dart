@@ -20,6 +20,18 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Track> _quickPicks = [];
   Map<String, List<Track>> _sections = {};
   bool _isLoading = true;
+  String _activeMood = '';
+  String? _lastYtmCookie;
+  bool? _lastIsGoogleLoggedIn;
+
+  final List<String> _moodFilters = const [
+    'Relax',
+    'Energia',
+    'Allenamento',
+    'Focus',
+    'Viaggio',
+    'Party',
+  ];
 
   @override
   void initState() {
@@ -45,47 +57,120 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Buongiorno';
+    if (hour < 18) return 'Buon pomeriggio';
+    return 'Buonasera';
+  }
+
   @override
   Widget build(BuildContext context) {
     final player = context.read<PlayerState>();
     final library = context.watch<LibraryState>();
+    final userName = library.googleUser?.name.split(' ').first ?? '';
+
+    // Auto-reload data when user logs in or updates session cookie
+    if (_lastYtmCookie != library.ytmCookie || _lastIsGoogleLoggedIn != library.isGoogleLoggedIn) {
+      _lastYtmCookie = library.ytmCookie;
+      _lastIsGoogleLoggedIn = library.isGoogleLoggedIn;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadData();
+      });
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: RefreshIndicator(
         color: AppTheme.primaryAccent,
+        backgroundColor: AppTheme.surfaceContainerHigh,
         onRefresh: _loadData,
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            // App Bar / Header
+            // 1. Material 3 Header with Greeting & Avatar
             SliverAppBar(
               floating: true,
-              backgroundColor: AppTheme.background.withOpacity(0.85),
+              pinned: false,
+              backgroundColor: AppTheme.background.withOpacity(0.9),
+              toolbarHeight: 64,
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Scopri',
-                    style: TextStyle(
+                  Text(
+                    userName.isNotEmpty ? '${_getGreeting()}, $userName' : _getGreeting(),
+                    style: AppTheme.syne(
                       color: AppTheme.textPrimary,
-                      fontSize: 28,
+                      fontSize: 20,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: -0.6,
+                      letterSpacing: -0.4,
                     ),
                   ),
                   Text(
-                    'La tua musica, senza limiti',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                    'La tua musica su misura',
+                    style: AppTheme.inter(color: AppTheme.textSecondary, fontSize: 11.5, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-                  onPressed: _loadData,
-                ),
+                if (library.isGoogleLoggedIn && (library.googleUser?.avatarUrl.isNotEmpty ?? false))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.surfaceContainerHigh,
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.network(
+                        library.googleUser!.avatarUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.person, color: AppTheme.primaryAccent, size: 20),
+                      ),
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                    onPressed: _loadData,
+                  ),
               ],
+            ),
+
+            // 2. Material 3 Mood / Activity Filter Pills
+            SliverToBoxAdapter(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: _moodFilters.map((mood) {
+                    final isSelected = _activeMood == mood;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(mood),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() => _activeMood = selected ? mood : '');
+                        },
+                        backgroundColor: AppTheme.surfaceContainerLow,
+                        selectedColor: AppTheme.primaryContainer,
+                        labelStyle: AppTheme.inter(
+                          color: isSelected ? Colors.white : AppTheme.textSecondary,
+                          fontSize: 13,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        side: BorderSide(
+                          color: isSelected ? AppTheme.primaryAccentLight.withOpacity(0.4) : AppTheme.border,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
 
             if (_isLoading)
@@ -95,17 +180,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
             else ...[
-              // 1. Scelte Rapide (Quick Picks)
+              // 3. Scelte Rapide (Quick Picks) Carousel
               if (_quickPicks.isNotEmpty) ...[
-                SliverToBoxAdapter(
+                const SliverToBoxAdapter(
                   child: SectionHeader(
                     title: 'Scelte rapide',
-                    subtitle: 'Ascolta i tuoi brani preferiti',
+                    subtitle: 'Basate sui tuoi ascolti',
                   ),
                 ),
                 SliverToBoxAdapter(
                   child: SizedBox(
-                    height: 205,
+                    height: 215,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -122,9 +207,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // 2. Di nuovo all'ascolto (History)
+              // 4. Di nuovo all'ascolto (History)
               if (library.history.isNotEmpty) ...[
-                SliverToBoxAdapter(
+                const SliverToBoxAdapter(
                   child: SectionHeader(
                     title: "Di nuovo all'ascolto",
                     subtitle: 'I tuoi ascolti recenti',
@@ -145,7 +230,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // 3. Dynamic YouTube Music Home Sections
+              // 5. Dynamic YouTube Music Shelves
               for (final entry in _sections.entries) ...[
                 SliverToBoxAdapter(
                   child: SectionHeader(
@@ -154,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 SliverToBoxAdapter(
                   child: SizedBox(
-                    height: 205,
+                    height: 215,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -171,8 +256,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // Bottom padding for miniplayer
-              const SliverToBoxAdapter(child: SizedBox(height: 120)),
+              // Bottom padding for miniplayer & navbar
+              const SliverToBoxAdapter(child: SizedBox(height: 180)),
             ],
           ],
         ),

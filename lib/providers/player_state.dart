@@ -163,6 +163,13 @@ class PlayerState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearQueue() {
+    _audioHandler.clearQueue();
+    _queue = _audioHandler.currentQueue;
+    _currentIndex = _audioHandler.currentIndex;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _playbackStateSub?.cancel();

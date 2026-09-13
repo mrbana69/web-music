@@ -1,7 +1,8 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/track.dart';
 import '../models/playlist.dart';
+import '../models/user.dart';
 import '../config/app_config.dart';
 
 class StorageService {
@@ -10,6 +11,7 @@ class StorageService {
   static const _keyHistory = 'preluded_history';
   static const _keyCookie = 'preluded_ytm_cookie';
   static const _keyBackendUrl = 'preluded_backend_url';
+  static const _keyGoogleUser = 'preluded_google_user';
 
   final SharedPreferences _prefs;
   StorageService(this._prefs);
@@ -17,6 +19,28 @@ class StorageService {
   static Future<StorageService> init() async {
     final prefs = await SharedPreferences.getInstance();
     return StorageService(prefs);
+  }
+
+  // --- Google User Account ---
+  GoogleUser? getGoogleUser() {
+    final raw = _prefs.getString(_keyGoogleUser);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return GoogleUser.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> setGoogleUser(GoogleUser? user) async {
+    if (user == null) {
+      await _prefs.remove(_keyGoogleUser);
+    } else {
+      await _prefs.setString(_keyGoogleUser, jsonEncode(user.toJson()));
+      if (user.cookie != null && user.cookie!.isNotEmpty) {
+        await setYtmCookie(user.cookie);
+      }
+    }
   }
 
   // --- Backend URL ---

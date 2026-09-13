@@ -5,7 +5,6 @@ import 'package:marquee/marquee.dart';
 import '../../providers/player_state.dart';
 import '../../providers/library_state.dart';
 import '../theme/app_theme.dart';
-import 'glass_container.dart';
 import '../screens/full_player_screen.dart';
 
 class MiniPlayer extends StatelessWidget {
@@ -27,11 +26,16 @@ class MiniPlayer extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: GlassContainer(
-        borderRadius: 20,
-        blur: 30,
-        color: const Color(0xFF181820).withOpacity(0.88),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+      child: GestureDetector(
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity != null) {
+            if (details.primaryVelocity! < -250) {
+              player.nextTrack();
+            } else if (details.primaryVelocity! > 250) {
+              player.previousTrack();
+            }
+          }
+        },
         onTap: () {
           Navigator.of(context).push(
             PageRouteBuilder(
@@ -45,148 +49,170 @@ class MiniPlayer extends StatelessWidget {
             ),
           );
         },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: Row(
-                children: [
-                  // 1. Artwork with drop shadow
-                  Hero(
-                    tag: 'mini_artwork_${track.id}',
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceContainerHigh.withOpacity(0.95),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+              BoxShadow(
+                color: player.ambientColor.withOpacity(0.2),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Row(
+                  children: [
+                    // 1. Squircle Artwork with Hero
+                    Hero(
+                      tag: 'mini_artwork_${track.id}',
+                      child: Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: AppTheme.surfaceContainerLowest,
+                        ),
+                        clipBehavior: Clip.antiAlias,
                         child: CachedNetworkImage(
                           imageUrl: track.coverUrl,
                           fit: BoxFit.cover,
-                          placeholder: (c, u) => Container(color: AppTheme.surface),
+                          placeholder: (c, u) => Container(color: AppTheme.surfaceContainerLowest),
                           errorWidget: (c, u, e) => Container(
-                            color: AppTheme.surface,
-                            child: const Icon(Icons.music_note, color: AppTheme.textSecondary),
+                            color: AppTheme.surfaceContainerLowest,
+                            child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
+                    const SizedBox(width: 12),
 
-                  // 2. Track Title & Artist
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          height: 20,
-                          child: track.title.length > 28
-                              ? Marquee(
-                                  text: track.title,
-                                  style: const TextStyle(
-                                    color: AppTheme.textPrimary,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  scrollAxis: Axis.horizontal,
-                                  blankSpace: 30.0,
-                                  velocity: 30.0,
-                                  pauseAfterRound: const Duration(seconds: 2),
-                                )
-                              : Text(
-                                  track.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: AppTheme.textPrimary,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          track.artistName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // 3. Like Button
-                  IconButton(
-                    icon: Icon(
-                      isLiked ? Icons.favorite : Icons.favorite_border,
-                      color: isLiked ? AppTheme.primaryAccent : AppTheme.textSecondary,
-                      size: 20,
-                    ),
-                    onPressed: () => library.toggleLike(track),
-                    splashRadius: 20,
-                  ),
-
-                  // 4. Play / Pause Button
-                  IconButton(
-                    icon: player.isBuffering
-                        ? const SizedBox(
-                            width: 20,
+                    // 2. Title (Syne) & Artist (Inter)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryAccent),
-                          )
-                        : Icon(
-                            player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                            color: AppTheme.textPrimary,
-                            size: 28,
+                            child: track.title.length > 26
+                                ? Marquee(
+                                    text: track.title,
+                                    style: AppTheme.syne(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                      letterSpacing: -0.2,
+                                    ),
+                                    scrollAxis: Axis.horizontal,
+                                    blankSpace: 30.0,
+                                    velocity: 28.0,
+                                    pauseAfterRound: const Duration(seconds: 2),
+                                  )
+                                : Text(
+                                    track.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTheme.syne(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
                           ),
-                    onPressed: player.togglePlay,
-                    splashRadius: 22,
-                  ),
-
-                  // 5. Next Button
-                  IconButton(
-                    icon: const Icon(
-                      Icons.skip_next_rounded,
-                      color: AppTheme.textPrimary,
-                      size: 24,
+                          const SizedBox(height: 2),
+                          Text(
+                            track.artistName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    onPressed: player.nextTrack,
-                    splashRadius: 20,
-                  ),
-                ],
-              ),
-            ),
 
-            // 6. Slim Progress Bar
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
+                    // 3. Like Button
+                    IconButton(
+                      icon: Icon(
+                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                        color: isLiked ? AppTheme.primaryAccent : AppTheme.textSecondary,
+                        size: 22,
+                      ),
+                      onPressed: () => library.toggleLike(track),
+                    ),
+
+                    // 4. Material 3 Tonal Play / Pause FAB
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.primaryAccent,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryAccent.withOpacity(0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: player.isBuffering
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : Icon(
+                                player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
+                        onPressed: player.togglePlay,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+
+                    // 5. Next Button
+                    IconButton(
+                      icon: const Icon(
+                        Icons.skip_next_rounded,
+                        color: AppTheme.textPrimary,
+                        size: 26,
+                      ),
+                      onPressed: player.nextTrack,
+                    ),
+                  ],
+                ),
               ),
-              child: LinearProgressIndicator(
+
+              // 6. Micro Progress Indicator
+              LinearProgressIndicator(
                 value: progress,
                 minHeight: 2.5,
-                backgroundColor: Colors.white.withOpacity(0.08),
-                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryAccent),
+                backgroundColor: Colors.white.withOpacity(0.06),
+                valueColor: AlwaysStoppedAnimation<Color>(player.ambientColor),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
