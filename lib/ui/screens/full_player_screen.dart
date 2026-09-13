@@ -135,49 +135,33 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                             : _buildPlayerBody(context, player, track, isLiked, maxSeconds)),
                   ),
 
-                  // --- Bottom Material 3 Pill Action Bar ---
+                  // --- Bottom Centered Action Icons (Lyrics, Queue, Share) ---
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceContainerHigh.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(color: Colors.white.withOpacity(0.1)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildBottomActionItem(
-                            icon: Icons.lyrics_rounded,
-                            label: 'Testi',
-                            isSelected: _activeSheetIndex == 1,
-                            ambientColor: player.ambientColor,
-                            onTap: () => setState(() => _activeSheetIndex = _activeSheetIndex == 1 ? 0 : 1),
-                          ),
-                          _buildBottomActionItem(
-                            icon: Icons.queue_music_rounded,
-                            label: 'Coda (${player.queue.length})',
-                            isSelected: _activeSheetIndex == 2,
-                            ambientColor: player.ambientColor,
-                            onTap: () => setState(() => _activeSheetIndex = _activeSheetIndex == 2 ? 0 : 2),
-                          ),
-                          _buildBottomActionItem(
-                            icon: Icons.share_rounded,
-                            label: 'Condividi',
-                            isSelected: false,
-                            ambientColor: player.ambientColor,
-                            onTap: () => Share.share('Ascolta ${track.title} di ${track.artistName} su Preluded!'),
-                          ),
-                        ],
-                      ),
+                    padding: const EdgeInsets.only(top: 6, bottom: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildBottomIconButton(
+                          icon: Icons.lyrics_rounded,
+                          isSelected: _activeSheetIndex == 1,
+                          ambientColor: player.ambientColor,
+                          onTap: () => setState(() => _activeSheetIndex = _activeSheetIndex == 1 ? 0 : 1),
+                        ),
+                        const SizedBox(width: 32),
+                        _buildBottomIconButton(
+                          icon: Icons.queue_music_rounded,
+                          isSelected: _activeSheetIndex == 2,
+                          ambientColor: player.ambientColor,
+                          onTap: () => setState(() => _activeSheetIndex = _activeSheetIndex == 2 ? 0 : 2),
+                        ),
+                        const SizedBox(width: 32),
+                        _buildBottomIconButton(
+                          icon: Icons.share_rounded,
+                          isSelected: false,
+                          ambientColor: player.ambientColor,
+                          onTap: () => Share.share('Ascolta ${track.title} di ${track.artistName} su Preluded!'),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -202,7 +186,16 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
         final screenWidth = constraints.maxWidth;
         // Adaptive sizing based on available viewport height
         final isCompact = availableHeight < 560;
-        final artSize = (availableHeight * (isCompact ? 0.38 : 0.43)).clamp(170.0, (screenWidth * 0.78).clamp(170.0, 310.0));
+        final maxArt = (screenWidth * 0.82).clamp(180.0, 335.0);
+        final artSize = (availableHeight * (isCompact ? 0.38 : 0.44)).clamp(180.0, maxArt);
+
+        // Dynamically distribute vertical spacing across the available lower space
+        final extraSpace = (availableHeight - (artSize + 52 + 58 + 72)).clamp(20.0, 220.0);
+        final spacingTop = (extraSpace * 0.08).clamp(4.0, 16.0);
+        final spacingArtToTitle = (extraSpace * 0.28).clamp(14.0, 36.0);
+        final spacingTitleToSlider = (extraSpace * 0.24).clamp(12.0, 32.0);
+        final spacingSliderToControls = (extraSpace * 0.28).clamp(14.0, 38.0);
+        final spacingBottom = (extraSpace * 0.12).clamp(8.0, 24.0);
 
         return SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -210,7 +203,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(height: isCompact ? 4 : 10),
+              SizedBox(height: spacingTop),
 
               // 1. Large Squircle 32px Artwork with Dynamic Glow
               GestureDetector(
@@ -261,7 +254,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                   ),
                 ),
               ),
-              SizedBox(height: isCompact ? 14 : 20),
+              SizedBox(height: spacingArtToTitle),
 
               // 2. Track Title, Artist & Like Button
               Row(
@@ -312,7 +305,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                   ),
                 ],
               ),
-              SizedBox(height: isCompact ? 10 : 14),
+              SizedBox(height: spacingTitleToSlider),
 
 
               // 4. Material You Scrubber Slider
@@ -358,7 +351,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                   );
                 },
               ),
-              SizedBox(height: isCompact ? 10 : 16),
+              SizedBox(height: spacingSliderToControls),
 
               // 5. Main Controls Row (Material 3 Expressive)
               Row(
@@ -432,7 +425,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: spacingBottom),
             ],
           ),
         );
@@ -440,35 +433,47 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
     );
   }
 
-  Widget _buildBottomActionItem({
+  Widget _buildBottomIconButton({
     required IconData icon,
-    required String label,
     required bool isSelected,
     required Color ambientColor,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? ambientColor : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: isSelected ? Colors.white : Colors.white.withOpacity(0.7), size: 18),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: AppTheme.inter(
-                color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isSelected
+                ? ambientColor.withOpacity(0.35)
+                : Colors.white.withOpacity(0.08),
+            border: Border.all(
+              color: isSelected ? ambientColor : Colors.white.withOpacity(0.12),
+              width: isSelected ? 1.5 : 1.0,
             ),
-          ],
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: ambientColor.withOpacity(0.40),
+                      blurRadius: 14,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Center(
+            child: Icon(
+              icon,
+              size: 22,
+              color: isSelected ? Colors.white : Colors.white.withOpacity(0.75),
+            ),
+          ),
         ),
       ),
     );
