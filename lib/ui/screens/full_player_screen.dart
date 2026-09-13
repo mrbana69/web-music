@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:just_audio/just_audio.dart' hide PlayerState;
 import '../../providers/player_state.dart';
 import '../../providers/library_state.dart';
 import '../theme/app_theme.dart';
-import '../widgets/glass_container.dart';
 import 'lyrics_view.dart';
 import 'queue_view.dart';
 
@@ -59,17 +58,17 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
         },
         child: Stack(
           children: [
-            // 1. Glowing Dynamic Ambient Background
+            // 1. Glowing Dynamic Ambient Background (Material You Tint)
             Positioned.fill(
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 600),
                 decoration: BoxDecoration(
                   gradient: RadialGradient(
-                    center: const Alignment(0, -0.4),
-                    radius: 1.2,
+                    center: const Alignment(0, -0.3),
+                    radius: 1.3,
                     colors: [
-                      player.ambientColor.withOpacity(0.55),
-                      player.ambientColor.withOpacity(0.18),
+                      player.ambientColor.withOpacity(0.50),
+                      player.ambientColor.withOpacity(0.15),
                       AppTheme.background,
                     ],
                   ),
@@ -80,7 +79,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
             // 2. Blur Backdrop Layer
             Positioned.fill(
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                filter: ImageFilter.blur(sigmaX: 45, sigmaY: 45),
                 child: Container(color: Colors.black.withOpacity(0.35)),
               ),
             ),
@@ -99,30 +98,27 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                           icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 34),
                           onPressed: () => Navigator.of(context).pop(),
                         ),
-                        Column(
-                          children: [
-                            Text(
-                              'IN RIPRODUZIONE DA',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.2,
+                        if (track.albumName.isNotEmpty)
+                          Flexible(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text(
+                                track.albumName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: AppTheme.inter(
+                                  color: Colors.white.withOpacity(0.70),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              track.albumName.isNotEmpty ? track.albumName : 'Preluded Music',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
+                          )
+                        else
+                          const SizedBox.shrink(),
                         IconButton(
-                          icon: const Icon(Icons.more_horiz_rounded, color: Colors.white, size: 28),
+                          icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 24),
                           onPressed: () => _showTrackOptions(context, track),
                         ),
                       ],
@@ -133,18 +129,28 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                   Expanded(
                     child: _activeSheetIndex == 1
                         ? const LyricsView()
-                        : (_activeSheetIndex == 2 ? const QueueView() : _buildPlayerBody(context, player, track, isLiked, currentSeconds, maxSeconds, remaining)),
+                        : (_activeSheetIndex == 2
+                            ? const QueueView()
+                            : _buildPlayerBody(context, player, track, isLiked, currentSeconds, maxSeconds, remaining)),
                   ),
 
-                  // --- Bottom Floating Glass Action Bar ---
+                  // --- Bottom Material 3 Pill Action Bar ---
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    child: GlassContainer(
-                      borderRadius: 30,
-                      blur: 24,
-                      color: Colors.white.withOpacity(0.08),
-                      border: Border.all(color: Colors.white.withOpacity(0.12)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceContainerHigh.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(color: Colors.white.withOpacity(0.1)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
@@ -152,19 +158,22 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                             icon: Icons.lyrics_rounded,
                             label: 'Testi',
                             isSelected: _activeSheetIndex == 1,
+                            ambientColor: player.ambientColor,
                             onTap: () => setState(() => _activeSheetIndex = _activeSheetIndex == 1 ? 0 : 1),
                           ),
                           _buildBottomActionItem(
                             icon: Icons.queue_music_rounded,
-                            label: 'Coda',
+                            label: 'Coda (${player.queue.length})',
                             isSelected: _activeSheetIndex == 2,
+                            ambientColor: player.ambientColor,
                             onTap: () => setState(() => _activeSheetIndex = _activeSheetIndex == 2 ? 0 : 2),
                           ),
                           _buildBottomActionItem(
-                            icon: Icons.airplay_rounded,
-                            label: 'AirPlay',
+                            icon: Icons.share_rounded,
+                            label: 'Condividi',
                             isSelected: false,
-                            onTap: () {},
+                            ambientColor: player.ambientColor,
+                            onTap: () => Share.share('Ascolta ${track.title} di ${track.artistName} su Preluded!'),
                           ),
                         ],
                       ),
@@ -188,215 +197,234 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
     double maxSeconds,
     Duration remaining,
   ) {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableHeight = constraints.maxHeight;
+        final screenWidth = constraints.maxWidth;
+        // Adaptive sizing based on available viewport height
+        final isCompact = availableHeight < 560;
+        final artSize = (availableHeight * (isCompact ? 0.38 : 0.43)).clamp(170.0, (screenWidth * 0.78).clamp(170.0, 310.0));
 
-          // 1. Large Artwork with 3D Drop Shadow & Horizontal Swipe
-          GestureDetector(
-            onHorizontalDragEnd: (details) {
-              if (details.primaryVelocity != null) {
-                if (details.primaryVelocity! < -300) {
-                  player.nextTrack();
-                } else if (details.primaryVelocity! > 300) {
-                  player.previousTrack();
-                }
-              }
-            },
-            child: Hero(
-              tag: 'mini_artwork_${track.id}',
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.78,
-                height: MediaQuery.of(context).size.width * 0.78,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: player.ambientColor.withOpacity(0.45),
-                      blurRadius: 36,
-                      offset: const Offset(0, 16),
-                      spreadRadius: -4,
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: isCompact ? 4 : 10),
+
+              // 1. Large Squircle 32px Artwork with Dynamic Glow
+              GestureDetector(
+                onHorizontalDragEnd: (details) {
+                  if (details.primaryVelocity != null) {
+                    if (details.primaryVelocity! < -300) {
+                      player.nextTrack();
+                    } else if (details.primaryVelocity! > 300) {
+                      player.previousTrack();
+                    }
+                  }
+                },
+                child: Hero(
+                  tag: 'mini_artwork_${track.id}',
+                  child: Container(
+                    width: artSize,
+                    height: artSize,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(isCompact ? 24 : 30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: player.ambientColor.withOpacity(0.40),
+                          blurRadius: isCompact ? 24 : 36,
+                          offset: const Offset(0, 14),
+                          spreadRadius: -4,
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.55),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: CachedNetworkImage(
-                    imageUrl: track.coverUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (c, u) => Container(color: AppTheme.surface),
-                    errorWidget: (c, u, e) => Container(
-                      color: AppTheme.surface,
-                      child: const Icon(Icons.music_note, color: AppTheme.textSecondary, size: 64),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(isCompact ? 24 : 30),
+                      child: CachedNetworkImage(
+                        imageUrl: track.coverUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (c, u) => Container(color: AppTheme.surfaceContainerLowest),
+                        errorWidget: (c, u, e) => Container(
+                          color: AppTheme.surfaceContainerLowest,
+                          child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary, size: 54),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: 28),
+              SizedBox(height: isCompact ? 14 : 20),
 
-          // 2. Track Title, Artist, & Favorite Row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              // 2. Track Title, Artist & Like Button
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          track.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.syne(
+                            color: Colors.white,
+                            fontSize: isCompact ? 17 : 19.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          track.artistName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.inter(
+                            color: Colors.white.withOpacity(0.70),
+                            fontSize: isCompact ? 13 : 14.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isLiked ? AppTheme.primaryAccent.withOpacity(0.15) : Colors.white.withOpacity(0.06),
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                        color: isLiked ? AppTheme.primaryAccent : Colors.white.withOpacity(0.75),
+                        size: isCompact ? 24 : 26,
+                      ),
+                      onPressed: () => context.read<LibraryState>().toggleLike(track),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: isCompact ? 10 : 14),
+
+
+              // 4. Material You Scrubber Slider
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 4.5,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6, elevation: 3),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                  activeTrackColor: player.ambientColor,
+                  inactiveTrackColor: Colors.white.withOpacity(0.15),
+                  thumbColor: player.ambientColor,
+                ),
+                child: Slider(
+                  value: currentSeconds.clamp(0.0, maxSeconds > 0 ? maxSeconds : 1.0),
+                  max: maxSeconds > 0 ? maxSeconds : 1.0,
+                  onChanged: (val) => player.seek(Duration(seconds: val.toInt())),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
-                      ),
+                      _formatDuration(player.position),
+                      style: AppTheme.inter(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 4),
                     Text(
-                      track.artistName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.68),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w400,
-                      ),
+                      '-${_formatDuration(remaining)}',
+                      style: AppTheme.inter(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
               ),
-              IconButton(
-                icon: Icon(
-                  isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                  color: isLiked ? AppTheme.primaryAccent : Colors.white.withOpacity(0.7),
-                  size: 28,
-                ),
-                onPressed: () => context.read<LibraryState>().toggleLike(track),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
+              SizedBox(height: isCompact ? 10 : 16),
 
-          // 3. Scrubber Slider
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 4.5,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-              activeTrackColor: Colors.white,
-              inactiveTrackColor: Colors.white.withOpacity(0.18),
-              thumbColor: Colors.white,
-            ),
-            child: Slider(
-              value: currentSeconds.clamp(0.0, maxSeconds > 0 ? maxSeconds : 1.0),
-              max: maxSeconds > 0 ? maxSeconds : 1.0,
-              onChanged: (val) => player.seek(Duration(seconds: val.toInt())),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _formatDuration(player.position),
-                  style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-                Text(
-                  '-${_formatDuration(remaining)}',
-                  style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // 4. Main Controls Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // Shuffle
-              IconButton(
-                icon: Icon(
-                  Icons.shuffle_rounded,
-                  color: player.isShuffle ? AppTheme.primaryAccent : Colors.white.withOpacity(0.6),
-                  size: 24,
-                ),
-                onPressed: player.toggleShuffle,
-              ),
-
-              // Previous
-              IconButton(
-                icon: const Icon(Icons.skip_previous_rounded, color: Colors.white, size: 40),
-                onPressed: player.previousTrack,
-              ),
-
-              // Play / Pause Gradient Circle
-              GestureDetector(
-                onTap: player.togglePlay,
-                child: Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: AppTheme.primaryGradient,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryAccent.withOpacity(0.5),
-                        blurRadius: 20,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
+              // 5. Main Controls Row (Material 3 Expressive)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Shuffle
+                  IconButton(
+                    icon: Icon(
+                      Icons.shuffle_rounded,
+                      color: player.isShuffle ? AppTheme.primaryAccent : Colors.white.withOpacity(0.6),
+                      size: isCompact ? 22 : 24,
+                    ),
+                    onPressed: player.toggleShuffle,
                   ),
-                  child: player.isBuffering
-                      ? const Center(
-                          child: SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+
+                  // Previous
+                  IconButton(
+                    icon: Icon(Icons.skip_previous_rounded, color: Colors.white, size: isCompact ? 36 : 42),
+                    onPressed: player.previousTrack,
+                  ),
+
+                  // Play / Pause Large FAB
+                  GestureDetector(
+                    onTap: player.togglePlay,
+                    child: Container(
+                      width: isCompact ? 64 : 72,
+                      height: isCompact ? 64 : 72,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.primaryAccent,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryAccent.withOpacity(0.45),
+                            blurRadius: 18,
+                            offset: const Offset(0, 5),
                           ),
-                        )
-                      : Icon(
-                          player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: 38,
-                        ),
-                ),
-              ),
+                        ],
+                      ),
+                      child: player.isBuffering
+                          ? const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                              ),
+                            )
+                          : Icon(
+                              player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: isCompact ? 36 : 40,
+                            ),
+                    ),
+                  ),
 
-              // Next
-              IconButton(
-                icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 40),
-                onPressed: player.nextTrack,
-              ),
+                  // Next
+                  IconButton(
+                    icon: Icon(Icons.skip_next_rounded, color: Colors.white, size: isCompact ? 36 : 42),
+                    onPressed: player.nextTrack,
+                  ),
 
-              // Repeat
-              IconButton(
-                icon: Icon(
-                  player.loopMode == LoopMode.one
-                      ? Icons.repeat_one_rounded
-                      : Icons.repeat_rounded,
-                  color: player.loopMode != LoopMode.off ? AppTheme.primaryAccent : Colors.white.withOpacity(0.6),
-                  size: 24,
-                ),
-                onPressed: player.cycleRepeat,
+                  // Repeat
+                  IconButton(
+                    icon: Icon(
+                      player.loopMode == LoopMode.one
+                          ? Icons.repeat_one_rounded
+                          : Icons.repeat_rounded,
+                      color: player.loopMode != LoopMode.off ? AppTheme.primaryAccent : Colors.white.withOpacity(0.6),
+                      size: isCompact ? 22 : 24,
+                    ),
+                    onPressed: player.cycleRepeat,
+                  ),
+                ],
               ),
+              const SizedBox(height: 6),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -404,6 +432,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
     required IconData icon,
     required String label,
     required bool isSelected,
+    required Color ambientColor,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
@@ -411,7 +440,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryAccent : Colors.transparent,
+          color: isSelected ? ambientColor : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -421,7 +450,7 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
             const SizedBox(width: 6),
             Text(
               label,
-              style: TextStyle(
+              style: AppTheme.inter(
                 color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -436,15 +465,21 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
   void _showTrackOptions(BuildContext context, dynamic track) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surfaceElevated,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      backgroundColor: AppTheme.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
+            ),
             ListTile(
-              leading: const Icon(Icons.share_outlined, color: Colors.white),
-              title: const Text('Condividi brano', style: TextStyle(color: Colors.white)),
+              leading: const Icon(Icons.share_rounded, color: Colors.white),
+              title: const Text('Condividi brano', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
               onTap: () {
                 Navigator.pop(ctx);
                 Share.share('Ascolta ${track.title} di ${track.artistName} su Preluded!');

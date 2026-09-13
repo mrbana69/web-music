@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/track.dart';
 import 'api_service.dart';
 import 'storage_service.dart';
+import 'local_stream_proxy.dart';
 
 Future<AudioHandler> initAudioService(ApiService apiService, StorageService storageService) async {
   return await AudioService.init(
@@ -18,10 +20,11 @@ Future<AudioHandler> initAudioService(ApiService apiService, StorageService stor
   );
 }
 
-class PreludedAudioHandler extends BaseAudioHandler with QueueAudioHandler, SeekHandler {
+class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
   final ApiService _api;
   final StorageService _storage;
   final AudioPlayer _player = AudioPlayer();
+  final LocalStreamProxy _localProxy = LocalStreamProxy();
 
   List<Track> _tracksQueue = [];
   int _currentIndex = 0;
@@ -29,7 +32,18 @@ class PreludedAudioHandler extends BaseAudioHandler with QueueAudioHandler, Seek
   LoopMode _loopMode = LoopMode.off;
 
   PreludedAudioHandler(this._api, this._storage) {
+    _initAudioSession();
     _initPlayerListeners();
+    _localProxy.start();
+  }
+
+  Future<void> _initAudioSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+    } catch (e) {
+      print('AudioSession init error: $e');
+    }
   }
 
   AudioPlayer get player => _player;
@@ -104,7 +118,7 @@ class PreludedAudioHandler extends BaseAudioHandler with QueueAudioHandler, Seek
     final targetTrack = _tracksQueue[_currentIndex];
     await _storage.addToHistory(targetTrack);
 
-    // Update MediaItem for iOS Lock Screen & Dynamic Island
+    // Update MediaItem for iOS Lock Screen & Android Notification
     final item = MediaItem(
       id: targetTrack.id,
       album: targetTrack.albumName,
@@ -123,9 +137,18 @@ class PreludedAudioHandler extends BaseAudioHandler with QueueAudioHandler, Seek
       artUri: Uri.parse(t.coverUrl),
     )).toList());
 
+    final vId = targetTrack.videoId.isNotEmpty ? targetTrack.videoId : targetTrack.id;
     try {
-      final streamUrl = await _api.resolveAudioStream(targetTrack);
-      await _player.setUrl(streamUrl);
+      if (!_localProxy.isRunning) {
+        await _localProxy.start();
+      }
+      final proxyUrl = _localProxy.getStreamUrl(vId);
+      print('[AudioHandler] Playing stream via LocalStreamProxy: $proxyUrl');
+      final audioSource = AudioSource.uri(
+        Uri.parse(proxyUrl),
+        tag: item,
+      );
+      await _player.setAudioSource(audioSource);
       await _player.play();
 
       // Prefetch radio mix if queue is single track
@@ -133,7 +156,26 @@ class PreludedAudioHandler extends BaseAudioHandler with QueueAudioHandler, Seek
         _fetchAndAppendMix(targetTrack);
       }
     } catch (e) {
-      print('Audio playback error: $e');
+      print('[AudioHandler] LocalStreamProxy playback failed for ${targetTrack.title}: $e, trying direct API stream fallback');
+      try {
+        final streamUrl = await _api.resolveAudioStream(targetTrack);
+        print('[AudioHandler] Playing direct stream for ${targetTrack.title}: $streamUrl');
+        final fallbackSource = AudioSource.uri(
+          Uri.parse(streamUrl),
+          headers: {
+            'User-Agent': 'com.google.android.youtube/19.29.35 (Linux; U; Android 11; US) gzip',
+          },
+          tag: item,
+        );
+        await _player.setAudioSource(fallbackSource);
+        await _player.play();
+
+        if (_tracksQueue.length == 1) {
+          _fetchAndAppendMix(targetTrack);
+        }
+      } catch (err2) {
+        print('[AudioHandler] All playback attempts failed for ${targetTrack.title}: $err2');
+      }
     }
   }
 
@@ -243,6 +285,17 @@ class PreludedAudioHandler extends BaseAudioHandler with QueueAudioHandler, Seek
       if (_currentIndex >= _tracksQueue.length) {
         _currentIndex = _tracksQueue.length - 1;
       }
+    }
+  }
+
+  void clearQueue() {
+    final current = currentTrack;
+    if (current != null) {
+      _tracksQueue = [current];
+      _currentIndex = 0;
+    } else {
+      _tracksQueue.clear();
+      _currentIndex = 0;
     }
   }
 }

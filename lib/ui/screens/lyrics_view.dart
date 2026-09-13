@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/player_state.dart';
 import '../theme/app_theme.dart';
-import '../widgets/glass_container.dart';
 
 class LyricsView extends StatefulWidget {
   const LyricsView({super.key});
@@ -23,33 +22,64 @@ class _LyricsViewState extends State<LyricsView> {
     final currentMs = player.position.inMilliseconds;
 
     if (player.isLoadingLyrics) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryAccent),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(strokeWidth: 3, color: AppTheme.primaryAccent),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Caricamento testi karaoke...',
+              style: AppTheme.inter(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
       );
     }
 
     if (lyrics == null || (lyrics.plainText.isEmpty && lyrics.syncedLines.isEmpty)) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.lyrics_outlined, size: 54, color: AppTheme.textSecondary),
-            const SizedBox(height: 12),
-            const Text(
-              'Testi non disponibili per questo brano',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.surfaceElevated,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: AppTheme.surfaceContainerHigh,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lyrics_rounded, size: 48, color: AppTheme.textSecondary),
               ),
-              icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
-              label: const Text('Riprova', style: TextStyle(color: Colors.white)),
-              onPressed: () => player.fetchLyricsForCurrentTrack(),
-            ),
-          ],
+              const SizedBox(height: 18),
+              Text(
+                'Testi non disponibili',
+                style: AppTheme.syne(color: AppTheme.textPrimary, fontSize: 15.5, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Non siamo riusciti a sincronizzare i testi per questo brano.',
+                textAlign: TextAlign.center,
+                style: AppTheme.inter(color: AppTheme.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.surfaceContainerHighest,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: Text('Riprova', style: AppTheme.inter(fontWeight: FontWeight.w600)),
+                onPressed: () => player.fetchLyricsForCurrentTrack(),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -63,7 +93,7 @@ class _LyricsViewState extends State<LyricsView> {
         _lastActiveIndex = activeIndex;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
-            final targetOffset = (activeIndex * 55.0) - 150.0;
+            final targetOffset = (activeIndex * 60.0) - 140.0;
             _scrollController.animateTo(
               targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
               duration: const Duration(milliseconds: 350),
@@ -78,15 +108,22 @@ class _LyricsViewState extends State<LyricsView> {
           // Translation toggle if available
           if (lyrics.translation != null && lyrics.translation!.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  ChoiceChip(
+                  FilterChip(
                     label: const Text('Traduzione'),
                     selected: _showTranslation,
                     onSelected: (val) => setState(() => _showTranslation = val),
+                    backgroundColor: AppTheme.surfaceContainerLow,
                     selectedColor: AppTheme.primaryAccent,
+                    labelStyle: AppTheme.inter(
+                      color: _showTranslation ? Colors.white : AppTheme.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                 ],
               ),
@@ -95,6 +132,7 @@ class _LyricsViewState extends State<LyricsView> {
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
               itemCount: lyrics.syncedLines.length,
               itemBuilder: (context, i) {
@@ -106,26 +144,24 @@ class _LyricsViewState extends State<LyricsView> {
                   onTap: () {
                     player.seek(Duration(milliseconds: line.timestampMs));
                   },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                  borderRadius: BorderRadius.circular(16),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isActive ? player.ambientColor.withOpacity(0.18) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Text(
                       line.text,
-                      style: TextStyle(
+                      style: AppTheme.syne(
                         color: isActive
                             ? Colors.white
-                            : (isPassed ? Colors.white.withOpacity(0.4) : Colors.white.withOpacity(0.2)),
-                        fontSize: isActive ? 24 : 20,
-                        fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                            : (isPassed ? Colors.white.withOpacity(0.45) : Colors.white.withOpacity(0.25)),
+                        fontSize: isActive ? 20 : 15.5,
+                        fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
                         letterSpacing: -0.3,
-                        shadows: isActive
-                            ? [
-                                BoxShadow(
-                                  color: player.ambientColor.withOpacity(0.6),
-                                  blurRadius: 18,
-                                ),
-                              ]
-                            : null,
                       ),
                     ),
                   ),
@@ -139,14 +175,16 @@ class _LyricsViewState extends State<LyricsView> {
 
     // Plain lyrics view
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
       child: Text(
         lyrics.plainText,
         style: const TextStyle(
           color: Colors.white,
-          fontSize: 18,
+          fontSize: 16,
           fontWeight: FontWeight.w500,
           height: 1.8,
+          letterSpacing: -0.2,
         ),
       ),
     );
@@ -158,3 +196,4 @@ class _LyricsViewState extends State<LyricsView> {
     super.dispose();
   }
 }
+

@@ -45,25 +45,29 @@ class _MainScreenState extends State<MainScreen> {
                     filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F0F14).withOpacity(0.85),
+                        color: AppTheme.surfaceContainerLowest.withOpacity(0.85),
                         border: Border(top: BorderSide(color: AppTheme.border)),
                       ),
                       child: SafeArea(
                         top: false,
-                        child: BottomNavigationBar(
-                          currentIndex: _currentIndex,
-                          onTap: (index) => setState(() => _currentIndex = index),
-                          items: const [
-                            BottomNavigationBarItem(
-                              icon: Icon(Icons.home_filled),
+                        child: NavigationBar(
+                          selectedIndex: _currentIndex,
+                          onDestinationSelected: (index) => setState(() => _currentIndex = index),
+                          backgroundColor: Colors.transparent,
+                          destinations: const [
+                            NavigationDestination(
+                              icon: Icon(Icons.home_outlined),
+                              selectedIcon: Icon(Icons.home_rounded),
                               label: 'Home',
                             ),
-                            BottomNavigationBarItem(
+                            NavigationDestination(
                               icon: Icon(Icons.search_rounded),
+                              selectedIcon: Icon(Icons.search_rounded),
                               label: 'Cerca',
                             ),
-                            BottomNavigationBarItem(
-                              icon: Icon(Icons.library_music_rounded),
+                            NavigationDestination(
+                              icon: Icon(Icons.library_music_outlined),
+                              selectedIcon: Icon(Icons.library_music_rounded),
                               label: 'Libreria',
                             ),
                           ],

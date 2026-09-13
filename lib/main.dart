@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'services/storage_service.dart';
 import 'services/api_service.dart';
 import 'services/audio_handler.dart';
+import 'services/local_stream_proxy.dart';
 import 'providers/player_state.dart';
 import 'providers/library_state.dart';
 import 'ui/theme/app_theme.dart';
@@ -26,6 +27,7 @@ Future<void> main() async {
   // Initialize Storage & API Services
   final storageService = await StorageService.init();
   final apiService = ApiService(storageService);
+  LocalStreamProxy().storage = storageService;
 
   // Initialize Native Audio Service for iOS Background & Lock Screen Playback
   final audioHandler = await initAudioService(apiService, storageService);

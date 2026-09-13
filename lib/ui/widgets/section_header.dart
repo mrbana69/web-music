@@ -25,18 +25,18 @@ class SectionHeader extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: AppTheme.syne(
                   color: AppTheme.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.4,
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
                 ),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
                 Text(
                   subtitle!,
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  style: AppTheme.inter(color: AppTheme.textSecondary, fontSize: 13),
                 ),
               ],
             ],
@@ -44,9 +44,9 @@ class SectionHeader extends StatelessWidget {
           if (onSeeAll != null)
             TextButton(
               onPressed: onSeeAll,
-              child: const Text(
+              child: Text(
                 'Vedi tutti',
-                style: TextStyle(color: AppTheme.primaryAccent, fontSize: 13, fontWeight: FontWeight.w600),
+                style: AppTheme.inter(color: AppTheme.primaryAccent, fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
         ],

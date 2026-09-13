@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:just_audio/just_audio.dart' hide PlayerState;
 import 'package:palette_generator/palette_generator.dart';
 import '../models/track.dart';
 import '../models/lyrics.dart';
@@ -158,6 +158,13 @@ class PlayerState extends ChangeNotifier {
 
   void removeFromQueue(int index) {
     _audioHandler.removeFromQueue(index);
+    _queue = _audioHandler.currentQueue;
+    _currentIndex = _audioHandler.currentIndex;
+    notifyListeners();
+  }
+
+  void clearQueue() {
+    _audioHandler.clearQueue();
     _queue = _audioHandler.currentQueue;
     _currentIndex = _audioHandler.currentIndex;
     notifyListeners();
