@@ -18,14 +18,27 @@ if (-not $devMode -or $devMode.AllowDevelopmentWithoutDevLicense -ne 1) {
 }
 
 # 2. Verifica Visual Studio C++ Tools
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$vsFound = $false
+if (Test-Path $vswhere) {
+    $installPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if ($installPath) { $vsFound = $true }
+}
+
 $hasCl = Get-Command "cl.exe" -ErrorAction SilentlyContinue
-$hasCmake = Get-Command "cmake.exe" -ErrorAction SilentlyContinue
-if (-not $hasCl -and -not $hasCmake) {
-    Write-Host "[INFO] Strumenti C++ di Visual Studio non rilevati nel PATH." -ForegroundColor Yellow
-    Write-Host "Se non hai installato Visual Studio con il carico di lavoro 'Sviluppo di applicazioni desktop con C++':" -ForegroundColor Yellow
-    Write-Host "Puoi installarlo rapidamente con:" -ForegroundColor Yellow
-    Write-Host "   winget install Microsoft.VisualStudio.2022.BuildTools --override ""--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended""" -ForegroundColor Cyan
-    Write-Host "`nIn alternativa, il workflow GitHub Actions compila automaticamente il file .exe sul cloud!`n" -ForegroundColor Green
+if (-not $vsFound -and -not $hasCl) {
+    Write-Host "`n[ERRORE PREREQUISITO] Visual Studio C++ Toolchain non trovata." -ForegroundColor Red
+    Write-Host "Flutter richiede il carico di lavoro 'Sviluppo di applicazioni desktop con C++' per creare l'app Windows." -ForegroundColor Yellow
+    Write-Host "`n--> COME RISOLVERE (SCEGLI UNA DELLE 2 STRADE):" -ForegroundColor Cyan
+    Write-Host "`nOPZIONE A (Nessuna installazione sul tuo PC - Piu veloce):" -ForegroundColor Green
+    Write-Host "Scarica direttamente l'eseguibile .exe compilato da GitHub Actions:" -ForegroundColor White
+    Write-Host "https://github.com/mrbana69/web-music/actions`n" -ForegroundColor Cyan
+    Write-Host "OPZIONE B (Compilazione in locale sul tuo PC):" -ForegroundColor Green
+    Write-Host "1. Apri PowerShell COME AMMINISTRATORE (tasto destro su Start -> Terminale/PowerShell come Amministratore)" -ForegroundColor White
+    Write-Host "2. Incolla ed esegui questo comando:" -ForegroundColor White
+    Write-Host "   winget install Microsoft.VisualStudio.2022.BuildTools --override ""--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended""" -ForegroundColor Yellow
+    Write-Host "3. Riavvia questo script: .\build_windows_local.ps1`n" -ForegroundColor White
+    exit 1
 }
 
 # 3. Abilita Windows Desktop in Flutter
@@ -59,3 +72,4 @@ if ($LASTEXITCODE -eq 0) {
 } else {
     Write-Error "Compilazione fallita con exit code $LASTEXITCODE"
 }
+
