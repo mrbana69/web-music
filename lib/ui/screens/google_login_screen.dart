@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../../providers/library_state.dart';
 import '../../services/api_service.dart';
@@ -16,7 +19,7 @@ class GoogleLoginScreen extends StatefulWidget {
 }
 
 class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
-  late final WebViewController _controller;
+  WebViewController? _controller;
   static const MethodChannel _nativeCookiesChannel = MethodChannel('com.preluded.music/cookies');
 
   bool _isLoading = true;
@@ -24,9 +27,16 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
   double _progress = 0.0;
   Timer? _periodicCheckTimer;
 
+  bool get _isDesktop => !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+
   @override
   void initState() {
     super.initState();
+    if (_isDesktop) {
+      _isLoading = false;
+      return;
+    }
+
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setUserAgent(
@@ -108,25 +118,27 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
     }
 
     // 2. Document cookie fallback
-    try {
-      final jsCookie = await _controller.runJavaScriptReturningResult('document.cookie');
-      String docStr = jsCookie.toString();
-      if (docStr.startsWith('"') && docStr.endsWith('"') && docStr.length > 1) {
-        docStr = docStr.substring(1, docStr.length - 1);
-      }
-      docStr = docStr.replaceAll(r'\"', '"');
-      final parts = docStr.split(';');
-      for (final p in parts) {
-        final kv = p.split('=');
-        if (kv.length >= 2) {
-          final k = kv[0].trim();
-          final v = kv.sublist(1).join('=').trim();
-          if (k.isNotEmpty && !cookieMap.containsKey(k)) {
-            cookieMap[k] = v;
+    if (_controller != null) {
+      try {
+        final jsCookie = await _controller!.runJavaScriptReturningResult('document.cookie');
+        String docStr = jsCookie.toString();
+        if (docStr.startsWith('"') && docStr.endsWith('"') && docStr.length > 1) {
+          docStr = docStr.substring(1, docStr.length - 1);
+        }
+        docStr = docStr.replaceAll(r'\"', '"');
+        final parts = docStr.split(';');
+        for (final p in parts) {
+          final kv = p.split('=');
+          if (kv.length >= 2) {
+            final k = kv[0].trim();
+            final v = kv.sublist(1).join('=').trim();
+            if (k.isNotEmpty && !cookieMap.containsKey(k)) {
+              cookieMap[k] = v;
+            }
           }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
     return cookieMap.entries.map((e) => '${e.key}=${e.value}').join('; ');
   }
@@ -264,26 +276,28 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: AppTheme.textSecondary),
-            tooltip: 'Ricarica pagina',
-            onPressed: () => _controller.reload(),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: ElevatedButton.icon(
-              onPressed: _isExtracting ? null : () => _extractAndAuthenticate(isManual: true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryAccent,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: const Icon(Icons.check_rounded, size: 16),
-              label: const Text('Fatto', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          if (!_isDesktop) ...[
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, color: AppTheme.textSecondary),
+              tooltip: 'Ricarica pagina',
+              onPressed: () => _controller?.reload(),
             ),
-          ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: ElevatedButton.icon(
+                onPressed: _isExtracting ? null : () => _extractAndAuthenticate(isManual: true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryAccent,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: const Text('Fatto', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(2),
@@ -297,9 +311,90 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
               : const SizedBox(height: 2),
         ),
       ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
+      body: _isDesktop
+          ? Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 460),
+                margin: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'G',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Accesso Google su Windows',
+                      style: AppTheme.syne(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'La sincronizzazione della libreria YouTube Music su Windows desktop può essere eseguita tramite browser.',
+                      style: AppTheme.inter(
+                        fontSize: 14,
+                        color: AppTheme.textSecondary,
+                        height: 1.4,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 28),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        launchUrl(
+                          Uri.parse('https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F'),
+                          mode: LaunchMode.externalApplication,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryAccent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      icon: const Icon(Icons.open_in_browser_rounded),
+                      label: const Text(
+                        'Apri nel Browser',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Torna all\'app', style: TextStyle(color: AppTheme.textSecondary)),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : Stack(
+              children: [
+                if (_controller != null) WebViewWidget(controller: _controller!),
           if (_isExtracting)
             Container(
               color: Colors.black.withOpacity(0.85),

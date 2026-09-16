@@ -27,6 +27,7 @@ dependencies:
   google_fonts: ^6.2.1
   crypto: ^3.0.3
   audio_session: ^0.1.21
+  just_audio_windows: ^0.2.3
 
 dev_dependencies:
   flutter_test:

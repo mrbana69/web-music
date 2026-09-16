@@ -129,11 +129,16 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
 
                   // --- Body: Player, Lyrics, or Queue ---
                   Expanded(
-                    child: _activeSheetIndex == 1
-                        ? const LyricsView()
-                        : (_activeSheetIndex == 2
-                            ? const QueueView()
-                            : _buildPlayerBody(context, player, track, isLiked, maxSeconds)),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 640),
+                        child: _activeSheetIndex == 1
+                            ? const LyricsView()
+                            : (_activeSheetIndex == 2
+                                ? const QueueView()
+                                : _buildPlayerBody(context, player, track, isLiked, maxSeconds)),
+                      ),
+                    ),
                   ),
 
                   // --- Bottom Centered Action Icons (Lyrics, Queue, Share) ---
@@ -201,9 +206,12 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
         return SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
               SizedBox(height: spacingTop),
 
               // 1. Large Squircle 32px Artwork with Dynamic Glow
@@ -429,9 +437,11 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
               SizedBox(height: spacingBottom),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
+  },
+);
   }
 
   Widget _buildBottomIconButton({

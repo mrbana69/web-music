@@ -1,0 +1,43 @@
+name: Build Windows Desktop App (EXE)
+
+on:
+  push:
+    branches: [ windows ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Windows Release EXE
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+          cache: true
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Windows App
+        run: flutter build windows --release
+
+      - name: Package Windows Release ZIP
+        shell: pwsh
+        run: |
+          $releaseDir = "build/windows/x64/runner/Release"
+          Compress-Archive -Path "$releaseDir/*" -DestinationPath "Preluded-Windows-Release.zip" -Force
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Preluded-Windows-Release
+          path: Preluded-Windows-Release.zip
+          retention-days: 14

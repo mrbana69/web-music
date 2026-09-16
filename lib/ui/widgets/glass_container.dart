@@ -55,11 +55,6 @@ class GlassContainer extends StatelessWidget {
       ),
       child: child,
     );
-          ),
-        ],
-      ),
-      child: child,
-    );
 
     Widget content = enableBlur
         ? ClipRRect(
