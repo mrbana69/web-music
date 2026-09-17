@@ -21,10 +21,8 @@
     <meta name="twitter:description" content="Ascolta i tuoi brani preferiti su Preluded" id="twitterDescription">
     <meta name="twitter:image" content="https://raw.githubusercontent.com/mrbana69/web-music/refs/heads/main/icons/512x512.png" id="twitterImage">
 
-    <meta name="apple-mobile-web-app-title" content="Preluded">
-    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mrbana69/web-music/refs/heads/main/icons/512x512.png">
-    <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/4430/4430494.png">
-    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="data:,">
+    <link rel="manifest" href="manifest.json">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Syne:wght@600;700;800&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Overpass:ital,wght@0,100..900;1,100..900&display=swap');
@@ -1243,22 +1241,6 @@ h1 { font-size: 34px; font-weight: 800; }
                     <div class="card-subtitle">Condizioni d'uso e conformità YouTube</div>
                 </div>
             </a>
-
-            <div class="section-title" style="margin-top: 30px;">
-                <span>Versione & Build</span>
-            </div>
-            <div class="list-item" style="cursor:default; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; margin-bottom: 32px;">
-                <div class="list-artwork" style="display:flex; align-items:center; justify-content:center; background: linear-gradient(135deg, #0284c7, #38bdf8); border-radius: 8px;">
-                    <svg class="icon" viewBox="0 0 24 24" style="color:#fff;"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-                </div>
-                <div class="list-info">
-                    <div class="card-title" style="display:flex; align-items:center; gap:8px;">
-                        <span>Preluded PWA v2.0.0</span>
-                        <span id="appCommitBadge" style="background:#0284c7; color:#fff; font-size:11px; padding:2px 8px; border-radius:10px; font-family:monospace; font-weight:700;">aceed2c</span>
-                    </div>
-                    <div class="card-subtitle" id="appCommitSubtitle">Build Commit: aceed2c · PWA Online</div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -1412,41 +1394,62 @@ h1 { font-size: 34px; font-weight: 800; }
                 throw new Error("Dati brano non validi");
             }
             const trackId = track.id;
-            const videoId = track.videoId || track.id;
-            
-            // 0. Cache in-memory immediata (0ms)
             if (streamUrlCache.has(trackId)) {
                 return streamUrlCache.get(trackId);
             }
 
-            // Always use .mp4 stream proxy URL for iOS AVPlayer & mobile background audio
+            const manifestRes = await apiFetch(`/track/?id=${encodeURIComponent(trackId)}&quality=LOSSLESS`);
+            if (!manifestRes.ok) {
+                throw new Error(`Risoluzione brano fallita: ${manifestRes.status}`);
+            }
+            const manifestData = await manifestRes.json();
+
+            let streamUrl = manifestData.directUrl || null;
+            let mimeType = manifestData.mimeType || 'audio/mp4';
+            let source = manifestData.source || 'api';
+            let videoId = manifestData.videoId || track.videoId || track.id;
+
+            // Backward compatibility if directUrl wasn't at top level
+            if (!streamUrl && manifestData.data?.manifest) {
+                try {
+                    const streamManifest = JSON.parse(atob(manifestData.data.manifest));
+                    if (streamManifest.urls && streamManifest.urls.length > 0) {
+                        streamUrl = streamManifest.urls[0];
+                    }
+                } catch (e) {
+                    console.warn("Decodifica manifest fallback:", e);
+                }
+            }
+
+            if (!streamUrl) {
+                throw new Error("Nessun URL stream disponibile per questo brano.");
+            }
+
+            const isDirectAudio = !streamUrl.includes('youtube.com/watch');
             const result = {
                 trackId,
-                streamUrl: `/api/stream.mp4?id=${encodeURIComponent(videoId)}`,
-                isDirectAudio: true,
-                mimeType: 'audio/mp4',
-                source: 'server-stream-proxy',
-                videoId
+                streamUrl,
+                mimeType,
+                source,
+                videoId,
+                isDirectAudio
             };
+
+            // Cache for 10 minutes to speed up repeats and pre-fetching
             streamUrlCache.set(trackId, result);
-            setTimeout(() => streamUrlCache.delete(trackId), 15 * 60 * 1000);
+            setTimeout(() => streamUrlCache.delete(trackId), 10 * 60 * 1000);
+
             return result;
         }
 
-        // Prefetch intelligente dei successivi brani in coda
-        function prefetchNextTracks(count = 3) {
-            const start = state.currentIndex + 1;
-            const end = Math.min(start + count, state.queue.length);
-            for (let i = start; i < end; i++) {
-                const track = state.queue[i];
-                if (track && track.id && !streamUrlCache.has(track.id)) {
-                    resolveTrackAudio(track).catch(() => {});
+        function prefetchNextTrack() {
+            const nextIndex = state.currentIndex + 1;
+            if (nextIndex < state.queue.length) {
+                const nextTrack = state.queue[nextIndex];
+                if (nextTrack && nextTrack.id && !streamUrlCache.has(nextTrack.id)) {
+                    resolveTrackAudio(nextTrack).catch(() => {});
                 }
             }
-        }
-
-        function prefetchNextTrack() {
-            prefetchNextTracks(3);
         }
 
         // --- 2. App State & Logic ---
@@ -1528,13 +1531,9 @@ h1 { font-size: 34px; font-weight: 800; }
             try {
                 const params = new URLSearchParams(window.location.search);
                 const token = params.get('access_token');
-                const refreshToken = params.get('refresh_token');
                 const provider = params.get('provider');
                 if (token && provider) {
                     localStorage.setItem(`${provider}_token`, token);
-                    if (refreshToken) {
-                        localStorage.setItem(`${provider}_refresh_token`, refreshToken);
-                    }
                     if (params.get('user_name')) {
                         localStorage.setItem(`${provider}_user`, params.get('user_name'));
                     }
@@ -1542,7 +1541,6 @@ h1 { font-size: 34px; font-weight: 800; }
                         sessionStorage.setItem('open_google_import_on_load', 'true');
                     }
                     params.delete('access_token');
-                    params.delete('refresh_token');
                     params.delete('provider');
                     params.delete('user_name');
                     const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
@@ -1634,8 +1632,8 @@ h1 { font-size: 34px; font-weight: 800; }
                 if (!container) return;
                 try {
                     this.player = new YT.Player('ytAudioBridge', {
-                        height: '64',
-                        width: '64',
+                        height: '1',
+                        width: '1',
                         playerVars: {
                             'autoplay': 1,
                             'controls': 0,
@@ -1643,7 +1641,7 @@ h1 { font-size: 34px; font-weight: 800; }
                             'disablekb': 1,
                             'fs': 0,
                             'rel': 0,
-                            'enablejsapi': 1
+                            'origin': window.location.origin
                         },
                         events: {
                             'onReady': () => {
@@ -1780,14 +1778,22 @@ h1 { font-size: 34px; font-weight: 800; }
         nativeAudio.setAttribute('playsinline', '');
         nativeAudio.setAttribute('webkit-playsinline', '');
 
-        // Unlock audio context on user gesture (essential for mobile & iOS Safari PWA)
+        // Unlock audio context on user gesture (essential for iOS Safari PWA)
         let audioUnlocked = false;
         function unlockAudioContext() {
             if (audioUnlocked) return;
             audioUnlocked = true;
             try {
-                if (backgroundAudioManager && backgroundAudioManager.start) {
-                    backgroundAudioManager.start();
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) {
+                    const ctx = new AudioCtx();
+                    ctx.resume().catch(() => {});
+                }
+                if (nativeAudio.paused && !nativeAudio.src) {
+                    nativeAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+                    nativeAudio.play().then(() => {
+                        nativeAudio.pause();
+                    }).catch(() => {});
                 }
             } catch (e) {}
         }
@@ -1878,95 +1884,63 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         });
         
-        // Error handler: fallback to /api/stream proxy or YouTube Audio Bridge
+        // Error handler: fallback to /api/stream or YouTube Audio Bridge
         nativeAudio.addEventListener('error', (e) => {
-            console.warn('Native audio direct stream error, trying stream proxy fallback:', e);
+            console.warn('Native audio stream error:', e);
             const currentTrack = state.queue[state.currentIndex];
             if (currentTrack) {
-                const streamProxyUrl = `/api/stream?id=${encodeURIComponent(currentTrack.id || currentTrack.videoId)}&proxy=true`;
+                const streamFallbackUrl = `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
                 if (nativeAudio.src && !nativeAudio.src.includes('/api/stream?id=')) {
-                    nativeAudio.src = streamProxyUrl;
+                    nativeAudio.src = streamFallbackUrl;
                     nativeAudio.load();
-                    nativeAudio.play().then(() => {
-                        state.isPlaying = true;
-                        updatePlayIcons();
-                    }).catch(() => {
-                        const videoId = currentTrack.videoId || currentTrack.id;
-                        if (videoId && ytAudioPlayer) {
-                            try {
-                                nativeAudio.pause();
-                                nativeAudio.removeAttribute('src');
-                                ytAudioPlayer.loadVideo(videoId);
-                                state.isPlaying = true;
-                                updatePlayIcons();
-                            } catch (_) {}
+                    nativeAudio.play().catch(() => {
+                        const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                        if (!isMobile) {
+                            const videoId = currentTrack.videoId || currentTrack.id;
+                            ytAudioPlayer.loadVideo(videoId);
                         }
                     });
                     return;
                 }
+                const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                if (!isMobile) {
+                    const videoId = currentTrack.videoId || currentTrack.id;
+                    ytAudioPlayer.loadVideo(videoId);
+                }
+            }
+        });
+
+        nativeAudio.addEventListener('timeupdate', () => {
+            const cur = nativeAudio.currentTime || 0;
+            const dur = nativeAudio.duration || 0;
+            if (dur > 30 && dur - cur <= 20) {
+                prefetchNextTrack();
+            }
+        });
+
+        // Error handler: fallback to YouTube Audio Bridge if available or graceful notify
+        nativeAudio.addEventListener('error', (e) => {
+            console.warn('Native audio stream error:', e);
+            const currentTrack = state.queue[state.currentIndex];
+            if (currentTrack && (!nativeAudio.src || nativeAudio.networkState === 3 || nativeAudio.error)) {
                 const videoId = currentTrack.videoId || currentTrack.id;
-                if (videoId && ytAudioPlayer) {
-                    try {
-                        nativeAudio.pause();
-                        nativeAudio.removeAttribute('src');
-                        ytAudioPlayer.loadVideo(videoId);
-                        state.isPlaying = true;
-                        updatePlayIcons();
-                    } catch (_) {}
+                if (videoId && (!state.currentStreamUrl || !state.currentStreamUrl.includes('youtube.com/watch'))) {
+                    ytAudioPlayer.loadVideo(videoId);
+                    showToast("Riproduzione via YouTube fallback (background non supportato su iOS in modalità video)", 4000);
+                } else {
+                    showToast("Questo brano non può essere riprodotto tramite Preluded.", 3500, 'error');
+                    setTimeout(() => { nextTrack(); }, 1200);
                 }
             }
         });
 
-        // Background & Visibility Change Handler for Mobile PWA (iOS Safari & Android)
-        let savedState = { time: 0, wasPlaying: false, trackId: null };
-
-        // Background & Visibility Change Handler for Mobile PWA (iOS Safari & Android) & Desktop
-        document.addEventListener('visibilitychange', async () => {
-            if (document.hidden) {
-                // Pagina in background / finestra senza focus
-                if ('mediaSession' in navigator && state.isPlaying) {
-                    navigator.mediaSession.playbackState = 'playing';
-                }
-            } else {
-                // Tornati in primo piano / finestra con focus: sincronizza UI e riprendi se sospeso
-                if (state.isPlaying) {
-                    if (nativeAudio.src && nativeAudio.paused) {
-                        nativeAudio.play().catch(() => showResumeButton());
-                    } else if (ytAudioPlayer.isInit && ytAudioPlayer.paused) {
-                        ytAudioPlayer.play();
-                    }
-                    updatePlayIcons();
-                    updateProgress();
-                }
-                if (state.isPlaying && !wakeLock) {
-                    requestWakeLock();
-                }
+        // Re-check wake lock when returning from background
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && state.isPlaying) {
+                if (!wakeLock) requestWakeLock();
             }
         });
 
-        function showResumeButton() {
-            let btn = document.getElementById('resumeAudioBanner');
-            if (btn) btn.remove();
-            btn = document.createElement('button');
-            btn.id = 'resumeAudioBanner';
-            btn.innerHTML = '<span>▶ Riprendi riproduzione</span>';
-            btn.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg, #FA2D48 0%, #FF6B00 100%);color:#ffffff;padding:12px 26px;border:none;border-radius:30px;font-weight:700;font-size:15px;box-shadow:0 8px 25px rgba(250,45,72,0.45);z-index:99999;cursor:pointer;display:flex;align-items:center;gap:8px;animation:fadeIn 0.25s ease;font-family:Inter,-apple-system,sans-serif;';
-            btn.onclick = async () => {
-                const currentTrack = state.queue[state.currentIndex];
-                if (nativeAudio.src) {
-                    await nativeAudio.play().catch(() => {});
-                } else if (ytAudioPlayer.isInit) {
-                    ytAudioPlayer.play();
-                } else if (currentTrack) {
-                    playTrack(currentTrack, true);
-                }
-                state.isPlaying = true;
-                updatePlayIcons();
-                btn.remove();
-            };
-            document.body.appendChild(btn);
-            setTimeout(() => btn && btn.remove(), 8000);
-        }
         // --- 3. UI Interactions ---
 
         function switchTab(tabName, evt) {
@@ -2030,43 +2004,30 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         }, { passive: true });
 
-        // --- 4. Audio Control Wrapper & Build Info ---
-
-        const APP_BUILD_INFO = {
-            version: '2.0.0',
-            commit: '7f8f36d',
-            buildTime: '08/09/2026, 16:50'
-        };
-
-        function initAppBuildInfo() {
-            const commitBadge = document.getElementById('appCommitBadge');
-            const commitSubtitle = document.getElementById('appCommitSubtitle');
-            if (commitBadge) {
-                commitBadge.textContent = APP_BUILD_INFO.commit;
-            }
-            if (commitSubtitle) {
-                commitSubtitle.textContent = `Build: ${APP_BUILD_INFO.buildTime} · PWA Online`;
-            }
-        }
+        // --- 4. Audio Control Wrapper ---
 
         async function clearCacheAndUpdate() {
-            try {
-                if ('serviceWorker' in navigator) {
+            if ('serviceWorker' in navigator) {
+                try {
                     const registrations = await navigator.serviceWorker.getRegistrations();
-                    for (const registration of registrations) {
-                        await registration.unregister();
+                    if (registrations.length) {
+                        for (const registration of registrations) {
+                            await registration.unregister();
+                        }
                     }
-                }
-                if ('caches' in window) {
+
                     const keys = await caches.keys();
                     await Promise.all(keys.map(key => caches.delete(key)));
+
+                    alert('Cache cleared successfully! The application will now reload.');
+                    window.location.reload(true);
+
+                } catch (error) {
+                    console.error('Failed to clear cache:', error);
+                    alert('Error clearing cache. Please try clearing your browser cache manually.');
                 }
-                sessionStorage.clear();
-                alert('Aggiornamento forzato completato! Ricarico con l\'ultima versione...');
-                window.location.href = window.location.pathname + '?v=' + Date.now();
-            } catch (error) {
-                console.error('Failed to clear cache:', error);
-                window.location.href = window.location.pathname + '?v=' + Date.now();
+            } else {
+                alert('Service workers are not supported in this browser.');
             }
         }
 
@@ -2127,11 +2088,11 @@ h1 { font-size: 34px; font-weight: 800; }
             addToHistory(track);
             state.mixLoaded = false;
             
-            // iOS & Mobile Audio Gesture Unlock
-            try {
-                backgroundAudioManager.init();
-                backgroundAudioManager.start();
-            } catch(e) {}
+            // Smooth fade out of currently active player before switching tracks
+            const currentPlayer = getActiveAudioPlayer();
+            if (state.isPlaying && currentPlayer && !currentPlayer.paused) {
+                await fadeOut(currentPlayer, 0.3);
+            }
             
             if (!fromQueue) {
                 state.queue = [track];
@@ -2146,42 +2107,49 @@ h1 { font-size: 34px; font-weight: 800; }
             updateMediaSession(currentTrack);
             document.getElementById('miniPlayer').classList.add('visible');
 
+            nativeAudio.pause();
+            ytAudioPlayer.reset();
+
             let started = false;
 
             try {
                 const streamData = await resolveTrackAudio(currentTrack);
                 state.currentStreamUrl = streamData.streamUrl;
 
-                if (streamData.isDirectAudio && streamData.streamUrl) {
-                    // Engine 1: Native HTML5 Audio (background & lock screen enabled)
-                    if (ytAudioPlayer && ytAudioPlayer.isInit) {
-                        ytAudioPlayer.pause();
-                    }
-                    if (nativeAudio.src !== streamData.streamUrl && !nativeAudio.src.endsWith(streamData.streamUrl)) {
-                        nativeAudio.src = streamData.streamUrl;
-                    }
-                    const playPromise = nativeAudio.play();
-                    if (playPromise !== undefined) {
-                        playPromise.then(() => {
-                            state.isPlaying = true;
-                            updatePlayIcons();
-                        }).catch((nativeErr) => {
-                            console.warn('Native audio play error:', nativeErr);
-                            setTimeout(() => {
-                                if (nativeAudio.paused && state.isPlaying) {
-                                    nativeAudio.play().catch(() => {});
-                                }
-                            }, 300);
-                        });
-                    }
-                    started = true;
-                } else {
-                    // Engine 2: YouTube Embed Bridge
+                const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                const isWatchUrl = streamData.streamUrl && streamData.streamUrl.includes('youtube.com/watch');
+                const directPlayUrl = (!isWatchUrl && streamData.streamUrl) ? streamData.streamUrl : `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
+
+                // Native HTML5 Audio for Mobile (Android & iOS) and Direct Streams
+                if (isMobile || !isWatchUrl) {
+                    nativeAudio.pause();
+                    nativeAudio.currentTime = 0;
+                    nativeAudio.src = directPlayUrl;
+                    nativeAudio.load();
+
                     try {
-                        nativeAudio.pause();
-                        nativeAudio.removeAttribute('src');
-                    } catch (_) {}
-                    ytAudioPlayer.loadVideo(streamData.videoId || currentTrack.id);
+                        const playPromise = nativeAudio.play();
+                        if (playPromise !== undefined) {
+                            await playPromise;
+                        }
+                        started = !nativeAudio.paused;
+                    } catch (playError) {
+                        console.warn('Native audio play error, trying backend stream fallback:', playError);
+                        if (nativeAudio.src !== `/api/stream?id=${encodeURIComponent(currentTrack.id)}`) {
+                            nativeAudio.src = `/api/stream?id=${encodeURIComponent(currentTrack.id)}`;
+                            nativeAudio.load();
+                            try { 
+                                await nativeAudio.play(); 
+                                started = !nativeAudio.paused; 
+                            } catch(e) {}
+                        }
+                        if (!started && !isMobile && streamData.videoId) {
+                            ytAudioPlayer.loadVideo(streamData.videoId);
+                            started = true;
+                        }
+                    }
+                } else if (streamData.videoId) {
+                    ytAudioPlayer.loadVideo(streamData.videoId);
                     started = true;
                 }
 
@@ -2203,18 +2171,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 }
 
             } catch (e) {
-                console.error("Playback error:", e);
-                const fallbackVideoId = currentTrack.videoId || currentTrack.id;
-                if (fallbackVideoId && ytAudioPlayer) {
-                    try {
-                        nativeAudio.pause();
-                        nativeAudio.removeAttribute('src');
-                        ytAudioPlayer.loadVideo(fallbackVideoId);
-                        state.isPlaying = true;
-                        updatePlayIcons();
-                        return true;
-                    } catch(fe) {}
-                }
+                console.error("Playback failed with error:", e);
                 showToast("Questo brano non può essere riprodotto tramite Preluded.", 3500, 'error');
                 state.isPlaying = false;
                 updatePlayIcons();
@@ -2233,6 +2190,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 backgroundAudioManager.start();
                 if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
             } else if (!state.isPlaying && wasPlaying) {
+                releaseWakeLock();
                 backgroundAudioManager.stop();
                 if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
             }
@@ -2249,14 +2207,15 @@ h1 { font-size: 34px; font-weight: 800; }
         }
 
         function updateMediaSession(track) {
-            if (!track || !('mediaSession' in navigator)) return;
-            const artUrl = formatArtworkUrl(track.album?.cover || track.cover || track.thumbnail, '640x640') || 'https://preluded.vercel.app/icons/512x512.png';
-            const artistName = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
-            try {
+            if ('mediaSession' in navigator && track) {
+                const artUrl = formatArtworkUrl(track.album?.cover, '640x640') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+                const artistName = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
+                const albumTitle = track.album?.title || track.title || 'Unknown Album';
+
                 navigator.mediaSession.metadata = new MediaMetadata({
-                    title: track.title || 'Unknown Title',
+                    title: track.title || 'Unknown Track',
                     artist: artistName,
-                    album: track.album?.title || 'Preluded Music',
+                    album: albumTitle,
                     artwork: [
                         { src: artUrl, sizes: '96x96', type: 'image/jpeg' },
                         { src: artUrl, sizes: '128x128', type: 'image/jpeg' },
@@ -2269,29 +2228,31 @@ h1 { font-size: 34px; font-weight: 800; }
 
                 navigator.mediaSession.playbackState = state.isPlaying ? 'playing' : 'paused';
 
-                navigator.mediaSession.setActionHandler('play', () => togglePlay());
-                navigator.mediaSession.setActionHandler('pause', () => togglePlay());
-                navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
-                navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
-                navigator.mediaSession.setActionHandler('seekto', (details) => {
-                    if (details.seekTime !== undefined) {
-                        seekToSeconds(details.seekTime);
-                    }
-                });
-                navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                    const offset = details.seekOffset || 10;
-                    const player = getActiveAudioPlayer();
-                    if (player) seekToSeconds(Math.max(0, (player.currentTime || 0) - offset));
-                });
-                navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                    const offset = details.seekOffset || 10;
-                    const player = getActiveAudioPlayer();
-                    if (player) seekToSeconds(Math.min(player.duration || 300, (player.currentTime || 0) + offset));
-                });
-                navigator.mediaSession.setActionHandler('stop', () => {
-                    if (state.isPlaying) togglePlay();
-                });
-            } catch (e) {}
+                try {
+                    navigator.mediaSession.setActionHandler('play', () => togglePlay());
+                    navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+                    navigator.mediaSession.setActionHandler('previoustrack', () => prevTrack());
+                    navigator.mediaSession.setActionHandler('nexttrack', () => nextTrack());
+                    navigator.mediaSession.setActionHandler('seekto', (details) => {
+                        if (details.seekTime !== undefined) {
+                            seekToSeconds(details.seekTime);
+                        }
+                    });
+                    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                        const offset = details.seekOffset || 10;
+                        const player = getActiveAudioPlayer();
+                        if (player) seekToSeconds(Math.max(0, (player.currentTime || 0) - offset));
+                    });
+                    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                        const offset = details.seekOffset || 10;
+                        const player = getActiveAudioPlayer();
+                        if (player) seekToSeconds(Math.min(player.duration || 300, (player.currentTime || 0) + offset));
+                    });
+                    navigator.mediaSession.setActionHandler('stop', () => {
+                        if (state.isPlaying) togglePlay();
+                    });
+                } catch (e) {}
+            }
         }
 
         let isAdvancingTrack = false;
@@ -4225,14 +4186,12 @@ h1 { font-size: 34px; font-weight: 800; }
         loadRecommendations();
         renderPlaylists();
         updateAccountUI();
-        initAppBuildInfo();
 
         // Hide splash screen once initial rendering is done (at least 2 seconds)
         setTimeout(() => {
             const splash = document.getElementById('splashOverlay');
             if (splash) splash.classList.add('hidden');
             checkAuthOnStartup();
-            initAppBuildInfo();
         }, 2200);
 
         // --- Deep Linking / Invite Banner ---
@@ -4370,26 +4329,6 @@ h1 { font-size: 34px; font-weight: 800; }
             renderPlaylistPicker();
             const modal = document.getElementById('playlistPickerOverlay');
             if (modal) modal.classList.remove('hidden');
-        }
-
-        function closeAddToPlaylistModal() {
-            const modal = document.getElementById('playlistPickerOverlay');
-            if (modal) modal.classList.add('hidden');
-            targetTrackForPlaylist = null;
-        }
-
-        function showGlobalSpinner(text = 'Caricamento...') {
-            const spinner = document.getElementById('globalSpinner');
-            if (spinner) {
-                const textEl = spinner.querySelector('.spinner-text');
-                if (textEl) textEl.textContent = text;
-                spinner.classList.remove('hidden');
-            }
-        }
-
-        function hideGlobalSpinner() {
-            const spinner = document.getElementById('globalSpinner');
-            if (spinner) spinner.classList.add('hidden');
         }
 
         function filterPlaylistPicker() {

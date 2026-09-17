@@ -25,6 +25,7 @@ class PlayerState extends ChangeNotifier {
   Color _ambientColor = const Color(0xFFFA2D48);
 
   StreamSubscription? _playbackStateSub;
+  StreamSubscription? _playerStateSub;
   StreamSubscription? _mediaItemSub;
   StreamSubscription? _positionSub;
 
@@ -56,6 +57,24 @@ class PlayerState extends ChangeNotifier {
       _queue = _audioHandler.currentQueue;
       _currentIndex = _audioHandler.currentIndex;
       notifyListeners();
+    });
+
+    // 2. Direct playerStateStream backup listener
+    _playerStateSub = _audioHandler.player.playerStateStream.listen((ps) {
+      bool changed = false;
+      if (_isPlaying != ps.playing) {
+        _isPlaying = ps.playing;
+        changed = true;
+      }
+      final buffering = ps.processingState == ProcessingState.buffering ||
+          ps.processingState == ProcessingState.loading;
+      if (_isBuffering != buffering) {
+        _isBuffering = buffering;
+        changed = true;
+      }
+      if (changed) {
+        notifyListeners();
+      }
     });
 
     // 2. MediaItem (Track Metadata)
@@ -115,15 +134,37 @@ class PlayerState extends ChangeNotifier {
   }
 
   Future<void> togglePlay() async {
-    if (_isPlaying) {
-      await _audioHandler.pause();
-    } else {
+    final nextPlaying = !_isPlaying;
+    _isPlaying = nextPlaying;
+    notifyListeners();
+    if (nextPlaying) {
       await _audioHandler.play();
+    } else {
+      await _audioHandler.pause();
     }
   }
 
-  Future<void> nextTrack() async => await _audioHandler.skipToNext();
-  Future<void> previousTrack() async => await _audioHandler.skipToPrevious();
+  Future<void> nextTrack() async {
+    await _audioHandler.skipToNext();
+    final cur = _audioHandler.currentTrack;
+    if (cur != null) {
+      _currentTrack = cur;
+      _currentIndex = _audioHandler.currentIndex;
+      _queue = _audioHandler.currentQueue;
+      notifyListeners();
+    }
+  }
+
+  Future<void> previousTrack() async {
+    await _audioHandler.skipToPrevious();
+    final cur = _audioHandler.currentTrack;
+    if (cur != null) {
+      _currentTrack = cur;
+      _currentIndex = _audioHandler.currentIndex;
+      _queue = _audioHandler.currentQueue;
+      notifyListeners();
+    }
+  }
   Future<void> seek(Duration pos) async {
     _position = pos;
     positionNotifier.value = pos;
@@ -179,6 +220,7 @@ class PlayerState extends ChangeNotifier {
   @override
   void dispose() {
     _playbackStateSub?.cancel();
+    _playerStateSub?.cancel();
     _mediaItemSub?.cancel();
     _positionSub?.cancel();
     positionNotifier.dispose();

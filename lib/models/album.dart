@@ -21,7 +21,7 @@ class Album {
   });
 
   factory Album.fromJson(Map<String, dynamic> json) {
-    final rawCover = json['cover'] ?? json['thumbnail'] ?? json['picture'] ?? '';
+    final rawCover = json['coverUrl'] ?? json['cover'] ?? json['thumbnail'] ?? json['picture'] ?? '';
     final trackItems = (json['tracks'] as List? ?? json['items'] as List? ?? [])
         .map((t) => Track.fromJson(Map<String, dynamic>.from(t)))
         .toList();
@@ -34,6 +34,26 @@ class Album {
       coverUrl: AppConfig.formatArtwork(rawCover),
       year: json['year']?.toString() ?? json['releaseDate']?.toString() ?? '',
       tracks: trackItems,
+    );
+  }
+
+  Album copyWith({
+    String? id,
+    String? title,
+    String? artistName,
+    String? artistId,
+    String? coverUrl,
+    String? year,
+    List<Track>? tracks,
+  }) {
+    return Album(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      artistName: artistName ?? this.artistName,
+      artistId: artistId ?? this.artistId,
+      coverUrl: coverUrl ?? this.coverUrl,
+      year: year ?? this.year,
+      tracks: tracks ?? this.tracks,
     );
   }
 
