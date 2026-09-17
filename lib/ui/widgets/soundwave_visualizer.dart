@@ -101,3 +101,4 @@ class _SoundwaveVisualizerState extends State<SoundwaveVisualizer>
     );
   }
 }
+
