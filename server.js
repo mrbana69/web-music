@@ -28,8 +28,8 @@ app.use('/health', healthRoutes);
 // Static assets (PWA frontend)
 app.use(express.static(__dirname));
 
-// Route /app, /app/* and /player directly to app.html
-app.get(['/app', '/app/*', '/player'], (req, res) => {
+// App route for PWA and deep links
+app.get(['/app', '/app/*'], (req, res) => {
   res.sendFile(path.join(__dirname, 'app.html'));
 });
 

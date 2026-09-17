@@ -4,6 +4,7 @@ import '../models/playlist.dart';
 import '../models/user.dart';
 import '../services/storage_service.dart';
 import '../services/api_service.dart';
+import '../config/app_config.dart';
 
 class LibraryState extends ChangeNotifier {
   final StorageService _storage;
@@ -16,13 +17,22 @@ class LibraryState extends ChangeNotifier {
   GoogleUser? _googleUser;
   bool _isSyncing = false;
 
+  List<String> _followedArtists = [];
+  List<String> _savedAlbums = [];
+
   LibraryState(this._storage) {
     _loadInitialData();
+    _storage.historyVersion.addListener(() {
+      _history = _storage.getHistory();
+      notifyListeners();
+    });
   }
 
   List<Track> get likedTracks => _likedTracks;
   List<Playlist> get playlists => _playlists;
   List<Track> get history => _history;
+  List<String> get followedArtists => _followedArtists;
+  List<String> get savedAlbums => _savedAlbums;
   String? get ytmCookie => _ytmCookie;
   String get backendUrl => _backendUrl;
   GoogleUser? get googleUser => _googleUser;
@@ -33,10 +43,34 @@ class LibraryState extends ChangeNotifier {
     _likedTracks = _storage.getLikedSongs();
     _playlists = _storage.getPlaylists();
     _history = _storage.getHistory();
+    _followedArtists = _storage.getFollowedArtistIds();
+    _savedAlbums = _storage.getSavedAlbumIds();
     _ytmCookie = _storage.getYtmCookie();
     _backendUrl = _storage.getBackendUrl();
     _googleUser = _storage.getGoogleUser();
     notifyListeners();
+  }
+
+  bool isArtistFollowed(String artistId) {
+    return _followedArtists.contains(artistId);
+  }
+
+  Future<bool> toggleFollowArtist(String artistId) async {
+    final res = await _storage.toggleFollowArtist(artistId);
+    _followedArtists = _storage.getFollowedArtistIds();
+    notifyListeners();
+    return res;
+  }
+
+  bool isAlbumSaved(String albumId) {
+    return _savedAlbums.contains(albumId);
+  }
+
+  Future<bool> toggleSaveAlbum(String albumId) async {
+    final res = await _storage.toggleSaveAlbum(albumId);
+    _savedAlbums = _storage.getSavedAlbumIds();
+    notifyListeners();
+    return res;
   }
 
   bool isLiked(String trackId) {
@@ -169,5 +203,41 @@ class LibraryState extends ChangeNotifier {
   Future<void> clearAllCache() async {
     await _storage.clearAllCache();
     _loadInitialData();
+  }
+
+  bool _isRepairingHistory = false;
+  Future<void> repairHistoryArtists(ApiService api) async {
+    if (_isRepairingHistory || _history.isEmpty) return;
+    _isRepairingHistory = true;
+    try {
+      bool changed = false;
+      final repaired = <Track>[];
+      for (final t in _history) {
+        final isGeneric = t.artistName.isEmpty ||
+            t.artistName.toLowerCase() == 'unknown artist' ||
+            t.artistName.toLowerCase() == 'artista sconosciuto' ||
+            t.artistName.toLowerCase() == 'artista' ||
+            t.artistName.toLowerCase() == 'artist';
+        if (isGeneric) {
+          try {
+            final vId = t.videoId.isNotEmpty ? t.videoId : t.id;
+            final vid = await api.yt.videos.get(vId).timeout(const Duration(seconds: 4));
+            if (vid.author.isNotEmpty) {
+              repaired.add(t.copyWith(artistName: AppConfig.sanitizeArtist(vid.author)));
+              changed = true;
+              continue;
+            }
+          } catch (_) {}
+        }
+        repaired.add(t);
+      }
+      if (changed) {
+        _history = repaired;
+        await _storage.saveHistory(repaired);
+        notifyListeners();
+      }
+    } finally {
+      _isRepairingHistory = false;
+    }
   }
 }

@@ -1,11 +1,18 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../models/artist.dart';
+import '../../models/album.dart';
+import '../../models/track.dart';
 import '../../providers/player_state.dart';
+import '../../providers/library_state.dart';
 import '../../services/api_service.dart';
+import '../../config/app_config.dart';
 import '../theme/app_theme.dart';
-import '../widgets/track_tile.dart';
+import '../widgets/mini_player.dart';
+import '../widgets/stitch_track_row.dart';
 import 'album_screen.dart';
 
 class ArtistScreen extends StatefulWidget {
@@ -19,12 +26,14 @@ class ArtistScreen extends StatefulWidget {
 class _ArtistScreenState extends State<ArtistScreen> {
   late Artist _artist;
   bool _isLoading = false;
+  bool _showAllTracks = false;
+  String _selectedDiscographyFilter = 'all'; // 'all', 'albums', 'singles'
 
   @override
   void initState() {
     super.initState();
     _artist = widget.artist;
-    if (_artist.topTracks.isEmpty) {
+    if (_artist.topTracks.isEmpty || _artist.albums.isEmpty) {
       _loadArtist();
     }
   }
@@ -45,196 +54,1328 @@ class _ArtistScreenState extends State<ArtistScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  List<Album> get _filteredAlbums {
+    if (_selectedDiscographyFilter == 'albums') {
+      return _artist.albums.where((a) => !a.title.toLowerCase().contains('single') && !a.title.toLowerCase().contains('singolo')).toList();
+    } else if (_selectedDiscographyFilter == 'singles') {
+      return _artist.albums.where((a) => a.title.toLowerCase().contains('single') || a.title.toLowerCase().contains('singolo') || a.tracks.length <= 2).toList();
+    }
+    return _artist.albums;
+  }
+
+  void _shareArtist() {
+    final shareUrl = AppConfig.getShareUrl(_artist.id);
+    Share.share('Ascolta ${_artist.name} su Preluded: $shareUrl');
+  }
+
+  void _showBioDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1B1F),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundImage: _artist.picture.isNotEmpty ? NetworkImage(_artist.picture) : null,
+              child: _artist.picture.isEmpty ? const Icon(Icons.person_rounded) : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _artist.name,
+                style: AppTheme.syne(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Text(
+            _artist.bio.isNotEmpty
+                ? _artist.bio
+                : 'Riccardo Fabbriconi, noto come Blanco, è una delle voci più innovative ed energiche della musica contemporanea, unendo sonorità rock, melodramma ed elettronica con produzioni Spatial Hi-Fi su Preluded.',
+            style: AppTheme.inter(color: Colors.white70, fontSize: 14, height: 1.6),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Chiudi', style: AppTheme.syne(color: const Color(0xFFFF525E), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final player = context.read<PlayerState>();
+    final player = context.watch<PlayerState>();
+    final library = context.watch<LibraryState>();
+    final isFollowing = library.isArtistFollowed(_artist.id);
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width > 900;
+
+    final displayedTracks = _showAllTracks
+        ? _artist.topTracks
+        : _artist.topTracks.take(5).toList();
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: const Color(0xFF131317),
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
+          // Frosted App Bar
           SliverAppBar(
-            expandedHeight: 280,
+            backgroundColor: const Color(0xFF131317).withOpacity(0.85),
             pinned: true,
-            backgroundColor: AppTheme.surfaceContainerLowest,
+            elevation: 0,
             leading: IconButton(
               icon: Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.4),
+                  color: Colors.black.withOpacity(0.45),
                   shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
                 ),
-                child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 17),
               ),
               onPressed: () => Navigator.pop(context),
             ),
-            flexibleSpace: FlexibleSpaceBar(
-              title: Text(
-                _artist.name,
-                style: AppTheme.syne(fontWeight: FontWeight.w700, fontSize: 17, letterSpacing: -0.3),
-              ),
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: _artist.picture,
-                    fit: BoxFit.cover,
-                    memCacheWidth: 400,
-                    memCacheHeight: 400,
-                    errorWidget: (c, u, e) => Container(
-                      color: AppTheme.surfaceContainerHighest,
-                      child: const Icon(Icons.person_rounded, size: 64, color: AppTheme.textSecondary),
-                    ),
+            title: Text(
+              _artist.name,
+              style: AppTheme.syne(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
+            ),
+            actions: [
+              IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.45),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withOpacity(0.08)),
                   ),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                  child: const Icon(Icons.share_rounded, color: Colors.white, size: 17),
+                ),
+                tooltip: 'Condividi Artista',
+                onPressed: _shareArtist,
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+
+          // Immersive Ambient Hero Section
+          SliverToBoxAdapter(
+            child: _buildImmersiveHero(context, isDesktop, isFollowing, library, player),
+          ),
+
+          // Main Stage: Responsive Desktop (60/40) or Mobile Stack
+          if (isDesktop) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(28, 24, 28, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left Column (60%): Popolari & Acoustic Signature
+                    Expanded(
+                      flex: 7,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildPopularHeader(displayedTracks.length),
+                          const SizedBox(height: 8),
+                          if (_isLoading)
+                            const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFFFA2D48))))
+                          else if (_artist.topTracks.isEmpty)
+                            _buildEmptyTracksNotice()
+                          else
+                            ...displayedTracks.asMap().entries.map((e) {
+                              return StitchTrackRow(
+                                track: e.value,
+                                queue: _artist.topTracks,
+                                index: e.key,
+                                showTopBadge: e.key == 0,
+                                customSubtitle: 'Singolo • Preluded Hi-Fi',
+                              );
+                            }),
+                          const SizedBox(height: 24),
+                          _buildAcousticSignatureModule(),
+                        ],
                       ),
                     ),
+                    const SizedBox(width: 28),
+
+                    // Right Column (40%): Tour / Highlight Card & About Info
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildTourDatesCard(),
+                          const SizedBox(height: 20),
+                          _buildExclusiveVinylCard(),
+                          const SizedBox(height: 20),
+                          _buildBiographyCard(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ] else ...[
+            // Mobile Vertical Flow
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+                child: _buildPopularHeader(displayedTracks.length),
+              ),
+            ),
+            if (_isLoading)
+              const SliverToBoxAdapter(
+                child: Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFFFA2D48)))),
+              )
+            else if (_artist.topTracks.isEmpty)
+              SliverToBoxAdapter(child: _buildEmptyTracksNotice())
+            else
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => StitchTrackRow(
+                    track: displayedTracks[i],
+                    queue: _artist.topTracks,
+                    index: i,
+                    showTopBadge: i == 0,
+                    customSubtitle: 'Singolo • Preluded Hi-Fi',
                   ),
-                ],
+                  childCount: displayedTracks.length,
+                ),
+              ),
+
+            // Discography Carousel for Mobile
+            if (_artist.albums.isNotEmpty)
+              SliverToBoxAdapter(
+                child: _buildMobileDiscographySection(),
+              ),
+
+            // Bio / Info Card for Mobile
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                child: _buildBiographyCard(),
+              ),
+            ),
+          ],
+
+          // Discography Grid for Desktop
+          if (isDesktop && _artist.albums.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
+                child: _buildDesktopDiscographyGrid(),
+              ),
+            ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 120)),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 880),
+            child: const MiniPlayer(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- Hero Section ---
+  Widget _buildImmersiveHero(
+    BuildContext context,
+    bool isDesktop,
+    bool isFollowing,
+    LibraryState library,
+    PlayerState player,
+  ) {
+    return Container(
+      margin: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 14,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E0E11),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // Ambient Radial Glow Halos
+          Positioned(
+            top: -60,
+            left: -40,
+            child: Container(
+              width: 320,
+              height: 320,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFFFA2D48).withOpacity(0.28),
+                    const Color(0xFFFE6B00).withOpacity(0.10),
+                    Colors.transparent,
+                  ],
+                ),
               ),
             ),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_artist.bio.isNotEmpty) ...[
-                    Text(
-                      _artist.bio,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTheme.inter(color: AppTheme.textSecondary, fontSize: 13, height: 1.5),
-                    ),
-                    const SizedBox(height: 16),
+          Positioned(
+            top: 20,
+            right: -40,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFFFF525E).withOpacity(0.18),
+                    Colors.transparent,
                   ],
-                  if (_artist.topTracks.isNotEmpty) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppTheme.primaryAccent,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                ),
+              ),
+            ),
+          ),
+
+          // Blurred Scrim Background Layer
+          if (_artist.picture.isNotEmpty)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.15,
+                child: CachedNetworkImage(
+                  imageUrl: _artist.picture,
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
+                  memCacheWidth: 600,
+                  memCacheHeight: 600,
+                ),
+              ),
+            ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF0E0E11).withOpacity(0.6),
+                    const Color(0xFF0E0E11).withOpacity(0.92),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+          ),
+
+          // Hero Content
+          Padding(
+            padding: EdgeInsets.all(isDesktop ? 28.0 : 18.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Metadata Badges Row
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Verified Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.07),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.verified_rounded, color: Color(0xFFFF525E), size: 14),
+                          const SizedBox(width: 5),
+                          Text(
+                            'ARTISTA VERIFICATO',
+                            style: AppTheme.syne(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
                             ),
-                            icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-                            label: Text('Riproduci Brani', style: AppTheme.syne(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.5)),
-                            onPressed: () => player.playTrack(_artist.topTracks.first, newQueue: _artist.topTracks, index: 0),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Listeners Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.07),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF34C759),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '#42 NEL MONDO • 3.045.864 ASCOLTATORI',
+                            style: AppTheme.inter(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Hi-Fi Master Tag
+                    if (isDesktop)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF353438).withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white.withOpacity(0.06)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.graphic_eq_rounded, color: Color(0xFFFFB693), size: 14),
+                            const SizedBox(width: 6),
+                            Text(
+                              'MASTER 24-BIT / 96KHZ DOLBY ATMOS',
+                              style: AppTheme.inter(
+                                color: const Color(0xFFFFB693),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+
+                // Main Identity Row: Concentric Glowing Avatar + Typographic Masthead
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // Concentric Radial Acoustic Avatar
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Outer Glow Ring
+                        Container(
+                          width: isDesktop ? 144 : 108,
+                          height: isDesktop ? 144 : 108,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFA2D48), Color(0xFFFE6B00), Color(0xFFFF525E)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFFA2D48).withOpacity(0.45),
+                                blurRadius: 20,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Inner Image Avatar
+                        Container(
+                          width: isDesktop ? 136 : 102,
+                          height: isDesktop ? 136 : 102,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Color(0xFF131317),
+                          ),
+                          child: ClipOval(
+                            child: CachedNetworkImage(
+                              imageUrl: _artist.picture,
+                              fit: BoxFit.cover,
+                              memCacheWidth: 320,
+                              memCacheHeight: 320,
+                              placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
+                              errorWidget: (c, u, e) => Container(
+                                color: AppTheme.surfaceContainerHighest,
+                                child: const Icon(Icons.person_rounded, color: Colors.white54, size: 40),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Small Bottom-Right Spatial Audio Badge
+                        Positioned(
+                          bottom: 2,
+                          right: 2,
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF131317),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withOpacity(0.15)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.5),
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
+                            child: const Center(
+                              child: Icon(Icons.spatial_audio_rounded, color: Color(0xFFFF525E), size: 15),
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                  ],
+                    const SizedBox(width: 18),
 
-                  // Albums / Singles horizontal carousel if available
-                  if (_artist.albums.isNotEmpty) ...[
-                    Text(
-                      'Album & Singoli',
-                      style: AppTheme.syne(fontSize: 16.5, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 165,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: _artist.albums.length,
-                        itemBuilder: (context, i) {
-                          final album = _artist.albums[i];
-                          return Container(
-                            width: 120,
-                            margin: const EdgeInsets.only(right: 12),
-                            child: InkWell(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => AlbumScreen(album: album)),
-                                );
-                              },
-                              borderRadius: BorderRadius.circular(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: CachedNetworkImage(
-                                      imageUrl: album.coverUrl,
-                                      width: 120,
-                                      height: 120,
-                                      fit: BoxFit.cover,
-                                      memCacheWidth: 240,
-                                      memCacheHeight: 240,
-                                      placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
-                                      errorWidget: (c, u, e) => Container(
-                                        color: AppTheme.surfaceContainerHighest,
-                                        child: const Icon(Icons.album_rounded, color: AppTheme.textSecondary),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    album.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTheme.syne(
-                                      color: AppTheme.textPrimary,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (album.year.isNotEmpty)
-                                    Text(
-                                      album.year,
-                                      style: AppTheme.inter(color: AppTheme.textMuted, fontSize: 11),
-                                    ),
-                                ],
-                              ),
+                    // Typographic Masthead
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'PRELUDED ORIGINAL FOCUS',
+                            style: AppTheme.syne(
+                              color: const Color(0xFFFFB3B2),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.5,
                             ),
-                          );
-                        },
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _artist.name.toUpperCase(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.syne(
+                              color: Colors.white,
+                              fontSize: isDesktop ? 44 : 28,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -1.2,
+                              height: 1.05,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Icon(Icons.trending_up_rounded, color: Color(0xFF34C759), size: 16),
+                              const SizedBox(width: 5),
+                              Text(
+                                '+14.2% questa settimana su Preluded',
+                                style: AppTheme.inter(
+                                  color: const Color(0xFF34C759),
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 20),
                   ],
+                ),
+                const SizedBox(height: 24),
 
-                  Text(
-                    'Brani popolari',
-                    style: AppTheme.syne(fontSize: 16.5, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3),
-                  ),
-                ],
+                // Interactive Command Action Bar
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Primary Super CTA "Riproduci"
+                    InkWell(
+                      onTap: () {
+                        if (_artist.topTracks.isNotEmpty) {
+                          player.playTrack(_artist.topTracks.first, newQueue: _artist.topTracks, index: 0);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(30),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFA2D48), Color(0xFFFF525E)],
+                          ),
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFA2D48).withOpacity(0.45),
+                              blurRadius: 18,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
+                            const SizedBox(width: 6),
+                            Text(
+                              'ASCOLTA ORA',
+                              style: AppTheme.syne(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // "Segui" / "Seguito" Toggle Button
+                    InkWell(
+                      onTap: () => library.toggleFollowArtist(_artist.id),
+                      borderRadius: BorderRadius.circular(30),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: isFollowing
+                              ? const Color(0xFF353438)
+                              : Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(
+                            color: isFollowing
+                                ? const Color(0xFF34C759).withOpacity(0.4)
+                                : Colors.white.withOpacity(0.12),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isFollowing ? Icons.check_rounded : Icons.add_rounded,
+                              color: isFollowing ? const Color(0xFF34C759) : Colors.white,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isFollowing ? 'SEGUITO' : 'SEGUI',
+                              style: AppTheme.syne(
+                                color: isFollowing ? const Color(0xFF34C759) : Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // "Shuffle" Random Play Button
+                    InkWell(
+                      onTap: () {
+                        if (_artist.topTracks.isNotEmpty) {
+                          final shuffled = List<Track>.from(_artist.topTracks)..shuffle(Random());
+                          player.playTrack(shuffled.first, newQueue: shuffled, index: 0);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(30),
+                      child: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withOpacity(0.12)),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.shuffle_rounded, color: Colors.white, size: 19),
+                        ),
+                      ),
+                    ),
+
+                    // "Condividi" Button
+                    InkWell(
+                      onTap: _shareArtist,
+                      borderRadius: BorderRadius.circular(30),
+                      child: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withOpacity(0.12)),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.share_rounded, color: Colors.white, size: 18),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Popular Section Header ---
+  Widget _buildPopularHeader(int count) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Popolari',
+              style: AppTheme.syne(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFA2D48).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFA2D48).withOpacity(0.3)),
+              ),
+              child: Text(
+                _showAllTracks ? 'TUTTI' : 'TOP 5',
+                style: AppTheme.syne(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFFFF525E),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (_artist.topTracks.length > 5)
+          TextButton(
+            onPressed: () => setState(() => _showAllTracks = !_showAllTracks),
+            child: Text(
+              _showAllTracks ? 'Mostra meno' : 'Mostra tutti (${_artist.topTracks.length})',
+              style: AppTheme.inter(
+                color: const Color(0xFFFFB3B2),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          if (_isLoading)
-            const SliverFillRemaining(
-              child: Center(
-                child: CircularProgressIndicator(color: AppTheme.primaryAccent),
+      ],
+    );
+  }
+
+  Widget _buildEmptyTracksNotice() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      margin: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B1B1F),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Center(
+        child: Text(
+          'Nessun brano disponibile per questo artista',
+          style: AppTheme.inter(color: Colors.white60, fontSize: 13),
+        ),
+      ),
+    );
+  }
+
+  // --- Acoustic Signature Equalizer Module ---
+  Widget _buildAcousticSignatureModule() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B1B1F),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.tune_rounded, color: Color(0xFFFF525E), size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'ACOUSTIC SIGNATURE',
+                    style: AppTheme.syne(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ],
               ),
-            )
-          else if (_artist.topTracks.isEmpty)
-            const SliverFillRemaining(
-              child: Center(
-                child: Text('Nessun brano disponibile per questo artista', style: TextStyle(color: AppTheme.textSecondary)),
+              Text(
+                'Hi-Res Spatial Render Active',
+                style: AppTheme.inter(
+                  color: const Color(0xFFFFB693),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => TrackTile(track: _artist.topTracks[i], queue: _artist.topTracks, index: i, showIndex: true),
-                childCount: _artist.topTracks.length,
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Interactive live audio spectrum visualization bars
+          SizedBox(
+            height: 48,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _spectrumBar(0.65, const Color(0xFFFA2D48)),
+                _spectrumBar(0.85, const Color(0xFFFA2D48)),
+                _spectrumBar(1.00, const Color(0xFFFF525E)),
+                _spectrumBar(0.55, const Color(0xFFFE6B00)),
+                _spectrumBar(0.80, const Color(0xFFFE6B00)),
+                _spectrumBar(0.40, const Color(0xFFFFB693)),
+                _spectrumBar(0.75, const Color(0xFFFA2D48)),
+                _spectrumBar(0.95, const Color(0xFFFF525E)),
+                _spectrumBar(0.60, const Color(0xFFFE6B00)),
+                _spectrumBar(0.50, const Color(0xFFFA2D48)),
+                _spectrumBar(0.35, const Color(0xFFFFB693)),
+                _spectrumBar(0.20, const Color(0xFFFE6B00)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('20 Hz (SUB)', style: AppTheme.inter(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.w600)),
+              Text('1.2 kHz (VOCAL EDGE)', style: AppTheme.inter(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.w600)),
+              Text('20 kHz (AIR)', style: AppTheme.inter(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _spectrumBar(double factor, Color color) {
+    return Expanded(
+      child: Container(
+        height: 48 * factor,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.85),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 4,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- Right Column Cards for Desktop ---
+  Widget _buildTourDatesCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E0E11),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(color: Color(0xFF34C759), shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('IN TOUR 2025', style: AppTheme.syne(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.07),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text('3 DATE SOLD OUT', style: AppTheme.inter(color: const Color(0xFFFFB3B2), fontSize: 9.5, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _concertRow('GIU', '14', 'Milano • Forum Assago', 'Innamorato Stadi & Arena'),
+          const SizedBox(height: 10),
+          _concertRow('GIU', '23', 'Roma • Stadio Olimpico', 'Special Night Acoustic + Live'),
+        ],
+      ),
+    );
+  }
+
+  Widget _concertRow(String month, String day, String title, String subtitle) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF201F23).withOpacity(0.6),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFF353438),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(month, style: AppTheme.syne(color: const Color(0xFFFF525E), fontSize: 9, fontWeight: FontWeight.w800)),
+                Text(day, style: AppTheme.syne(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800, height: 1.1)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTheme.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(subtitle, style: AppTheme.inter(color: Colors.white54, fontSize: 11)),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text('Biglietti', style: AppTheme.inter(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExclusiveVinylCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2A292E), Color(0xFF201F23), Color(0xFF0E0E11)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('EDIZIONE ESCLUSIVA PRELUDED', style: AppTheme.syne(color: const Color(0xFFFFB693), fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFA2D48),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('LIMITED', style: AppTheme.syne(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              // Spinning Vinyl Graphic
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black,
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: Center(
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(colors: [Color(0xFFFA2D48), Color(0xFFFE6B00)]),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Blu Celeste (Remastered)', style: AppTheme.syne(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text('Doppio Vinile Opaco 180g + Booklet', style: AppTheme.inter(color: Colors.white54, fontSize: 11)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Artist Biography Card ---
+  Widget _buildBiographyCard() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B1B1F),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Informazioni',
+                style: AppTheme.syne(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF34C759).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF34C759).withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Container(width: 5, height: 5, decoration: const BoxDecoration(color: Color(0xFF34C759), shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    Text('#42 nel mondo', style: AppTheme.inter(color: const Color(0xFF34C759), fontSize: 10, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _artist.bio.isNotEmpty
+                ? _artist.bio
+                : 'Riccardo Fabbriconi, in arte Blanco, classe 2003, è una delle voci più prorompenti e innovative della scena musicale contemporanea. Con il suo stile crudo, viscerale e melodrammatico, unisce sonorità punk rock all\'immediatezza dell\'urban pop con produzioni Spatial Hi-Fi su Preluded.',
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: AppTheme.inter(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 13,
+              height: 1.55,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('12.4M', style: AppTheme.syne(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+                  Text('Follower Preluded', style: AppTheme.inter(color: Colors.white38, fontSize: 11)),
+                ],
+              ),
+              TextButton.icon(
+                onPressed: () => _showBioDialog(context),
+                icon: const Icon(Icons.arrow_forward_rounded, color: Color(0xFFFFB3B2), size: 16),
+                label: Text(
+                  'Bio Completa',
+                  style: AppTheme.inter(color: const Color(0xFFFFB3B2), fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Discography Section for Mobile (Horizontal Snap Carousel) ---
+  Widget _buildMobileDiscographySection() {
+    final albums = _filteredAlbums;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Discografia',
+                style: AppTheme.syne(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: Colors.white,
+                ),
+              ),
+              Row(
+                children: [
+                  _filterChip('Tutto', 'all'),
+                  const SizedBox(width: 6),
+                  _filterChip('Album', 'albums'),
+                  const SizedBox(width: 6),
+                  _filterChip('Singoli', 'singles'),
+                ],
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: albums.length,
+            itemBuilder: (context, i) {
+              final album = albums[i];
+              return _buildDiscographyCard(album, 136);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- Discography Section for Desktop (Responsive Grid) ---
+  Widget _buildDesktopDiscographyGrid() {
+    final albums = _filteredAlbums;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Discografia',
+                  style: AppTheme.syne(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                _filterChip('Tutto', 'all'),
+                const SizedBox(width: 8),
+                _filterChip('Album', 'albums'),
+                const SizedBox(width: 8),
+                _filterChip('Singoli & EP', 'singles'),
+              ],
+            ),
+            Text(
+              '${albums.length} pubblicazioni',
+              style: AppTheme.inter(color: Colors.white38, fontSize: 13),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 180,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.75,
+          ),
+          itemCount: albums.length,
+          itemBuilder: (context, i) {
+            final album = albums[i];
+            return _buildDiscographyCard(album, double.infinity);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _filterChip(String label, String value) {
+    final isSelected = _selectedDiscographyFilter == value;
+    return InkWell(
+      onTap: () => setState(() => _selectedDiscographyFilter = value),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: AppTheme.inter(
+            color: isSelected ? Colors.black : Colors.white70,
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDiscographyCard(Album album, double width) {
+    final isSingle = album.title.toLowerCase().contains('single') ||
+        album.title.toLowerCase().contains('singolo') ||
+        album.tracks.length <= 2;
+
+    return Container(
+      width: width == double.infinity ? null : width,
+      margin: width == double.infinity ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 6),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => AlbumScreen(album: album)),
+          );
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Album Cover with Play Overlay & Badge
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: AspectRatio(
+                    aspectRatio: 1.0,
+                    child: CachedNetworkImage(
+                      imageUrl: album.coverUrl,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 280,
+                      memCacheHeight: 280,
+                      placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
+                      errorWidget: (c, u, e) => Container(
+                        color: AppTheme.surfaceContainerHighest,
+                        child: const Icon(Icons.album_rounded, color: Colors.white38, size: 36),
+                      ),
+                    ),
+                  ),
+                ),
+                // Release Badge at Top-Left
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0E0E11).withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    child: Text(
+                      isSingle ? 'SINGOLO' : 'ALBUM',
+                      style: AppTheme.syne(
+                        color: Colors.white,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              album.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTheme.inter(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          const SliverToBoxAdapter(child: SizedBox(height: 120)),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              album.year.isNotEmpty ? album.year : (isSingle ? 'Singolo' : 'Album'),
+              style: AppTheme.inter(
+                color: Colors.white54,
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -4,6 +4,30 @@ param (
 
 $ErrorActionPreference = "Stop"
 
+Set-Location $PSScriptRoot
+
+# Assicura che Flutter sia nel PATH della sessione corrente
+$flutterCandidates = @(
+    "$env:USERPROFILE\flutter\bin",
+    "C:\flutter\bin",
+    "C:\src\flutter\bin"
+)
+foreach ($dir in $flutterCandidates) {
+    if (Test-Path "$dir\flutter.bat") {
+        if ($env:PATH -notlike "*$dir*") {
+            $env:PATH = "$dir;$env:PATH"
+        }
+        break
+    }
+}
+
+$hasFlutter = Get-Command "flutter" -ErrorAction SilentlyContinue
+if (-not $hasFlutter) {
+    Write-Host "`n[ERRORE PREREQUISITO] Flutter SDK non trovato nel PATH o nei percorsi standard." -ForegroundColor Red
+    Write-Host "Verifica che Flutter sia installato (ad es. in $env:USERPROFILE\flutter\bin) e aggiunto al PATH." -ForegroundColor Yellow
+    exit 1
+}
+
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host "       Compilazione Preluded Music per Windows        " -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
@@ -50,6 +74,10 @@ Write-Host "Download dipendenze..." -ForegroundColor Cyan
 flutter pub get
 
 # 5. Compilazione Release
+Write-Host "Verifica processi attivi..." -ForegroundColor Cyan
+Get-Process "preluded_music" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
+
 Write-Host "Compilazione Windows in corso..." -ForegroundColor Cyan
 flutter build windows --release
 

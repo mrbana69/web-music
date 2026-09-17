@@ -41,12 +41,17 @@ class Track {
   factory Track.fromJson(Map<String, dynamic> json) {
     final rawId = json['id']?.toString() ?? json['videoId']?.toString() ?? '';
     final vId = json['videoId']?.toString() ?? rawId;
-    final tTitle = json['title']?.toString() ?? json['name']?.toString() ?? 'Unknown Title';
+    var tTitle = json['title']?.toString() ?? json['name']?.toString() ?? 'Unknown Title';
     
     // Parse Artist
-    String aName = 'Unknown Artist';
+    String aName = '';
     String aId = '';
-    if (json['artist'] != null) {
+    
+    if (json['artistName'] != null && json['artistName'].toString().trim().isNotEmpty) {
+      aName = json['artistName'].toString().trim();
+    } else if (json['artist_name'] != null && json['artist_name'].toString().trim().isNotEmpty) {
+      aName = json['artist_name'].toString().trim();
+    } else if (json['artist'] != null) {
       if (json['artist'] is Map) {
         aName = json['artist']['name']?.toString() ?? '';
         aId = json['artist']['id']?.toString() ?? '';
@@ -61,13 +66,47 @@ class Track {
       } else {
         aName = first.toString();
       }
+    } else if (json['author'] != null) {
+      if (json['author'] is Map) {
+        aName = json['author']['name']?.toString() ?? '';
+      } else {
+        aName = json['author'].toString();
+      }
+    }
+
+    if (aId.isEmpty) {
+      aId = json['artistId']?.toString() ?? json['artist_id']?.toString() ?? '';
+    }
+
+    // Check if artist is missing or generic
+    final isGenericArtist = aName.isEmpty ||
+        aName.toLowerCase() == 'unknown artist' ||
+        aName.toLowerCase() == 'artista sconosciuto' ||
+        aName.toLowerCase() == 'artista' ||
+        aName.toLowerCase() == 'artist';
+
+    // If generic, try extracting artist from "Artist - Song Title"
+    if (isGenericArtist && tTitle.contains(' - ')) {
+      final parts = tTitle.split(' - ');
+      if (parts.length >= 2 && parts[0].trim().isNotEmpty) {
+        aName = parts[0].trim();
+        tTitle = parts.sublist(1).join(' - ').trim();
+      }
+    }
+
+    if (aName.isEmpty) {
+      aName = 'Unknown Artist';
     }
     aName = AppConfig.sanitizeArtist(aName);
 
     // Parse Album
     String albName = '';
     String albId = '';
-    if (json['album'] != null) {
+    if (json['albumName'] != null && json['albumName'].toString().trim().isNotEmpty) {
+      albName = json['albumName'].toString().trim();
+    } else if (json['album_name'] != null && json['album_name'].toString().trim().isNotEmpty) {
+      albName = json['album_name'].toString().trim();
+    } else if (json['album'] != null) {
       if (json['album'] is Map) {
         albName = json['album']['title']?.toString() ?? json['album']['name']?.toString() ?? '';
         albId = json['album']['id']?.toString() ?? '';
@@ -75,11 +114,14 @@ class Track {
         albName = json['album'].toString();
       }
     }
+    if (albId.isEmpty) {
+      albId = json['albumId']?.toString() ?? json['album_id']?.toString() ?? '';
+    }
 
     // Parse Cover
-    String rawCover = json['cover']?.toString() ??
+    String rawCover = json['coverUrl']?.toString() ??
+        json['cover']?.toString() ??
         json['thumbnail']?.toString() ??
-        json['coverUrl']?.toString() ??
         json['picture']?.toString() ??
         (json['album'] is Map ? json['album']['cover']?.toString() : null) ??
         '';
@@ -87,7 +129,9 @@ class Track {
 
     // Parse Duration
     int dMs = 210000;
-    if (json['duration_ms'] != null) {
+    if (json['durationMs'] != null) {
+      dMs = int.tryParse(json['durationMs'].toString()) ?? 210000;
+    } else if (json['duration_ms'] != null) {
       dMs = int.tryParse(json['duration_ms'].toString()) ?? 210000;
     } else if (json['duration'] != null) {
       final val = json['duration'];
@@ -127,11 +171,14 @@ class Track {
     'videoId': videoId,
     'title': title,
     'artistName': artistName,
+    'artist': artistName,
     'artistId': artistId,
     'albumName': albumName,
+    'album': albumName,
     'albumId': albumId,
     'coverUrl': coverUrl,
     'durationMs': durationMs,
+    'duration_ms': durationMs,
     'streamUrl': streamUrl,
     'source': source,
     'isExplicit': isExplicit,

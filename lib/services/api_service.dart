@@ -318,11 +318,13 @@ class ApiService {
     try {
       String? params;
       if (filter == 'tracks' || filter == 'songs') {
-        params = 'EgWKAQIIAWoQEAMQBBAJEAoQCxAEEAkQChAA';
+        params = 'EgWKAQIIAWoQEAUQCRAKEAMQEBAEEBUQEQ%3D%3D';
       } else if (filter == 'albums') {
-        params = 'EgWKAQIBAmoQEAMQBBAJEAoQCxAEEAkQChAA';
+        params = 'EgWKAQIYAWoQEAUQCRAKEAMQEBAEEBUQEQ%3D%3D';
       } else if (filter == 'artists') {
-        params = 'EgWKAQIIAmoQEAMQBBAJEAoQCxAEEAkQChAA';
+        params = 'EgWKAQIgAWoQEAUQCRAKEAMQEBAEEBUQEQ%3D%3D';
+      } else if (filter == 'playlists') {
+        params = 'EgeKAQQoAEABahAQBRAJEAoQAxAQEAQQFRAR';
       }
 
       final uri = Uri.parse('$_innertubeEndpoint/search?prettyPrint=false');
@@ -419,10 +421,10 @@ class ApiService {
           final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
 
           final subLower = subFull.toLowerCase();
-          final isArtist = pageType == 'MUSIC_PAGE_TYPE_ARTIST' || subLower.startsWith('artista') || subLower.startsWith('artist');
-          final isAlbum = pageType == 'MUSIC_PAGE_TYPE_ALBUM' || subLower.startsWith('album') || subLower.startsWith('singolo') || subLower.startsWith('ep');
-          final isPlaylist = pageType == 'MUSIC_PAGE_TYPE_PLAYLIST' || subLower.startsWith('playlist');
-          final isTrack = vId.isNotEmpty || subLower.startsWith('brano') || subLower.startsWith('canzone') || subLower.startsWith('song') || subLower.startsWith('video');
+          final isArtist = pageType == 'MUSIC_PAGE_TYPE_ARTIST' || subLower.startsWith('artista') || subLower.startsWith('artist') || filter == 'artists';
+          final isAlbum = pageType == 'MUSIC_PAGE_TYPE_ALBUM' || subLower.startsWith('album') || subLower.startsWith('singolo') || subLower.startsWith('ep') || filter == 'albums';
+          final isPlaylist = pageType == 'MUSIC_PAGE_TYPE_PLAYLIST' || subLower.startsWith('playlist') || filter == 'playlists';
+          final isTrack = vId.isNotEmpty || subLower.startsWith('brano') || subLower.startsWith('canzone') || subLower.startsWith('song') || subLower.startsWith('video') || filter == 'tracks' || filter == 'songs';
 
           if (isArtist && (browseId.startsWith('UC') || browseId.isNotEmpty)) {
             if (!artists.any((a) => a.name.toLowerCase() == title.toLowerCase())) {
@@ -615,30 +617,48 @@ class ApiService {
   // --- 5. Lyrics via LRCLib ---
   Future<Lyrics?> fetchLyrics(Track track) async {
     try {
-      final title = track.title;
-      final artist = track.artistName;
-      final durSec = track.durationMs ~/ 1000;
+      String title = track.title;
+      String artist = track.artistName;
+      if (artist.toLowerCase() == 'artista' || artist.toLowerCase() == 'unknown artist') {
+        artist = '';
+      }
 
-      final uri = Uri.parse(
-        'https://lrclib.net/api/get?track_name=${Uri.encodeComponent(title)}&artist_name=${Uri.encodeComponent(artist)}&duration=$durSec',
-      );
-      final res = await _client.get(uri, headers: {
-        'User-Agent': 'Preluded/2.0.0 (https://github.com/mrbana69/web-music)',
-      }).timeout(const Duration(seconds: 4));
+      // Clean YouTube/video suffixes
+      String cleanTitle = title
+          .replaceAll(RegExp(r'\s*\(official\s*(?:video|audio|music\s*video|hd|4k)?\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\[official\s*(?:video|audio|music\s*video|hd|4k)?\]', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\(visualizer\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\[visualizer\]', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\(audio\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\[audio\]', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\(video\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\[video\]', caseSensitive: false), '')
+          .trim();
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final synced = data['syncedLyrics']?.toString() ?? '';
-        final plain = data['plainLyrics']?.toString() ?? '';
-        if (synced.isNotEmpty) {
-          return Lyrics.parse(rawLrc: synced);
-        } else if (plain.isNotEmpty) {
-          return Lyrics(plainText: plain, isSynced: false);
+      if (artist.isNotEmpty) {
+        final durSec = track.durationMs ~/ 1000;
+        final uri = Uri.parse(
+          'https://lrclib.net/api/get?track_name=${Uri.encodeComponent(cleanTitle)}&artist_name=${Uri.encodeComponent(artist)}&duration=$durSec',
+        );
+        final res = await _client.get(uri, headers: {
+          'User-Agent': 'Preluded/2.0.0 (https://github.com/mrbana69/web-music)',
+        }).timeout(const Duration(seconds: 4));
+
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body) as Map<String, dynamic>;
+          final synced = data['syncedLyrics']?.toString() ?? '';
+          final plain = data['plainLyrics']?.toString() ?? '';
+          if (synced.isNotEmpty) {
+            return Lyrics.parse(rawLrc: synced);
+          } else if (plain.isNotEmpty) {
+            return Lyrics(plainText: plain, isSynced: false);
+          }
         }
       }
 
       // Search fallback on LRCLib
-      final searchUri = Uri.parse('https://lrclib.net/api/search?q=${Uri.encodeComponent('$title $artist')}');
+      final q = artist.isNotEmpty ? '$cleanTitle $artist' : cleanTitle;
+      final searchUri = Uri.parse('https://lrclib.net/api/search?q=${Uri.encodeComponent(q)}');
       final sRes = await _client.get(searchUri, headers: {'User-Agent': 'Preluded/2.0.0'}).timeout(const Duration(seconds: 4));
       if (sRes.statusCode == 200) {
         final list = jsonDecode(sRes.body) as List? ?? [];
@@ -773,24 +793,57 @@ class ApiService {
       final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final header = data['header']?['musicDetailHeaderRenderer'] ??
-                       data['header']?['musicResponsiveHeaderRenderer'];
+        
+        final respHeader = _findNodes(data, 'musicResponsiveHeaderRenderer').firstOrNull;
+        final detailHeader = _findNodes(data, 'musicDetailHeaderRenderer').firstOrNull;
+        final header = respHeader ?? detailHeader ?? data['header']?['musicDetailHeaderRenderer'] ?? data['header']?['musicResponsiveHeaderRenderer'];
+
         final title = header?['title']?['runs']?[0]?['text']?.toString() ?? 'Album';
-        final artist = header?['straplineTextOne']?['runs']?[0]?['text']?.toString() ??
-                       header?['subtitle']?['runs']?[0]?['text']?.toString() ?? 'Artista';
+        
+        // Extract artist and artistId
+        String artist = '';
+        String artistId = '';
+        final straplineRuns = header?['straplineTextOne']?['runs'] as List? ?? [];
+        for (final r in straplineRuns) {
+          final t = (r as Map)['text']?.toString() ?? '';
+          final bId = r['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
+          if (t.isNotEmpty && artist.isEmpty) artist = t;
+          if (bId.isNotEmpty && artistId.isEmpty) artistId = bId;
+        }
+        if (artist.isEmpty) {
+          final subRuns = header?['subtitle']?['runs'] as List? ?? [];
+          for (final r in subRuns) {
+            final t = (r as Map)['text']?.toString() ?? '';
+            final bId = r['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
+            if (bId.startsWith('UC') || bId.startsWith('FEmusic_library')) {
+              artist = t;
+              artistId = bId;
+              break;
+            }
+          }
+        }
+        if (artist.isEmpty) {
+          artist = 'Artista';
+        }
+
+        // Extract year
         final subRuns = header?['subtitle']?['runs'] as List? ?? [];
         String year = '';
         for (final r in subRuns) {
-          final txt = r['text']?.toString() ?? '';
-          if (txt.contains('202') || txt.contains('201') || txt.contains('199') || txt.contains('198')) {
-            year = txt;
+          final txt = (r as Map)['text']?.toString() ?? '';
+          final yearMatch = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(txt);
+          if (yearMatch != null) {
+            year = yearMatch.group(1) ?? '';
             break;
           }
         }
+
+        // Extract cover artwork
         final thumbs = (header?['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
                         header?['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
-        final cover = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
+        final cover = thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
 
+        // Extract tracks
         final rawTracks = _findNodes(data, 'musicResponsiveListItemRenderer');
         final tracks = <Track>[];
         for (final item in rawTracks) {
@@ -798,8 +851,12 @@ class ApiService {
           if (t != null) {
             tracks.add(t.copyWith(
               albumName: title,
-              artistName: t.artistName == 'Artista' || t.artistName.isEmpty ? artist : t.artistName,
-              coverUrl: t.coverUrl.isEmpty ? cover : t.coverUrl,
+              albumId: albumId,
+              artistName: (t.artistName.isNotEmpty && t.artistName != 'Artista' && t.artistName != 'Unknown Artist')
+                  ? t.artistName
+                  : (artist != 'Artista' ? artist : t.artistName),
+              artistId: t.artistId.isNotEmpty ? t.artistId : artistId,
+              coverUrl: t.coverUrl.isNotEmpty ? t.coverUrl : cover,
             ));
           }
         }
@@ -808,6 +865,7 @@ class ApiService {
           id: albumId,
           title: title,
           artistName: AppConfig.sanitizeArtist(artist),
+          artistId: artistId,
           coverUrl: AppConfig.formatArtwork(cover),
           year: year,
           tracks: tracks,
@@ -1128,15 +1186,37 @@ class ApiService {
       final responsive = item['musicResponsiveListItemRenderer'] as Map? ?? (item.containsKey('flexColumns') ? item : null);
 
       if (twoRow != null) {
-        final title = twoRow['title']?['runs']?[0]?['text']?.toString() ?? '';
+        var title = twoRow['title']?['runs']?[0]?['text']?.toString() ?? '';
         final subtitleRuns = twoRow['subtitle']?['runs'] as List? ?? [];
-        final artistCandidates = <String>[];
+        String artist = '';
+        String artistId = '';
+
         for (final r in subtitleRuns) {
-          final t = r['text']?.toString() ?? '';
-          if (t == 'Brano' || t == 'Video' || t == 'Song' || t == ' • ' || t == ' e ' || t == ' & ' || t.contains(':') || t.contains('visualizzazioni') || t.contains('views') || t.contains('riproduzioni') || t.contains('ascoltatori')) continue;
-          artistCandidates.add(t);
+          final browseId = (r as Map)['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
+          if (browseId.startsWith('UC') || browseId.startsWith('FEmusic_library')) {
+            artistId = browseId;
+            artist = r['text']?.toString() ?? '';
+            break;
+          }
         }
-        final artist = artistCandidates.isNotEmpty ? artistCandidates.join(', ') : subtitleRuns.map((r) => r['text']).join('');
+
+        if (artist.isEmpty) {
+          for (final r in subtitleRuns) {
+            final t = (r as Map)['text']?.toString() ?? '';
+            if (t == 'Brano' || t == 'Video' || t == 'Song' || t == ' • ' || t == ' e ' || t == ' & ' || t.contains(':') || t.contains('visualizzazioni') || t.contains('views') || t.contains('riproduzioni') || t.contains('ascoltatori')) continue;
+            artist = t;
+            break;
+          }
+        }
+
+        if ((artist.isEmpty || artist.toLowerCase() == 'artista') && title.contains(' - ')) {
+          final parts = title.split(' - ');
+          if (parts.length >= 2 && parts[0].trim().isNotEmpty) {
+            artist = parts[0].trim();
+            title = parts.sublist(1).join(' - ').trim();
+          }
+        }
+
         final vId = twoRow['navigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ??
                     twoRow['thumbnailOverlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ?? '';
         final thumbs = (twoRow['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
@@ -1149,6 +1229,7 @@ class ApiService {
             videoId: vId,
             title: title,
             artistName: AppConfig.sanitizeArtist(artist.isNotEmpty ? artist : 'Artista'),
+            artistId: artistId,
             coverUrl: AppConfig.formatArtwork(thumb),
             durationMs: 210000,
           );
@@ -1157,15 +1238,52 @@ class ApiService {
         final flexCols = responsive['flexColumns'] as List? ?? [];
         final col0 = flexCols.isNotEmpty ? (flexCols[0] as Map)['musicResponsiveListItemFlexColumnRenderer'] : null;
         final col1 = flexCols.length > 1 ? (flexCols[1] as Map)['musicResponsiveListItemFlexColumnRenderer'] : null;
-        final title = col0?['text']?['runs']?[0]?['text']?.toString() ?? '';
+        var title = col0?['text']?['runs']?[0]?['text']?.toString() ?? '';
         final artistRuns = col1?['text']?['runs'] as List? ?? [];
-        final artistCandidates = <String>[];
+
+        String artist = '';
+        String artistId = '';
+
         for (final r in artistRuns) {
-          final t = r['text']?.toString() ?? '';
-          if (t == 'Brano' || t == 'Video' || t == 'Song' || t == ' • ' || t == ' e ' || t == ' & ' || t.contains(':') || t.contains('visualizzazioni') || t.contains('views') || t.contains('riproduzioni') || t.contains('ascoltatori')) continue;
-          artistCandidates.add(t);
+          final browseId = (r as Map)['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
+          if (browseId.startsWith('UC') || browseId.startsWith('FEmusic_library')) {
+            artistId = browseId;
+            artist = r['text']?.toString() ?? '';
+            break;
+          }
         }
-        final artist = artistCandidates.isNotEmpty ? artistCandidates.join(', ') : artistRuns.map((r) => r['text']).join('');
+
+        if (artist.isEmpty) {
+          for (final r in artistRuns) {
+            final t = (r as Map)['text']?.toString() ?? '';
+            if (t == 'Brano' || t == 'Video' || t == 'Song' || t == ' • ' || t == ' e ' || t == ' & ' || t.contains(':') || t.contains('visualizzazioni') || t.contains('views') || t.contains('riproduzioni') || t.contains('ascoltatori')) continue;
+            artist = t;
+            break;
+          }
+        }
+
+        if (artist.isEmpty && flexCols.length > 2) {
+          for (int c = 2; c < flexCols.length; c++) {
+            final otherRuns = (flexCols[c] as Map)['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List? ?? [];
+            for (final r in otherRuns) {
+              final browseId = (r as Map)['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
+              if (browseId.startsWith('UC') || browseId.startsWith('FEmusic_library')) {
+                artistId = browseId;
+                artist = r['text']?.toString() ?? '';
+                break;
+              }
+            }
+            if (artist.isNotEmpty) break;
+          }
+        }
+
+        if ((artist.isEmpty || artist.toLowerCase() == 'artista') && title.contains(' - ')) {
+          final parts = title.split(' - ');
+          if (parts.length >= 2 && parts[0].trim().isNotEmpty) {
+            artist = parts[0].trim();
+            title = parts.sublist(1).join(' - ').trim();
+          }
+        }
 
         String vId = responsive['playlistItemData']?['videoId']?.toString() ??
                     responsive['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ??
@@ -1196,6 +1314,7 @@ class ApiService {
             videoId: vId,
             title: title,
             artistName: AppConfig.sanitizeArtist(artist.isNotEmpty ? artist : 'Artista'),
+            artistId: artistId,
             coverUrl: AppConfig.formatArtwork(thumb),
             durationMs: 210000,
           );

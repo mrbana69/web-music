@@ -1,0 +1,2272 @@
+diff --git a/lib/main.dart b/lib/main.dart
+index e745ca2..31231c6 100644
+--- a/lib/main.dart
++++ b/lib/main.dart
+@@ -1,6 +1,9 @@
++import 'dart:io' show Platform;
++import 'package:flutter/foundation.dart' show kIsWeb;
+ import 'package:flutter/material.dart';
+ import 'package:flutter/services.dart';
+ import 'package:provider/provider.dart';
++import 'package:desktop_webview_window/desktop_webview_window.dart';
+ import 'services/storage_service.dart';
+ import 'services/api_service.dart';
+ import 'services/audio_handler.dart';
+@@ -10,9 +13,15 @@ import 'providers/library_state.dart';
+ import 'ui/theme/app_theme.dart';
+ import 'ui/screens/main_screen.dart';
+ 
+-Future<void> main() async {
++Future<void> main(List<String> args) async {
+   WidgetsFlutterBinding.ensureInitialized();
+ 
++  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
++    if (runWebViewTitleBarWidget(args)) {
++      return;
++    }
++  }
++
+   // Set immersive dark status bar & navigation bar for iOS and Android
+   SystemChrome.setSystemUIOverlayStyle(
+     const SystemUiOverlayStyle(
+diff --git a/lib/models/album.dart b/lib/models/album.dart
+index c962ad4..0f17fd8 100644
+--- a/lib/models/album.dart
++++ b/lib/models/album.dart
+@@ -21,7 +21,7 @@ class Album {
+   });
+ 
+   factory Album.fromJson(Map<String, dynamic> json) {
+-    final rawCover = json['cover'] ?? json['thumbnail'] ?? json['picture'] ?? '';
++    final rawCover = json['coverUrl'] ?? json['cover'] ?? json['thumbnail'] ?? json['picture'] ?? '';
+     final trackItems = (json['tracks'] as List? ?? json['items'] as List? ?? [])
+         .map((t) => Track.fromJson(Map<String, dynamic>.from(t)))
+         .toList();
+@@ -37,6 +37,26 @@ class Album {
+     );
+   }
+ 
++  Album copyWith({
++    String? id,
++    String? title,
++    String? artistName,
++    String? artistId,
++    String? coverUrl,
++    String? year,
++    List<Track>? tracks,
++  }) {
++    return Album(
++      id: id ?? this.id,
++      title: title ?? this.title,
++      artistName: artistName ?? this.artistName,
++      artistId: artistId ?? this.artistId,
++      coverUrl: coverUrl ?? this.coverUrl,
++      year: year ?? this.year,
++      tracks: tracks ?? this.tracks,
++    );
++  }
++
+   Map<String, dynamic> toJson() => {
+     'id': id,
+     'title': title,
+diff --git a/lib/models/track.dart b/lib/models/track.dart
+index 16e1e31..92fe576 100644
+--- a/lib/models/track.dart
++++ b/lib/models/track.dart
+@@ -41,12 +41,17 @@ class Track {
+   factory Track.fromJson(Map<String, dynamic> json) {
+     final rawId = json['id']?.toString() ?? json['videoId']?.toString() ?? '';
+     final vId = json['videoId']?.toString() ?? rawId;
+-    final tTitle = json['title']?.toString() ?? json['name']?.toString() ?? 'Unknown Title';
++    var tTitle = json['title']?.toString() ?? json['name']?.toString() ?? 'Unknown Title';
+     
+     // Parse Artist
+-    String aName = 'Unknown Artist';
++    String aName = '';
+     String aId = '';
+-    if (json['artist'] != null) {
++    
++    if (json['artistName'] != null && json['artistName'].toString().trim().isNotEmpty) {
++      aName = json['artistName'].toString().trim();
++    } else if (json['artist_name'] != null && json['artist_name'].toString().trim().isNotEmpty) {
++      aName = json['artist_name'].toString().trim();
++    } else if (json['artist'] != null) {
+       if (json['artist'] is Map) {
+         aName = json['artist']['name']?.toString() ?? '';
+         aId = json['artist']['id']?.toString() ?? '';
+@@ -61,13 +66,47 @@ class Track {
+       } else {
+         aName = first.toString();
+       }
++    } else if (json['author'] != null) {
++      if (json['author'] is Map) {
++        aName = json['author']['name']?.toString() ?? '';
++      } else {
++        aName = json['author'].toString();
++      }
++    }
++
++    if (aId.isEmpty) {
++      aId = json['artistId']?.toString() ?? json['artist_id']?.toString() ?? '';
++    }
++
++    // Check if artist is missing or generic
++    final isGenericArtist = aName.isEmpty ||
++        aName.toLowerCase() == 'unknown artist' ||
++        aName.toLowerCase() == 'artista sconosciuto' ||
++        aName.toLowerCase() == 'artista' ||
++        aName.toLowerCase() == 'artist';
++
++    // If generic, try extracting artist from "Artist - Song Title"
++    if (isGenericArtist && tTitle.contains(' - ')) {
++      final parts = tTitle.split(' - ');
++      if (parts.length >= 2 && parts[0].trim().isNotEmpty) {
++        aName = parts[0].trim();
++        tTitle = parts.sublist(1).join(' - ').trim();
++      }
++    }
++
++    if (aName.isEmpty) {
++      aName = 'Unknown Artist';
+     }
+     aName = AppConfig.sanitizeArtist(aName);
+ 
+     // Parse Album
+     String albName = '';
+     String albId = '';
+-    if (json['album'] != null) {
++    if (json['albumName'] != null && json['albumName'].toString().trim().isNotEmpty) {
++      albName = json['albumName'].toString().trim();
++    } else if (json['album_name'] != null && json['album_name'].toString().trim().isNotEmpty) {
++      albName = json['album_name'].toString().trim();
++    } else if (json['album'] != null) {
+       if (json['album'] is Map) {
+         albName = json['album']['title']?.toString() ?? json['album']['name']?.toString() ?? '';
+         albId = json['album']['id']?.toString() ?? '';
+@@ -75,11 +114,14 @@ class Track {
+         albName = json['album'].toString();
+       }
+     }
++    if (albId.isEmpty) {
++      albId = json['albumId']?.toString() ?? json['album_id']?.toString() ?? '';
++    }
+ 
+     // Parse Cover
+-    String rawCover = json['cover']?.toString() ??
++    String rawCover = json['coverUrl']?.toString() ??
++        json['cover']?.toString() ??
+         json['thumbnail']?.toString() ??
+-        json['coverUrl']?.toString() ??
+         json['picture']?.toString() ??
+         (json['album'] is Map ? json['album']['cover']?.toString() : null) ??
+         '';
+@@ -87,7 +129,9 @@ class Track {
+ 
+     // Parse Duration
+     int dMs = 210000;
+-    if (json['duration_ms'] != null) {
++    if (json['durationMs'] != null) {
++      dMs = int.tryParse(json['durationMs'].toString()) ?? 210000;
++    } else if (json['duration_ms'] != null) {
+       dMs = int.tryParse(json['duration_ms'].toString()) ?? 210000;
+     } else if (json['duration'] != null) {
+       final val = json['duration'];
+@@ -127,11 +171,14 @@ class Track {
+     'videoId': videoId,
+     'title': title,
+     'artistName': artistName,
++    'artist': artistName,
+     'artistId': artistId,
+     'albumName': albumName,
++    'album': albumName,
+     'albumId': albumId,
+     'coverUrl': coverUrl,
+     'durationMs': durationMs,
++    'duration_ms': durationMs,
+     'streamUrl': streamUrl,
+     'source': source,
+     'isExplicit': isExplicit,
+diff --git a/lib/providers/library_state.dart b/lib/providers/library_state.dart
+index d45d0f6..be660b3 100644
+--- a/lib/providers/library_state.dart
++++ b/lib/providers/library_state.dart
+@@ -4,6 +4,7 @@ import '../models/playlist.dart';
+ import '../models/user.dart';
+ import '../services/storage_service.dart';
+ import '../services/api_service.dart';
++import '../config/app_config.dart';
+ 
+ class LibraryState extends ChangeNotifier {
+   final StorageService _storage;
+@@ -18,6 +19,10 @@ class LibraryState extends ChangeNotifier {
+ 
+   LibraryState(this._storage) {
+     _loadInitialData();
++    _storage.historyVersion.addListener(() {
++      _history = _storage.getHistory();
++      notifyListeners();
++    });
+   }
+ 
+   List<Track> get likedTracks => _likedTracks;
+@@ -170,4 +175,40 @@ class LibraryState extends ChangeNotifier {
+     await _storage.clearAllCache();
+     _loadInitialData();
+   }
++
++  bool _isRepairingHistory = false;
++  Future<void> repairHistoryArtists(ApiService api) async {
++    if (_isRepairingHistory || _history.isEmpty) return;
++    _isRepairingHistory = true;
++    try {
++      bool changed = false;
++      final repaired = <Track>[];
++      for (final t in _history) {
++        final isGeneric = t.artistName.isEmpty ||
++            t.artistName.toLowerCase() == 'unknown artist' ||
++            t.artistName.toLowerCase() == 'artista sconosciuto' ||
++            t.artistName.toLowerCase() == 'artista' ||
++            t.artistName.toLowerCase() == 'artist';
++        if (isGeneric) {
++          try {
++            final vId = t.videoId.isNotEmpty ? t.videoId : t.id;
++            final vid = await api.yt.videos.get(vId).timeout(const Duration(seconds: 4));
++            if (vid.author.isNotEmpty) {
++              repaired.add(t.copyWith(artistName: AppConfig.sanitizeArtist(vid.author)));
++              changed = true;
++              continue;
++            }
++          } catch (_) {}
++        }
++        repaired.add(t);
++      }
++      if (changed) {
++        _history = repaired;
++        await _storage.saveHistory(repaired);
++        notifyListeners();
++      }
++    } finally {
++      _isRepairingHistory = false;
++    }
++  }
+ }
+diff --git a/lib/providers/player_state.dart b/lib/providers/player_state.dart
+index ab8645e..1374fcc 100644
+--- a/lib/providers/player_state.dart
++++ b/lib/providers/player_state.dart
+@@ -25,6 +25,7 @@ class PlayerState extends ChangeNotifier {
+   Color _ambientColor = const Color(0xFFFA2D48);
+ 
+   StreamSubscription? _playbackStateSub;
++  StreamSubscription? _playerStateSub;
+   StreamSubscription? _mediaItemSub;
+   StreamSubscription? _positionSub;
+ 
+@@ -58,6 +59,24 @@ class PlayerState extends ChangeNotifier {
+       notifyListeners();
+     });
+ 
++    // 2. Direct playerStateStream backup listener
++    _playerStateSub = _audioHandler.player.playerStateStream.listen((ps) {
++      bool changed = false;
++      if (_isPlaying != ps.playing) {
++        _isPlaying = ps.playing;
++        changed = true;
++      }
++      final buffering = ps.processingState == ProcessingState.buffering ||
++          ps.processingState == ProcessingState.loading;
++      if (_isBuffering != buffering) {
++        _isBuffering = buffering;
++        changed = true;
++      }
++      if (changed) {
++        notifyListeners();
++      }
++    });
++
+     // 2. MediaItem (Track Metadata)
+     _mediaItemSub = _audioHandler.mediaItem.listen((item) {
+       if (item != null) {
+@@ -115,15 +134,37 @@ class PlayerState extends ChangeNotifier {
+   }
+ 
+   Future<void> togglePlay() async {
+-    if (_isPlaying) {
+-      await _audioHandler.pause();
+-    } else {
++    final nextPlaying = !_isPlaying;
++    _isPlaying = nextPlaying;
++    notifyListeners();
++    if (nextPlaying) {
+       await _audioHandler.play();
++    } else {
++      await _audioHandler.pause();
+     }
+   }
+ 
+-  Future<void> nextTrack() async => await _audioHandler.skipToNext();
+-  Future<void> previousTrack() async => await _audioHandler.skipToPrevious();
++  Future<void> nextTrack() async {
++    await _audioHandler.skipToNext();
++    final cur = _audioHandler.currentTrack;
++    if (cur != null) {
++      _currentTrack = cur;
++      _currentIndex = _audioHandler.currentIndex;
++      _queue = _audioHandler.currentQueue;
++      notifyListeners();
++    }
++  }
++
++  Future<void> previousTrack() async {
++    await _audioHandler.skipToPrevious();
++    final cur = _audioHandler.currentTrack;
++    if (cur != null) {
++      _currentTrack = cur;
++      _currentIndex = _audioHandler.currentIndex;
++      _queue = _audioHandler.currentQueue;
++      notifyListeners();
++    }
++  }
+   Future<void> seek(Duration pos) async {
+     _position = pos;
+     positionNotifier.value = pos;
+@@ -179,6 +220,7 @@ class PlayerState extends ChangeNotifier {
+   @override
+   void dispose() {
+     _playbackStateSub?.cancel();
++    _playerStateSub?.cancel();
+     _mediaItemSub?.cancel();
+     _positionSub?.cancel();
+     positionNotifier.dispose();
+diff --git a/lib/services/api_service.dart b/lib/services/api_service.dart
+index 9850316..6771538 100644
+--- a/lib/services/api_service.dart
++++ b/lib/services/api_service.dart
+@@ -318,11 +318,13 @@ class ApiService {
+     try {
+       String? params;
+       if (filter == 'tracks' || filter == 'songs') {
+-        params = 'EgWKAQIIAWoQEAMQBBAJEAoQCxAEEAkQChAA';
++        params = 'EgWKAQIIAWoQEAUQCRAKEAMQEBAEEBUQEQ%3D%3D';
+       } else if (filter == 'albums') {
+-        params = 'EgWKAQIBAmoQEAMQBBAJEAoQCxAEEAkQChAA';
++        params = 'EgWKAQIYAWoQEAUQCRAKEAMQEBAEEBUQEQ%3D%3D';
+       } else if (filter == 'artists') {
+-        params = 'EgWKAQIIAmoQEAMQBBAJEAoQCxAEEAkQChAA';
++        params = 'EgWKAQIgAWoQEAUQCRAKEAMQEBAEEBUQEQ%3D%3D';
++      } else if (filter == 'playlists') {
++        params = 'EgeKAQQoAEABahAQBRAJEAoQAxAQEAQQFRAR';
+       }
+ 
+       final uri = Uri.parse('$_innertubeEndpoint/search?prettyPrint=false');
+@@ -419,10 +421,10 @@ class ApiService {
+           final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
+ 
+           final subLower = subFull.toLowerCase();
+-          final isArtist = pageType == 'MUSIC_PAGE_TYPE_ARTIST' || subLower.startsWith('artista') || subLower.startsWith('artist');
+-          final isAlbum = pageType == 'MUSIC_PAGE_TYPE_ALBUM' || subLower.startsWith('album') || subLower.startsWith('singolo') || subLower.startsWith('ep');
+-          final isPlaylist = pageType == 'MUSIC_PAGE_TYPE_PLAYLIST' || subLower.startsWith('playlist');
+-          final isTrack = vId.isNotEmpty || subLower.startsWith('brano') || subLower.startsWith('canzone') || subLower.startsWith('song') || subLower.startsWith('video');
++          final isArtist = pageType == 'MUSIC_PAGE_TYPE_ARTIST' || subLower.startsWith('artista') || subLower.startsWith('artist') || filter == 'artists';
++          final isAlbum = pageType == 'MUSIC_PAGE_TYPE_ALBUM' || subLower.startsWith('album') || subLower.startsWith('singolo') || subLower.startsWith('ep') || filter == 'albums';
++          final isPlaylist = pageType == 'MUSIC_PAGE_TYPE_PLAYLIST' || subLower.startsWith('playlist') || filter == 'playlists';
++          final isTrack = vId.isNotEmpty || subLower.startsWith('brano') || subLower.startsWith('canzone') || subLower.startsWith('song') || subLower.startsWith('video') || filter == 'tracks' || filter == 'songs';
+ 
+           if (isArtist && (browseId.startsWith('UC') || browseId.isNotEmpty)) {
+             if (!artists.any((a) => a.name.toLowerCase() == title.toLowerCase())) {
+@@ -615,30 +617,48 @@ class ApiService {
+   // --- 5. Lyrics via LRCLib ---
+   Future<Lyrics?> fetchLyrics(Track track) async {
+     try {
+-      final title = track.title;
+-      final artist = track.artistName;
+-      final durSec = track.durationMs ~/ 1000;
++      String title = track.title;
++      String artist = track.artistName;
++      if (artist.toLowerCase() == 'artista' || artist.toLowerCase() == 'unknown artist') {
++        artist = '';
++      }
+ 
+-      final uri = Uri.parse(
+-        'https://lrclib.net/api/get?track_name=${Uri.encodeComponent(title)}&artist_name=${Uri.encodeComponent(artist)}&duration=$durSec',
+-      );
+-      final res = await _client.get(uri, headers: {
+-        'User-Agent': 'Preluded/2.0.0 (https://github.com/mrbana69/web-music)',
+-      }).timeout(const Duration(seconds: 4));
++      // Clean YouTube/video suffixes
++      String cleanTitle = title
++          .replaceAll(RegExp(r'\s*\(official\s*(?:video|audio|music\s*video|hd|4k)?\)', caseSensitive: false), '')
++          .replaceAll(RegExp(r'\s*\[official\s*(?:video|audio|music\s*video|hd|4k)?\]', caseSensitive: false), '')
++          .replaceAll(RegExp(r'\s*\(visualizer\)', caseSensitive: false), '')
++          .replaceAll(RegExp(r'\s*\[visualizer\]', caseSensitive: false), '')
++          .replaceAll(RegExp(r'\s*\(audio\)', caseSensitive: false), '')
++          .replaceAll(RegExp(r'\s*\[audio\]', caseSensitive: false), '')
++          .replaceAll(RegExp(r'\s*\(video\)', caseSensitive: false), '')
++          .replaceAll(RegExp(r'\s*\[video\]', caseSensitive: false), '')
++          .trim();
++
++      if (artist.isNotEmpty) {
++        final durSec = track.durationMs ~/ 1000;
++        final uri = Uri.parse(
++          'https://lrclib.net/api/get?track_name=${Uri.encodeComponent(cleanTitle)}&artist_name=${Uri.encodeComponent(artist)}&duration=$durSec',
++        );
++        final res = await _client.get(uri, headers: {
++          'User-Agent': 'Preluded/2.0.0 (https://github.com/mrbana69/web-music)',
++        }).timeout(const Duration(seconds: 4));
+ 
+-      if (res.statusCode == 200) {
+-        final data = jsonDecode(res.body) as Map<String, dynamic>;
+-        final synced = data['syncedLyrics']?.toString() ?? '';
+-        final plain = data['plainLyrics']?.toString() ?? '';
+-        if (synced.isNotEmpty) {
+-          return Lyrics.parse(rawLrc: synced);
+-        } else if (plain.isNotEmpty) {
+-          return Lyrics(plainText: plain, isSynced: false);
++        if (res.statusCode == 200) {
++          final data = jsonDecode(res.body) as Map<String, dynamic>;
++          final synced = data['syncedLyrics']?.toString() ?? '';
++          final plain = data['plainLyrics']?.toString() ?? '';
++          if (synced.isNotEmpty) {
++            return Lyrics.parse(rawLrc: synced);
++          } else if (plain.isNotEmpty) {
++            return Lyrics(plainText: plain, isSynced: false);
++          }
+         }
+       }
+ 
+       // Search fallback on LRCLib
+-      final searchUri = Uri.parse('https://lrclib.net/api/search?q=${Uri.encodeComponent('$title $artist')}');
++      final q = artist.isNotEmpty ? '$cleanTitle $artist' : cleanTitle;
++      final searchUri = Uri.parse('https://lrclib.net/api/search?q=${Uri.encodeComponent(q)}');
+       final sRes = await _client.get(searchUri, headers: {'User-Agent': 'Preluded/2.0.0'}).timeout(const Duration(seconds: 4));
+       if (sRes.statusCode == 200) {
+         final list = jsonDecode(sRes.body) as List? ?? [];
+@@ -773,24 +793,57 @@ class ApiService {
+       final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
+       if (res.statusCode == 200) {
+         final data = jsonDecode(res.body) as Map<String, dynamic>;
+-        final header = data['header']?['musicDetailHeaderRenderer'] ??
+-                       data['header']?['musicResponsiveHeaderRenderer'];
++        
++        final respHeader = _findNodes(data, 'musicResponsiveHeaderRenderer').firstOrNull;
++        final detailHeader = _findNodes(data, 'musicDetailHeaderRenderer').firstOrNull;
++        final header = respHeader ?? detailHeader ?? data['header']?['musicDetailHeaderRenderer'] ?? data['header']?['musicResponsiveHeaderRenderer'];
++
+         final title = header?['title']?['runs']?[0]?['text']?.toString() ?? 'Album';
+-        final artist = header?['straplineTextOne']?['runs']?[0]?['text']?.toString() ??
+-                       header?['subtitle']?['runs']?[0]?['text']?.toString() ?? 'Artista';
++        
++        // Extract artist and artistId
++        String artist = '';
++        String artistId = '';
++        final straplineRuns = header?['straplineTextOne']?['runs'] as List? ?? [];
++        for (final r in straplineRuns) {
++          final t = (r as Map)['text']?.toString() ?? '';
++          final bId = r['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
++          if (t.isNotEmpty && artist.isEmpty) artist = t;
++          if (bId.isNotEmpty && artistId.isEmpty) artistId = bId;
++        }
++        if (artist.isEmpty) {
++          final subRuns = header?['subtitle']?['runs'] as List? ?? [];
++          for (final r in subRuns) {
++            final t = (r as Map)['text']?.toString() ?? '';
++            final bId = r['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
++            if (bId.startsWith('UC') || bId.startsWith('FEmusic_library')) {
++              artist = t;
++              artistId = bId;
++              break;
++            }
++          }
++        }
++        if (artist.isEmpty) {
++          artist = 'Artista';
++        }
++
++        // Extract year
+         final subRuns = header?['subtitle']?['runs'] as List? ?? [];
+         String year = '';
+         for (final r in subRuns) {
+-          final txt = r['text']?.toString() ?? '';
+-          if (txt.contains('202') || txt.contains('201') || txt.contains('199') || txt.contains('198')) {
+-            year = txt;
++          final txt = (r as Map)['text']?.toString() ?? '';
++          final yearMatch = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(txt);
++          if (yearMatch != null) {
++            year = yearMatch.group(1) ?? '';
+             break;
+           }
+         }
++
++        // Extract cover artwork
+         final thumbs = (header?['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                         header?['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
+-        final cover = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
++        final cover = thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
+ 
++        // Extract tracks
+         final rawTracks = _findNodes(data, 'musicResponsiveListItemRenderer');
+         final tracks = <Track>[];
+         for (final item in rawTracks) {
+@@ -798,8 +851,12 @@ class ApiService {
+           if (t != null) {
+             tracks.add(t.copyWith(
+               albumName: title,
+-              artistName: t.artistName == 'Artista' || t.artistName.isEmpty ? artist : t.artistName,
+-              coverUrl: t.coverUrl.isEmpty ? cover : t.coverUrl,
++              albumId: albumId,
++              artistName: (t.artistName.isNotEmpty && t.artistName != 'Artista' && t.artistName != 'Unknown Artist')
++                  ? t.artistName
++                  : (artist != 'Artista' ? artist : t.artistName),
++              artistId: t.artistId.isNotEmpty ? t.artistId : artistId,
++              coverUrl: t.coverUrl.isNotEmpty ? t.coverUrl : cover,
+             ));
+           }
+         }
+@@ -808,6 +865,7 @@ class ApiService {
+           id: albumId,
+           title: title,
+           artistName: AppConfig.sanitizeArtist(artist),
++          artistId: artistId,
+           coverUrl: AppConfig.formatArtwork(cover),
+           year: year,
+           tracks: tracks,
+@@ -1128,15 +1186,37 @@ class ApiService {
+       final responsive = item['musicResponsiveListItemRenderer'] as Map? ?? (item.containsKey('flexColumns') ? item : null);
+ 
+       if (twoRow != null) {
+-        final title = twoRow['title']?['runs']?[0]?['text']?.toString() ?? '';
++        var title = twoRow['title']?['runs']?[0]?['text']?.toString() ?? '';
+         final subtitleRuns = twoRow['subtitle']?['runs'] as List? ?? [];
+-        final artistCandidates = <String>[];
++        String artist = '';
++        String artistId = '';
++
+         for (final r in subtitleRuns) {
+-          final t = r['text']?.toString() ?? '';
+-          if (t == 'Brano' || t == 'Video' || t == 'Song' || t == ' • ' || t == ' e ' || t == ' & ' || t.contains(':') || t.contains('visualizzazioni') || t.contains('views') || t.contains('riproduzioni') || t.contains('ascoltatori')) continue;
+-          artistCandidates.add(t);
++          final browseId = (r as Map)['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
++          if (browseId.startsWith('UC') || browseId.startsWith('FEmusic_library')) {
++            artistId = browseId;
++            artist = r['text']?.toString() ?? '';
++            break;
++          }
++        }
++
++        if (artist.isEmpty) {
++          for (final r in subtitleRuns) {
++            final t = (r as Map)['text']?.toString() ?? '';
++            if (t == 'Brano' || t == 'Video' || t == 'Song' || t == ' • ' || t == ' e ' || t == ' & ' || t.contains(':') || t.contains('visualizzazioni') || t.contains('views') || t.contains('riproduzioni') || t.contains('ascoltatori')) continue;
++            artist = t;
++            break;
++          }
++        }
++
++        if ((artist.isEmpty || artist.toLowerCase() == 'artista') && title.contains(' - ')) {
++          final parts = title.split(' - ');
++          if (parts.length >= 2 && parts[0].trim().isNotEmpty) {
++            artist = parts[0].trim();
++            title = parts.sublist(1).join(' - ').trim();
++          }
+         }
+-        final artist = artistCandidates.isNotEmpty ? artistCandidates.join(', ') : subtitleRuns.map((r) => r['text']).join('');
++
+         final vId = twoRow['navigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ??
+                     twoRow['thumbnailOverlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ?? '';
+         final thumbs = (twoRow['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+@@ -1149,6 +1229,7 @@ class ApiService {
+             videoId: vId,
+             title: title,
+             artistName: AppConfig.sanitizeArtist(artist.isNotEmpty ? artist : 'Artista'),
++            artistId: artistId,
+             coverUrl: AppConfig.formatArtwork(thumb),
+             durationMs: 210000,
+           );
+@@ -1157,15 +1238,52 @@ class ApiService {
+         final flexCols = responsive['flexColumns'] as List? ?? [];
+         final col0 = flexCols.isNotEmpty ? (flexCols[0] as Map)['musicResponsiveListItemFlexColumnRenderer'] : null;
+         final col1 = flexCols.length > 1 ? (flexCols[1] as Map)['musicResponsiveListItemFlexColumnRenderer'] : null;
+-        final title = col0?['text']?['runs']?[0]?['text']?.toString() ?? '';
++        var title = col0?['text']?['runs']?[0]?['text']?.toString() ?? '';
+         final artistRuns = col1?['text']?['runs'] as List? ?? [];
+-        final artistCandidates = <String>[];
++
++        String artist = '';
++        String artistId = '';
++
+         for (final r in artistRuns) {
+-          final t = r['text']?.toString() ?? '';
+-          if (t == 'Brano' || t == 'Video' || t == 'Song' || t == ' • ' || t == ' e ' || t == ' & ' || t.contains(':') || t.contains('visualizzazioni') || t.contains('views') || t.contains('riproduzioni') || t.contains('ascoltatori')) continue;
+-          artistCandidates.add(t);
++          final browseId = (r as Map)['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
++          if (browseId.startsWith('UC') || browseId.startsWith('FEmusic_library')) {
++            artistId = browseId;
++            artist = r['text']?.toString() ?? '';
++            break;
++          }
++        }
++
++        if (artist.isEmpty) {
++          for (final r in artistRuns) {
++            final t = (r as Map)['text']?.toString() ?? '';
++            if (t == 'Brano' || t == 'Video' || t == 'Song' || t == ' • ' || t == ' e ' || t == ' & ' || t.contains(':') || t.contains('visualizzazioni') || t.contains('views') || t.contains('riproduzioni') || t.contains('ascoltatori')) continue;
++            artist = t;
++            break;
++          }
++        }
++
++        if (artist.isEmpty && flexCols.length > 2) {
++          for (int c = 2; c < flexCols.length; c++) {
++            final otherRuns = (flexCols[c] as Map)['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List? ?? [];
++            for (final r in otherRuns) {
++              final browseId = (r as Map)['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
++              if (browseId.startsWith('UC') || browseId.startsWith('FEmusic_library')) {
++                artistId = browseId;
++                artist = r['text']?.toString() ?? '';
++                break;
++              }
++            }
++            if (artist.isNotEmpty) break;
++          }
++        }
++
++        if ((artist.isEmpty || artist.toLowerCase() == 'artista') && title.contains(' - ')) {
++          final parts = title.split(' - ');
++          if (parts.length >= 2 && parts[0].trim().isNotEmpty) {
++            artist = parts[0].trim();
++            title = parts.sublist(1).join(' - ').trim();
++          }
+         }
+-        final artist = artistCandidates.isNotEmpty ? artistCandidates.join(', ') : artistRuns.map((r) => r['text']).join('');
+ 
+         String vId = responsive['playlistItemData']?['videoId']?.toString() ??
+                     responsive['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ??
+@@ -1196,6 +1314,7 @@ class ApiService {
+             videoId: vId,
+             title: title,
+             artistName: AppConfig.sanitizeArtist(artist.isNotEmpty ? artist : 'Artista'),
++            artistId: artistId,
+             coverUrl: AppConfig.formatArtwork(thumb),
+             durationMs: 210000,
+           );
+diff --git a/lib/services/audio_handler.dart b/lib/services/audio_handler.dart
+index 4e33496..90588ec 100644
+--- a/lib/services/audio_handler.dart
++++ b/lib/services/audio_handler.dart
+@@ -3,6 +3,7 @@ import 'package:audio_service/audio_service.dart';
+ import 'package:audio_session/audio_session.dart';
+ import 'package:just_audio/just_audio.dart';
+ import '../models/track.dart';
++import '../config/app_config.dart';
+ import 'api_service.dart';
+ import 'storage_service.dart';
+ import 'local_stream_proxy.dart';
+@@ -53,40 +54,45 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
+       ? _tracksQueue[_currentIndex]
+       : null;
+ 
++  void _broadcastState() {
++    final playing = _player.playing;
++    final procState = const {
++      ProcessingState.idle: AudioProcessingState.idle,
++      ProcessingState.loading: AudioProcessingState.loading,
++      ProcessingState.buffering: AudioProcessingState.buffering,
++      ProcessingState.ready: AudioProcessingState.ready,
++      ProcessingState.completed: AudioProcessingState.completed,
++    }[_player.processingState] ?? AudioProcessingState.idle;
++
++    playbackState.add(playbackState.value.copyWith(
++      controls: [
++        MediaControl.skipToPrevious,
++        if (playing) MediaControl.pause else MediaControl.play,
++        MediaControl.skipToNext,
++        MediaControl.stop,
++      ],
++      systemActions: const {
++        MediaAction.seek,
++        MediaAction.seekForward,
++        MediaAction.seekBackward,
++      },
++      androidCompactActionIndices: const [0, 1, 2],
++      processingState: procState,
++      playing: playing,
++      updatePosition: _player.position,
++      bufferedPosition: _player.bufferedPosition,
++      speed: _player.speed,
++      queueIndex: _currentIndex,
++    ));
++  }
++
+   void _initPlayerListeners() {
+     // 1. Playback Events
+-    _player.playbackEventStream.listen((PlaybackEvent event) {
+-      final playing = _player.playing;
+-      playbackState.add(playbackState.value.copyWith(
+-        controls: [
+-          MediaControl.skipToPrevious,
+-          if (playing) MediaControl.pause else MediaControl.play,
+-          MediaControl.skipToNext,
+-          MediaControl.stop,
+-        ],
+-        systemActions: const {
+-          MediaAction.seek,
+-          MediaAction.seekForward,
+-          MediaAction.seekBackward,
+-        },
+-        androidCompactActionIndices: const [0, 1, 2],
+-        processingState: const {
+-          ProcessingState.idle: AudioProcessingState.idle,
+-          ProcessingState.loading: AudioProcessingState.loading,
+-          ProcessingState.buffering: AudioProcessingState.buffering,
+-          ProcessingState.ready: AudioProcessingState.ready,
+-          ProcessingState.completed: AudioProcessingState.completed,
+-        }[_player.processingState]!,
+-        playing: playing,
+-        updatePosition: _player.position,
+-        bufferedPosition: _player.bufferedPosition,
+-        speed: _player.speed,
+-        queueIndex: _currentIndex,
+-      ));
+-    });
++    _player.playbackEventStream.listen((_) => _broadcastState());
+ 
+-    // 2. Track Completion -> Auto Next
++    // 2. Track Completion & State Changes (emits on playing and processingState change)
+     _player.playerStateStream.listen((state) {
++      _broadcastState();
+       if (state.processingState == ProcessingState.completed) {
+         if (_loopMode == LoopMode.one) {
+           _player.seek(Duration.zero);
+@@ -97,7 +103,10 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
+       }
+     });
+ 
+-    // 3. Duration Stream
++    // 3. Playing Stream
++    _player.playingStream.listen((_) => _broadcastState());
++
++    // 4. Duration Stream
+     _player.durationStream.listen((dur) {
+       final item = mediaItem.value;
+       if (item != null && dur != null) {
+@@ -106,16 +115,40 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
+     });
+   }
+ 
+-  Future<void> loadAndPlayTrack(Track track, {List<Track>? newQueue, int index = 0}) async {
++  Future<void> loadAndPlayTrack(Track track, {List<Track>? newQueue, int? index}) async {
+     if (newQueue != null && newQueue.isNotEmpty) {
+       _tracksQueue = List.from(newQueue);
+-      _currentIndex = index.clamp(0, _tracksQueue.length - 1);
++      _currentIndex = (index ?? 0).clamp(0, _tracksQueue.length - 1);
++    } else if (index != null && index >= 0 && index < _tracksQueue.length) {
++      _currentIndex = index;
+     } else {
+-      _tracksQueue = [track];
+-      _currentIndex = 0;
++      final foundIdx = _tracksQueue.indexWhere((t) => t.id == track.id);
++      if (foundIdx != -1) {
++        _currentIndex = foundIdx;
++      } else if (_tracksQueue.isEmpty) {
++        _tracksQueue = [track];
++        _currentIndex = 0;
++      }
++    }
++
++    var targetTrack = _tracksQueue[_currentIndex];
++    final vId = targetTrack.videoId.isNotEmpty ? targetTrack.videoId : targetTrack.id;
++
++    // Auto-resolve artist name if missing or generic
++    final isGeneric = targetTrack.artistName.isEmpty ||
++        targetTrack.artistName.toLowerCase() == 'unknown artist' ||
++        targetTrack.artistName.toLowerCase() == 'artista sconosciuto' ||
++        targetTrack.artistName.toLowerCase() == 'artista';
++    if (isGeneric && vId.isNotEmpty) {
++      try {
++        final vid = await _api.yt.videos.get(vId).timeout(const Duration(seconds: 3));
++        if (vid.author.isNotEmpty) {
++          targetTrack = targetTrack.copyWith(artistName: AppConfig.sanitizeArtist(vid.author));
++          _tracksQueue[_currentIndex] = targetTrack;
++        }
++      } catch (_) {}
+     }
+ 
+-    final targetTrack = _tracksQueue[_currentIndex];
+     await _storage.addToHistory(targetTrack);
+ 
+     // Update MediaItem for iOS Lock Screen & Android Notification
+@@ -137,7 +170,6 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
+       artUri: Uri.parse(t.coverUrl),
+     )).toList());
+ 
+-    final vId = targetTrack.videoId.isNotEmpty ? targetTrack.videoId : targetTrack.id;
+     try {
+       if (!_localProxy.isRunning) {
+         await _localProxy.start();
+@@ -197,10 +229,16 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
+   }
+ 
+   @override
+-  Future<void> play() => _player.play();
++  Future<void> play() async {
++    await _player.play();
++    _broadcastState();
++  }
+ 
+   @override
+-  Future<void> pause() => _player.pause();
++  Future<void> pause() async {
++    await _player.pause();
++    _broadcastState();
++  }
+ 
+   @override
+   Future<void> seek(Duration position) => _player.seek(position);
+@@ -210,10 +248,10 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
+     if (_tracksQueue.isEmpty) return;
+     if (_currentIndex < _tracksQueue.length - 1) {
+       _currentIndex++;
+-      await loadAndPlayTrack(_tracksQueue[_currentIndex]);
++      await loadAndPlayTrack(_tracksQueue[_currentIndex], index: _currentIndex);
+     } else if (_loopMode == LoopMode.all) {
+       _currentIndex = 0;
+-      await loadAndPlayTrack(_tracksQueue[_currentIndex]);
++      await loadAndPlayTrack(_tracksQueue[_currentIndex], index: _currentIndex);
+     }
+   }
+ 
+@@ -225,7 +263,7 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
+     }
+     if (_currentIndex > 0) {
+       _currentIndex--;
+-      await loadAndPlayTrack(_tracksQueue[_currentIndex]);
++      await loadAndPlayTrack(_tracksQueue[_currentIndex], index: _currentIndex);
+     } else {
+       await _player.seek(Duration.zero);
+     }
+@@ -234,6 +272,7 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
+   @override
+   Future<void> stop() async {
+     await _player.stop();
++    _broadcastState();
+     return super.stop();
+   }
+ 
+diff --git a/lib/services/storage_service.dart b/lib/services/storage_service.dart
+index 62aa18f..63f9274 100644
+--- a/lib/services/storage_service.dart
++++ b/lib/services/storage_service.dart
+@@ -1,4 +1,5 @@
+-﻿import 'dart:convert';
++import 'dart:convert';
++import 'package:flutter/foundation.dart' show ValueNotifier;
+ import 'package:shared_preferences/shared_preferences.dart';
+ import '../models/track.dart';
+ import '../models/playlist.dart';
+@@ -14,6 +15,7 @@ class StorageService {
+   static const _keyGoogleUser = 'preluded_google_user';
+ 
+   final SharedPreferences _prefs;
++  final ValueNotifier<int> historyVersion = ValueNotifier(0);
+   StorageService(this._prefs);
+ 
+   static Future<StorageService> init() async {
+@@ -190,6 +192,12 @@ class StorageService {
+         .toList();
+   }
+ 
++  Future<void> saveHistory(List<Track> list) async {
++    final encoded = list.map((t) => jsonEncode(t.toJson())).toList();
++    await _prefs.setStringList(_keyHistory, encoded);
++    historyVersion.value++;
++  }
++
+   Future<void> addToHistory(Track track) async {
+     final list = getHistory();
+     list.removeWhere((t) => t.id == track.id || t.videoId == track.id);
+@@ -197,15 +205,16 @@ class StorageService {
+     if (list.length > 100) {
+       list.removeRange(100, list.length);
+     }
+-    final encoded = list.map((t) => jsonEncode(t.toJson())).toList();
+-    await _prefs.setStringList(_keyHistory, encoded);
++    await saveHistory(list);
+   }
+ 
+   Future<void> clearHistory() async {
+     await _prefs.remove(_keyHistory);
++    historyVersion.value++;
+   }
+ 
+   Future<void> clearAllCache() async {
+     await _prefs.clear();
++    historyVersion.value++;
+   }
+ }
+diff --git a/lib/ui/screens/album_screen.dart b/lib/ui/screens/album_screen.dart
+index eb88464..e0a3eec 100644
+--- a/lib/ui/screens/album_screen.dart
++++ b/lib/ui/screens/album_screen.dart
+@@ -6,6 +6,7 @@ import '../../providers/player_state.dart';
+ import '../../services/api_service.dart';
+ import '../theme/app_theme.dart';
+ import '../widgets/track_tile.dart';
++import '../widgets/mini_player.dart';
+ 
+ class AlbumScreen extends StatefulWidget {
+   final Album album;
+@@ -35,7 +36,12 @@ class _AlbumScreenState extends State<AlbumScreen> {
+       final fullAlbum = await api.fetchAlbum(_album.id);
+       if (fullAlbum != null && mounted) {
+         setState(() {
+-          _album = fullAlbum;
++          _album = fullAlbum.copyWith(
++            coverUrl: fullAlbum.coverUrl.isNotEmpty ? fullAlbum.coverUrl : _album.coverUrl,
++            artistName: (fullAlbum.artistName.isNotEmpty && fullAlbum.artistName != 'Artista')
++                ? fullAlbum.artistName
++                : _album.artistName,
++          );
+           _isLoading = false;
+         });
+         return;
+@@ -163,6 +169,16 @@ class _AlbumScreenState extends State<AlbumScreen> {
+           const SliverToBoxAdapter(child: SizedBox(height: 120)),
+         ],
+       ),
++      bottomNavigationBar: SafeArea(
++        top: false,
++        child: Align(
++          alignment: Alignment.bottomCenter,
++          child: ConstrainedBox(
++            constraints: const BoxConstraints(maxWidth: 880),
++            child: const MiniPlayer(),
++          ),
++        ),
++      ),
+     );
+   }
+ }
+diff --git a/lib/ui/screens/artist_screen.dart b/lib/ui/screens/artist_screen.dart
+index bc9b403..de2d362 100644
+--- a/lib/ui/screens/artist_screen.dart
++++ b/lib/ui/screens/artist_screen.dart
+@@ -6,6 +6,7 @@ import '../../providers/player_state.dart';
+ import '../../services/api_service.dart';
+ import '../theme/app_theme.dart';
+ import '../widgets/track_tile.dart';
++import '../widgets/mini_player.dart';
+ import 'album_screen.dart';
+ 
+ class ArtistScreen extends StatefulWidget {
+@@ -236,6 +237,16 @@ class _ArtistScreenState extends State<ArtistScreen> {
+           const SliverToBoxAdapter(child: SizedBox(height: 120)),
+         ],
+       ),
++      bottomNavigationBar: SafeArea(
++        top: false,
++        child: Align(
++          alignment: Alignment.bottomCenter,
++          child: ConstrainedBox(
++            constraints: const BoxConstraints(maxWidth: 880),
++            child: const MiniPlayer(),
++          ),
++        ),
++      ),
+     );
+   }
+ }
+diff --git a/lib/ui/screens/full_player_screen.dart b/lib/ui/screens/full_player_screen.dart
+index 271c844..f9d9305 100644
+--- a/lib/ui/screens/full_player_screen.dart
++++ b/lib/ui/screens/full_player_screen.dart
+@@ -373,51 +373,57 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
+                       color: player.isShuffle ? AppTheme.primaryAccent : Colors.white.withOpacity(0.6),
+                       size: isCompact ? 22 : 24,
+                     ),
++                    mouseCursor: SystemMouseCursors.click,
++                    tooltip: 'Riproduzione casuale',
+                     onPressed: player.toggleShuffle,
+                   ),
+ 
+                   // Previous
+                   IconButton(
+                     icon: Icon(Icons.skip_previous_rounded, color: Colors.white, size: isCompact ? 36 : 42),
++                    mouseCursor: SystemMouseCursors.click,
++                    tooltip: 'Brano precedente',
+                     onPressed: player.previousTrack,
+                   ),
+ 
+                   // Play / Pause Large FAB
+-                  GestureDetector(
+-                    onTap: player.togglePlay,
+-                    child: Container(
+-                      width: isCompact ? 64 : 72,
+-                      height: isCompact ? 64 : 72,
+-                      decoration: BoxDecoration(
+-                        shape: BoxShape.circle,
+-                        color: AppTheme.primaryAccent,
+-                        boxShadow: [
+-                          BoxShadow(
+-                            color: AppTheme.primaryAccent.withOpacity(0.45),
+-                            blurRadius: 18,
+-                            offset: const Offset(0, 5),
+-                          ),
+-                        ],
+-                      ),
+-                      child: player.isBuffering
+-                          ? const Center(
+-                              child: SizedBox(
+-                                width: 24,
+-                                height: 24,
+-                                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
++                  Material(
++                    color: AppTheme.primaryAccent,
++                    shape: const CircleBorder(),
++                    elevation: 6,
++                    shadowColor: AppTheme.primaryAccent.withOpacity(0.45),
++                    clipBehavior: Clip.antiAlias,
++                    child: InkWell(
++                      customBorder: const CircleBorder(),
++                      mouseCursor: SystemMouseCursors.click,
++                      onTap: player.togglePlay,
++                      splashColor: Colors.white.withOpacity(0.25),
++                      highlightColor: Colors.white.withOpacity(0.12),
++                      child: SizedBox(
++                        width: isCompact ? 64 : 72,
++                        height: isCompact ? 64 : 72,
++                        child: player.isBuffering
++                            ? const Center(
++                                child: SizedBox(
++                                  width: 26,
++                                  height: 26,
++                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
++                                ),
++                              )
++                            : Icon(
++                                player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
++                                color: Colors.white,
++                                size: isCompact ? 36 : 40,
+                               ),
+-                            )
+-                          : Icon(
+-                              player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+-                              color: Colors.white,
+-                              size: isCompact ? 36 : 40,
+-                            ),
++                      ),
+                     ),
+                   ),
+ 
+                   // Next
+                   IconButton(
+                     icon: Icon(Icons.skip_next_rounded, color: Colors.white, size: isCompact ? 36 : 42),
++                    mouseCursor: SystemMouseCursors.click,
++                    tooltip: 'Brano successivo',
+                     onPressed: player.nextTrack,
+                   ),
+ 
+@@ -430,6 +436,8 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
+                       color: player.loopMode != LoopMode.off ? AppTheme.primaryAccent : Colors.white.withOpacity(0.6),
+                       size: isCompact ? 22 : 24,
+                     ),
++                    mouseCursor: SystemMouseCursors.click,
++                    tooltip: 'Ripetizione',
+                     onPressed: player.cycleRepeat,
+                   ),
+                 ],
+diff --git a/lib/ui/screens/google_login_screen.dart b/lib/ui/screens/google_login_screen.dart
+index 479b73e..5cf3347 100644
+--- a/lib/ui/screens/google_login_screen.dart
++++ b/lib/ui/screens/google_login_screen.dart
+@@ -1,10 +1,11 @@
+ import 'dart:async';
+-import 'dart:io' show Platform;
++import 'dart:io' show Platform, Directory;
+ import 'package:flutter/foundation.dart' show kIsWeb;
+ import 'package:flutter/material.dart';
+ import 'package:flutter/services.dart';
+ import 'package:webview_flutter/webview_flutter.dart';
+-import 'package:url_launcher/url_launcher.dart';
++import 'package:desktop_webview_window/desktop_webview_window.dart';
++import 'package:path_provider/path_provider.dart';
+ import 'package:provider/provider.dart';
+ import '../../providers/library_state.dart';
+ import '../../services/api_service.dart';
+@@ -27,6 +28,13 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
+   double _progress = 0.0;
+   Timer? _periodicCheckTimer;
+ 
++  // Desktop WebView2 state
++  Webview? _desktopWebview;
++  bool _isDesktopWindowOpen = false;
++  String _desktopStatus = 'Preparazione accesso...';
++  bool _desktopSuccess = false;
++  GoogleUser? _detectedUser;
++
+   bool get _isDesktop => !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+ 
+   @override
+@@ -34,6 +42,9 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
+     super.initState();
+     if (_isDesktop) {
+       _isLoading = false;
++      WidgetsBinding.instance.addPostFrameCallback((_) {
++        _openDesktopWebview();
++      });
+       return;
+     }
+ 
+@@ -79,9 +90,185 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
+   @override
+   void dispose() {
+     _periodicCheckTimer?.cancel();
++    try {
++      _desktopWebview?.close();
++      _desktopWebview = null;
++    } catch (_) {}
+     super.dispose();
+   }
+ 
++  Future<void> _openDesktopWebview() async {
++    if (_desktopWebview != null) return;
++
++    setState(() {
++      _isLoading = true;
++      _isDesktopWindowOpen = true;
++      _desktopStatus = 'Apertura finestra browser per accesso Google...';
++    });
++
++    try {
++      final appSupportDir = await getApplicationSupportDirectory();
++      final cacheDir = Directory('${appSupportDir.path}/web_cache');
++      if (!await cacheDir.exists()) {
++        await cacheDir.create(recursive: true);
++      }
++
++      final webview = await WebviewWindow.create(
++        configuration: CreateConfiguration(
++          windowWidth: 540,
++          windowHeight: 760,
++          title: 'Accesso Google - Preluded Music',
++          userDataFolderWindows: cacheDir.path,
++        ),
++      );
++
++      _desktopWebview = webview;
++
++      if (mounted) {
++        setState(() {
++          _isLoading = false;
++          _desktopStatus = 'Accedi con le tue credenziali Google nella finestra.';
++        });
++      }
++
++      webview.setOnUrlRequestCallback((url) {
++        debugPrint('[GoogleLoginScreen Desktop] URL callback: $url');
++        if (url.contains('music.youtube.com') || url.contains('youtube.com')) {
++          _checkDesktopAuth();
++        }
++        return true; // PERMIT ALL NAVIGATIONS (returning false cancels page loading in WebView2!)
++      });
++
++      _periodicCheckTimer?.cancel();
++      _periodicCheckTimer = Timer.periodic(const Duration(milliseconds: 1200), (_) {
++        if (_desktopWebview != null && !_isExtracting && !_desktopSuccess) {
++          _checkDesktopAuth();
++        }
++      });
++
++      webview.onClose.whenComplete(() {
++        _periodicCheckTimer?.cancel();
++        _desktopWebview = null;
++        if (mounted) {
++          setState(() {
++            _isDesktopWindowOpen = false;
++            if (!_isExtracting && !_desktopSuccess) {
++              _desktopStatus = 'Finestra chiusa. Se non hai completato l\'accesso, riaprila qui sotto.';
++            }
++          });
++        }
++      });
++
++      webview.launch(
++        'https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F',
++      );
++    } catch (e) {
++      debugPrint('[GoogleLoginScreen Desktop] Error creating webview window: $e');
++      if (mounted) {
++        setState(() {
++          _isLoading = false;
++          _isDesktopWindowOpen = false;
++          _desktopStatus = 'Errore apertura finestra: $e';
++        });
++      }
++    }
++  }
++
++  Future<void> _checkDesktopAuth() async {
++    if (_desktopWebview == null || _isExtracting || _desktopSuccess) return;
++
++    try {
++      // 1. Prova a estrarre tutti i cookie nativi da WebView2
++      final cookies = await _desktopWebview!.getAllCookies();
++      final hasNativeSapisid = cookies.any((c) =>
++          c.name == 'SAPISID' ||
++          c.name == '__Secure-3PAPISID' ||
++          c.name == '__Secure-1PAPISID');
++
++      if (hasNativeSapisid) {
++        final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
++        await _handleSuccessfulDesktopAuth(cookieStr);
++        return;
++      }
++
++      // 2. Fallback su evaluateJavaScript document.cookie
++      final jsCookie = await _desktopWebview!.evaluateJavaScript('document.cookie');
++      String docStr = (jsCookie ?? '').toString();
++      if (docStr.startsWith('"') && docStr.endsWith('"') && docStr.length > 1) {
++        docStr = docStr.substring(1, docStr.length - 1);
++      }
++      docStr = docStr.replaceAll(r'\"', '"');
++
++      final hasSapisid = docStr.contains('SAPISID') ||
++          docStr.contains('__Secure-3PAPISID') ||
++          docStr.contains('__Secure-1PAPISID');
++
++      if (hasSapisid) {
++        await _handleSuccessfulDesktopAuth(docStr);
++      }
++    } catch (e) {
++      debugPrint('[GoogleLoginScreen Desktop] check error: $e');
++    }
++  }
++
++  Future<void> _handleSuccessfulDesktopAuth(String rawCookies) async {
++    if (_isExtracting || _desktopSuccess || !mounted) return;
++    _isExtracting = true;
++    _periodicCheckTimer?.cancel();
++
++    setState(() {
++      _desktopStatus = 'Accesso rilevato! Sincronizzazione in corso...';
++    });
++
++    try {
++      final api = context.read<ApiService>();
++      final library = context.read<LibraryState>();
++
++      await library.saveYtmCookie(rawCookies);
++
++      GoogleUser? fetchedUser;
++      try {
++        fetchedUser = await api.fetchYtmAccountInfo(rawCookies).timeout(const Duration(seconds: 4));
++      } catch (_) {}
++
++      final user = fetchedUser ?? GoogleUser(
++        name: 'Account Google',
++        email: '',
++        cookie: rawCookies,
++      );
++
++      await library.loginWithGoogle(user);
++
++      try {
++        _desktopWebview?.close();
++        _desktopWebview = null;
++      } catch (_) {}
++
++      if (mounted) {
++        setState(() {
++          _isExtracting = false;
++          _desktopSuccess = true;
++          _detectedUser = user;
++        });
++
++        // Ritorno automatico dopo 2.5 secondi se l'utente non clicca subito "Ritorna all'app"
++        Timer(const Duration(milliseconds: 2500), () {
++          if (mounted) {
++            Navigator.pop(context, true);
++          }
++        });
++      }
++    } catch (e) {
++      if (mounted) {
++        setState(() {
++          _isExtracting = false;
++          _desktopStatus = 'Errore durante la sincronizzazione: $e';
++        });
++      }
++    }
++  }
++
++
+   Future<String> _extractAllCookies() async {
+     final Map<String, String> cookieMap = {};
+ 
+@@ -314,84 +501,197 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
+       body: _isDesktop
+           ? Center(
+               child: Container(
+-                constraints: const BoxConstraints(maxWidth: 460),
++                constraints: const BoxConstraints(maxWidth: 480),
+                 margin: const EdgeInsets.all(24),
+                 padding: const EdgeInsets.all(32),
+                 decoration: BoxDecoration(
+                   color: AppTheme.surfaceContainerHigh,
+                   borderRadius: BorderRadius.circular(24),
+-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+-                ),
+-                child: Column(
+-                  mainAxisSize: MainAxisSize.min,
+-                  children: [
+-                    Container(
+-                      width: 64,
+-                      height: 64,
+-                      decoration: BoxDecoration(
+-                        color: Colors.white.withOpacity(0.08),
+-                        shape: BoxShape.circle,
+-                      ),
+-                      child: const Center(
+-                        child: Text(
+-                          'G',
+-                          style: TextStyle(
+-                            fontSize: 32,
+-                            fontWeight: FontWeight.bold,
+-                            color: Colors.white,
+-                          ),
+-                        ),
+-                      ),
+-                    ),
+-                    const SizedBox(height: 20),
+-                    Text(
+-                      'Accesso Google su Windows',
+-                      style: AppTheme.syne(
+-                        fontSize: 20,
+-                        fontWeight: FontWeight.bold,
+-                        color: Colors.white,
+-                      ),
+-                      textAlign: TextAlign.center,
+-                    ),
+-                    const SizedBox(height: 12),
+-                    Text(
+-                      'La sincronizzazione della libreria YouTube Music su Windows desktop può essere eseguita tramite browser.',
+-                      style: AppTheme.inter(
+-                        fontSize: 14,
+-                        color: AppTheme.textSecondary,
+-                        height: 1.4,
+-                      ),
+-                      textAlign: TextAlign.center,
+-                    ),
+-                    const SizedBox(height: 28),
+-                    ElevatedButton.icon(
+-                      onPressed: () {
+-                        launchUrl(
+-                          Uri.parse('https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F'),
+-                          mode: LaunchMode.externalApplication,
+-                        );
+-                      },
+-                      style: ElevatedButton.styleFrom(
+-                        backgroundColor: AppTheme.primaryAccent,
+-                        foregroundColor: Colors.white,
+-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+-                      ),
+-                      icon: const Icon(Icons.open_in_browser_rounded),
+-                      label: const Text(
+-                        'Apri nel Browser',
+-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+-                      ),
+-                    ),
+-                    const SizedBox(height: 12),
+-                    TextButton(
+-                      onPressed: () => Navigator.pop(context),
+-                      child: const Text('Torna all\'app', style: TextStyle(color: AppTheme.textSecondary)),
++                  border: Border.all(
++                    color: _desktopSuccess
++                        ? Colors.greenAccent.withOpacity(0.4)
++                        : Colors.white.withOpacity(0.1),
++                  ),
++                  boxShadow: [
++                    BoxShadow(
++                      color: Colors.black.withOpacity(0.3),
++                      blurRadius: 20,
++                      offset: const Offset(0, 8),
+                     ),
+                   ],
+                 ),
++                child: _desktopSuccess
++                    ? Column(
++                        mainAxisSize: MainAxisSize.min,
++                        children: [
++                          Container(
++                            width: 72,
++                            height: 72,
++                            decoration: BoxDecoration(
++                              color: Colors.greenAccent.withOpacity(0.15),
++                              shape: BoxShape.circle,
++                            ),
++                            child: const Center(
++                              child: Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 44),
++                            ),
++                          ),
++                          const SizedBox(height: 20),
++                          Text(
++                            'Accesso completato!',
++                            style: AppTheme.syne(
++                              fontSize: 22,
++                              fontWeight: FontWeight.bold,
++                              color: Colors.white,
++                            ),
++                            textAlign: TextAlign.center,
++                          ),
++                          const SizedBox(height: 10),
++                          Text(
++                            'Autenticato come:\n${_detectedUser?.name ?? 'Utente Google'}',
++                            style: AppTheme.inter(
++                              fontSize: 14,
++                              color: AppTheme.textSecondary,
++                              height: 1.4,
++                            ),
++                            textAlign: TextAlign.center,
++                          ),
++                          const SizedBox(height: 28),
++                          ElevatedButton.icon(
++                            onPressed: () => Navigator.pop(context, true),
++                            style: ElevatedButton.styleFrom(
++                              backgroundColor: Colors.greenAccent.shade700,
++                              foregroundColor: Colors.white,
++                              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
++                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
++                            ),
++                            icon: const Icon(Icons.arrow_back_rounded),
++                            label: const Text(
++                              'Ritorna all\'App',
++                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
++                            ),
++                          ),
++                        ],
++                      )
++                    : Column(
++                        mainAxisSize: MainAxisSize.min,
++                        children: [
++                          Container(
++                            width: 64,
++                            height: 64,
++                            decoration: BoxDecoration(
++                              color: Colors.white.withOpacity(0.08),
++                              shape: BoxShape.circle,
++                            ),
++                            child: const Center(
++                              child: Text(
++                                'G',
++                                style: TextStyle(
++                                  fontSize: 32,
++                                  fontWeight: FontWeight.bold,
++                                  color: Color(0xFF4285F4),
++                                ),
++                              ),
++                            ),
++                          ),
++                          const SizedBox(height: 20),
++                          Text(
++                            'Accesso Google su Windows',
++                            style: AppTheme.syne(
++                              fontSize: 20,
++                              fontWeight: FontWeight.bold,
++                              color: Colors.white,
++                            ),
++                            textAlign: TextAlign.center,
++                          ),
++                          const SizedBox(height: 12),
++                          Text(
++                            _desktopStatus,
++                            style: AppTheme.inter(
++                              fontSize: 14,
++                              color: AppTheme.textSecondary,
++                              height: 1.4,
++                            ),
++                            textAlign: TextAlign.center,
++                          ),
++                          const SizedBox(height: 24),
++                          if (_isExtracting)
++                            const Padding(
++                              padding: EdgeInsets.symmetric(vertical: 8.0),
++                              child: Row(
++                                mainAxisAlignment: MainAxisAlignment.center,
++                                children: [
++                                  SizedBox(
++                                    width: 18,
++                                    height: 18,
++                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryAccent),
++                                  ),
++                                  SizedBox(width: 12),
++                                  Text('Sincronizzazione in corso...', style: TextStyle(color: Colors.white70, fontSize: 13)),
++                                ],
++                              ),
++                            )
++                          else if (_isDesktopWindowOpen)
++                            Padding(
++                              padding: const EdgeInsets.symmetric(vertical: 6.0),
++                              child: Container(
++                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
++                                decoration: BoxDecoration(
++                                  color: const Color(0xFF4285F4).withOpacity(0.12),
++                                  borderRadius: BorderRadius.circular(12),
++                                  border: Border.all(color: const Color(0xFF4285F4).withOpacity(0.3)),
++                                ),
++                                child: const Row(
++                                  mainAxisSize: MainAxisSize.min,
++                                  children: [
++                                    SizedBox(
++                                      width: 14,
++                                      height: 14,
++                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF4285F4)),
++                                    ),
++                                    SizedBox(width: 10),
++                                    Flexible(
++                                      child: Text(
++                                        'Finestra attiva: completa l\'accesso con Google',
++                                        style: TextStyle(color: Colors.white, fontSize: 12),
++                                      ),
++                                    ),
++                                  ],
++                                ),
++                              ),
++                            )
++                          else
++                            ElevatedButton.icon(
++                              onPressed: _openDesktopWebview,
++                              style: ElevatedButton.styleFrom(
++                                backgroundColor: AppTheme.primaryAccent,
++                                foregroundColor: Colors.white,
++                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
++                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
++                              ),
++                              icon: const Icon(Icons.open_in_new_rounded),
++                              label: const Text('Riapri Finestra Accesso', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
++                            ),
++                          const SizedBox(height: 20),
++                          Row(
++                            mainAxisAlignment: MainAxisAlignment.center,
++                            children: [
++                              TextButton.icon(
++                                onPressed: () => _checkDesktopAuth(),
++                                icon: const Icon(Icons.sync_rounded, size: 16, color: AppTheme.textSecondary),
++                                label: const Text('Verifica Ora', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
++                              ),
++                              const SizedBox(width: 12),
++                              TextButton(
++                                onPressed: () => Navigator.pop(context),
++                                child: const Text('Annulla', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
++                              ),
++                            ],
++                          ),
++                        ],
++                      ),
+               ),
+             )
++
+           : Stack(
+               children: [
+                 if (_controller != null) WebViewWidget(controller: _controller!),
+diff --git a/lib/ui/screens/home_screen.dart b/lib/ui/screens/home_screen.dart
+index c0026cc..997bba9 100644
+--- a/lib/ui/screens/home_screen.dart
++++ b/lib/ui/screens/home_screen.dart
+@@ -20,19 +20,9 @@ class _HomeScreenState extends State<HomeScreen> {
+   List<Track> _quickPicks = [];
+   Map<String, List<Track>> _sections = {};
+   bool _isLoading = true;
+-  String _activeMood = '';
+   String? _lastYtmCookie;
+   bool? _lastIsGoogleLoggedIn;
+ 
+-  final List<String> _moodFilters = const [
+-    'Relax',
+-    'Energia',
+-    'Allenamento',
+-    'Focus',
+-    'Viaggio',
+-    'Party',
+-  ];
+-
+   @override
+   void initState() {
+     super.initState();
+@@ -42,6 +32,8 @@ class _HomeScreenState extends State<HomeScreen> {
+   Future<void> _loadData() async {
+     setState(() => _isLoading = true);
+     final api = context.read<ApiService>();
++    final library = context.read<LibraryState>();
++    library.repairHistoryArtists(api);
+     try {
+       final qp = await api.fetchQuickPicks();
+       final sec = await api.fetchHomeSections();
+@@ -139,39 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
+               ],
+             ),
+ 
+-            // 2. Material 3 Mood / Activity Filter Pills
+-            SliverToBoxAdapter(
+-              child: SingleChildScrollView(
+-                scrollDirection: Axis.horizontal,
+-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+-                child: Row(
+-                  children: _moodFilters.map((mood) {
+-                    final isSelected = _activeMood == mood;
+-                    return Padding(
+-                      padding: const EdgeInsets.only(right: 8),
+-                      child: FilterChip(
+-                        label: Text(mood),
+-                        selected: isSelected,
+-                        onSelected: (selected) {
+-                          setState(() => _activeMood = selected ? mood : '');
+-                        },
+-                        backgroundColor: AppTheme.surfaceContainerLow,
+-                        selectedColor: AppTheme.primaryContainer,
+-                        labelStyle: AppTheme.inter(
+-                          color: isSelected ? Colors.white : AppTheme.textSecondary,
+-                          fontSize: 13,
+-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+-                        ),
+-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+-                        side: BorderSide(
+-                          color: isSelected ? AppTheme.primaryAccentLight.withOpacity(0.4) : AppTheme.border,
+-                        ),
+-                      ),
+-                    );
+-                  }).toList(),
+-                ),
+-              ),
+-            ),
++
+ 
+             if (_isLoading)
+               const SliverFillRemaining(
+@@ -230,30 +190,34 @@ class _HomeScreenState extends State<HomeScreen> {
+                 ),
+               ],
+ 
+-              // 5. Dynamic YouTube Music Shelves
++              // 5. Dynamic YouTube Music Shelves (filtering out duplicate Scelte rapide)
+               for (final entry in _sections.entries) ...[
+-                SliverToBoxAdapter(
+-                  child: SectionHeader(
+-                    title: entry.key,
++                if (!entry.key.toLowerCase().contains('scelt') &&
++                    !entry.key.toLowerCase().contains('quick') &&
++                    !entry.key.toLowerCase().contains('picks')) ...[
++                  SliverToBoxAdapter(
++                    child: SectionHeader(
++                      title: entry.key,
++                    ),
+                   ),
+-                ),
+-                SliverToBoxAdapter(
+-                  child: SizedBox(
+-                    height: 215,
+-                    child: ListView.builder(
+-                      scrollDirection: Axis.horizontal,
+-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+-                      itemCount: entry.value.length,
+-                      itemBuilder: (context, i) {
+-                        final track = entry.value[i];
+-                        return QuickPickCard(
+-                          track: track,
+-                          onTap: () => player.playTrack(track, newQueue: entry.value, index: i),
+-                        );
+-                      },
++                  SliverToBoxAdapter(
++                    child: SizedBox(
++                      height: 215,
++                      child: ListView.builder(
++                        scrollDirection: Axis.horizontal,
++                        padding: const EdgeInsets.symmetric(horizontal: 16),
++                        itemCount: entry.value.length,
++                        itemBuilder: (context, i) {
++                          final track = entry.value[i];
++                          return QuickPickCard(
++                            track: track,
++                            onTap: () => player.playTrack(track, newQueue: entry.value, index: i),
++                          );
++                        },
++                      ),
+                     ),
+                   ),
+-                ),
++                ],
+               ],
+ 
+               // Bottom padding for miniplayer & navbar
+diff --git a/lib/ui/screens/library_screen.dart b/lib/ui/screens/library_screen.dart
+index 2c1366e..1dd148b 100644
+--- a/lib/ui/screens/library_screen.dart
++++ b/lib/ui/screens/library_screen.dart
+@@ -1,3 +1,4 @@
++import 'dart:io' show Platform;
+ import 'package:flutter/material.dart';
+ import 'package:provider/provider.dart';
+ import '../../providers/library_state.dart';
+@@ -420,7 +421,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
+                                 ),
+                               ),
+                               const SizedBox(width: 10),
+-                              const Text('Versione v${AppConfig.appVersion} Android Native', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
++                              Text(
++                                'Versione v${AppConfig.appVersion} ${Platform.isWindows ? "Windows Desktop" : (Platform.isAndroid ? "Android Native" : (Platform.isIOS ? "iOS Native" : (Platform.isMacOS ? "macOS Desktop" : (Platform.isLinux ? "Linux Desktop" : "Web"))))}',
++                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
++                              ),
+                             ],
+                           ),
+                           const SizedBox(height: 6),
+diff --git a/lib/ui/screens/playlist_screen.dart b/lib/ui/screens/playlist_screen.dart
+index 4492372..2b61832 100644
+--- a/lib/ui/screens/playlist_screen.dart
++++ b/lib/ui/screens/playlist_screen.dart
+@@ -5,6 +5,7 @@ import '../../providers/player_state.dart';
+ import '../../services/api_service.dart';
+ import '../theme/app_theme.dart';
+ import '../widgets/track_tile.dart';
++import '../widgets/mini_player.dart';
+ 
+ class PlaylistScreen extends StatefulWidget {
+   final String title;
+@@ -214,6 +215,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
+           const SliverToBoxAdapter(child: SizedBox(height: 120)),
+         ],
+       ),
++      bottomNavigationBar: SafeArea(
++        top: false,
++        child: Align(
++          alignment: Alignment.bottomCenter,
++          child: ConstrainedBox(
++            constraints: const BoxConstraints(maxWidth: 880),
++            child: const MiniPlayer(),
++          ),
++        ),
++      ),
+     );
+   }
+ }
+diff --git a/lib/ui/screens/search_screen.dart b/lib/ui/screens/search_screen.dart
+index 5ad5723..99ffba5 100644
+--- a/lib/ui/screens/search_screen.dart
++++ b/lib/ui/screens/search_screen.dart
+@@ -31,27 +31,7 @@ class _SearchScreenState extends State<SearchScreen> {
+   List<Album> _albums = [];
+   List<Playlist> _playlists = [];
+ 
+-  final List<String> _trendingSearches = [
+-    'Sfera Ebbasta',
+-    'Geolier',
+-    'Annalisa',
+-    'Lazza',
+-    'Travis Scott',
+-    'The Weeknd',
+-    'Tedua',
+-    'Rose Villain',
+-    'Marracash',
+-    'Capo Plaza',
+-  ];
+ 
+-  final List<Map<String, dynamic>> _genreCards = [
+-    {'title': 'Trap Italia', 'color': Color(0xFFFA2D48), 'icon': Icons.whatshot_rounded},
+-    {'title': 'Pop Hits', 'color': Color(0xFFFF6B6B), 'icon': Icons.star_rounded},
+-    {'title': 'Hip Hop & Rap', 'color': Color(0xFF7928CA), 'icon': Icons.mic_rounded},
+-    {'title': 'Dance & EDM', 'color': Color(0xFF0070F3), 'icon': Icons.graphic_eq_rounded},
+-    {'title': 'Chill & Relax', 'color': Color(0xFF10B981), 'icon': Icons.spa_rounded},
+-    {'title': 'Rock & Indie', 'color': Color(0xFFF59E0B), 'icon': Icons.album_rounded},
+-  ];
+ 
+   void _onSearchChanged(String query) {
+     if (_debounce?.isActive ?? false) _debounce!.cancel();
+@@ -174,7 +154,7 @@ class _SearchScreenState extends State<SearchScreen> {
+               child: _isLoading
+                   ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryAccent))
+                   : _searchCtrl.text.isEmpty
+-                      ? _buildSearchDiscovery()
++                      ? _buildEmptyPrompt()
+                       : _buildSearchResults(),
+             ),
+           ],
+@@ -213,123 +193,62 @@ class _SearchScreenState extends State<SearchScreen> {
+     );
+   }
+ 
+-  Widget _buildSearchDiscovery() {
+-    return SingleChildScrollView(
+-      physics: const BouncingScrollPhysics(),
+-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 180),
+-      child: Column(
+-        crossAxisAlignment: CrossAxisAlignment.start,
+-        children: [
+-          Text(
+-            '🔥 Di tendenza',
+-            style: AppTheme.syne(
+-              color: AppTheme.textPrimary,
+-              fontSize: 15.5,
+-              fontWeight: FontWeight.w700,
+-              letterSpacing: -0.2,
++  Widget _buildEmptyPrompt() {
++    return Center(
++      child: SingleChildScrollView(
++        padding: const EdgeInsets.only(bottom: 120),
++        child: Column(
++          mainAxisSize: MainAxisSize.min,
++          children: [
++            Container(
++              width: 76,
++              height: 76,
++              decoration: BoxDecoration(
++                shape: BoxShape.circle,
++                color: AppTheme.surfaceContainerHigh.withOpacity(0.6),
++                border: Border.all(color: Colors.white.withOpacity(0.08)),
++              ),
++              child: const Icon(
++                Icons.search_rounded,
++                size: 34,
++                color: AppTheme.textSecondary,
++              ),
+             ),
+-          ),
+-          const SizedBox(height: 12),
+-          Wrap(
+-            spacing: 8,
+-            runSpacing: 8,
+-            children: _trendingSearches.map((s) {
+-              return ActionChip(
+-                label: Text(s),
+-                backgroundColor: AppTheme.surfaceContainerHigh,
+-                labelStyle: AppTheme.inter(
+-                  color: AppTheme.textPrimary,
+-                  fontSize: 13,
+-                  fontWeight: FontWeight.w500,
+-                ),
+-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+-                side: BorderSide(color: Colors.white.withOpacity(0.06)),
+-                onPressed: () {
+-                  _searchCtrl.text = s;
+-                  _onSearchChanged(s);
+-                },
+-              );
+-            }).toList(),
+-          ),
+-          const SizedBox(height: 28),
+-          Text(
+-            'Esplora per Genere',
+-            style: AppTheme.syne(
+-              color: AppTheme.textPrimary,
+-              fontSize: 15.5,
+-              fontWeight: FontWeight.w700,
+-              letterSpacing: -0.2,
++            const SizedBox(height: 18),
++            Text(
++              'Cerca su Preluded',
++              style: AppTheme.syne(
++                color: AppTheme.textPrimary,
++                fontSize: 18,
++                fontWeight: FontWeight.w700,
++                letterSpacing: -0.3,
++              ),
+             ),
+-          ),
+-          const SizedBox(height: 12),
+-          GridView.builder(
+-            shrinkWrap: true,
+-            physics: const NeverScrollableScrollPhysics(),
+-            itemCount: _genreCards.length,
+-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+-              crossAxisCount: 2,
+-              crossAxisSpacing: 12,
+-              mainAxisSpacing: 12,
+-              childAspectRatio: 2.2,
++            const SizedBox(height: 6),
++            Text(
++              'Digita un brano, artista, album o playlist',
++              style: AppTheme.inter(
++                color: AppTheme.textMuted,
++                fontSize: 13,
++                fontWeight: FontWeight.w500,
++              ),
+             ),
+-            itemBuilder: (context, i) {
+-              final card = _genreCards[i];
+-              final color = card['color'] as Color;
+-              return Material(
+-                color: Colors.transparent,
+-                borderRadius: BorderRadius.circular(16),
+-                child: InkWell(
+-                  onTap: () {
+-                    _searchCtrl.text = card['title'] as String;
+-                    _onSearchChanged(_searchCtrl.text);
+-                  },
+-                  borderRadius: BorderRadius.circular(16),
+-                  child: Container(
+-                    padding: const EdgeInsets.all(12),
+-                    decoration: BoxDecoration(
+-                      gradient: LinearGradient(
+-                        colors: [color.withOpacity(0.85), color.withOpacity(0.45)],
+-                        begin: Alignment.topLeft,
+-                        end: Alignment.bottomRight,
+-                      ),
+-                      borderRadius: BorderRadius.circular(16),
+-                      boxShadow: [
+-                        BoxShadow(
+-                          color: color.withOpacity(0.3),
+-                          blurRadius: 10,
+-                          offset: const Offset(0, 4),
+-                        ),
+-                      ],
+-                    ),
+-                    child: Row(
+-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+-                      children: [
+-                        Expanded(
+-                          child: Text(
+-                            card['title'] as String,
+-                            style: AppTheme.syne(
+-                              color: Colors.white,
+-                              fontSize: 14,
+-                              fontWeight: FontWeight.w700,
+-                            ),
+-                          ),
+-                        ),
+-                        Icon(card['icon'] as IconData, color: Colors.white.withOpacity(0.9), size: 28),
+-                      ],
+-                    ),
+-                  ),
+-                ),
+-              );
+-            },
+-          ),
+-        ],
++          ],
++        ),
+       ),
+     );
+   }
+ 
+   Widget _buildSearchResults() {
+-    if (_tracks.isEmpty && _artists.isEmpty && _albums.isEmpty && _playlists.isEmpty) {
++    final hasResults = switch (_selectedFilter) {
++      'tracks' => _tracks.isNotEmpty,
++      'artists' => _artists.isNotEmpty,
++      'albums' => _albums.isNotEmpty,
++      'playlists' => _playlists.isNotEmpty,
++      _ => _tracks.isNotEmpty || _artists.isNotEmpty || _albums.isNotEmpty || _playlists.isNotEmpty,
++    };
++
++    if (!hasResults) {
+       return const Center(
+         child: Text('Nessun risultato trovato', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
+       );
+@@ -339,8 +258,189 @@ class _SearchScreenState extends State<SearchScreen> {
+       physics: const BouncingScrollPhysics(),
+       padding: const EdgeInsets.only(bottom: 180),
+       children: [
+-        // Artists Carousel if any
+-        if (_artists.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'artists')) ...[
++        // Dedicated Artists View
++        if (_selectedFilter == 'artists') ...[
++          Padding(
++            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
++            child: Text(
++              '${_artists.length} ${_artists.length == 1 ? "Artista trovato" : "Artisti trovati"}',
++              style: const TextStyle(
++                color: AppTheme.textSecondary,
++                fontSize: 14,
++                fontWeight: FontWeight.w600,
++              ),
++            ),
++          ),
++          ..._artists.map((artist) => ListTile(
++            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
++            leading: CircleAvatar(
++              radius: 28,
++              backgroundColor: AppTheme.surfaceContainerHighest,
++              backgroundImage: artist.picture.isNotEmpty ? NetworkImage(artist.picture) : null,
++              child: artist.picture.isEmpty
++                  ? const Icon(Icons.person_rounded, color: AppTheme.textSecondary, size: 28)
++                  : null,
++            ),
++            title: Text(
++              artist.name,
++              maxLines: 1,
++              overflow: TextOverflow.ellipsis,
++              style: const TextStyle(
++                color: AppTheme.textPrimary,
++                fontSize: 16,
++                fontWeight: FontWeight.w600,
++              ),
++            ),
++            subtitle: const Text(
++              'Artista',
++              style: TextStyle(
++                color: AppTheme.textSecondary,
++                fontSize: 13,
++              ),
++            ),
++            trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
++            onTap: () {
++              Navigator.push(
++                context,
++                MaterialPageRoute(builder: (_) => ArtistScreen(artist: artist)),
++              );
++            },
++          )),
++        ],
++
++        // Dedicated Albums View
++        if (_selectedFilter == 'albums') ...[
++          Padding(
++            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
++            child: Text(
++              '${_albums.length} ${_albums.length == 1 ? "Album trovato" : "Album trovati"}',
++              style: const TextStyle(
++                color: AppTheme.textSecondary,
++                fontSize: 14,
++                fontWeight: FontWeight.w600,
++              ),
++            ),
++          ),
++          ..._albums.map((album) => ListTile(
++            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
++            leading: ClipRRect(
++              borderRadius: BorderRadius.circular(8),
++              child: CachedNetworkImage(
++                imageUrl: album.coverUrl,
++                width: 52,
++                height: 52,
++                fit: BoxFit.cover,
++                memCacheWidth: 104,
++                memCacheHeight: 104,
++                placeholder: (c, u) => Container(width: 52, height: 52, color: AppTheme.surfaceContainerHighest),
++                errorWidget: (c, u, e) => Container(
++                  width: 52,
++                  height: 52,
++                  color: AppTheme.surfaceContainerHighest,
++                  child: const Icon(Icons.album_rounded, color: AppTheme.textSecondary),
++                ),
++              ),
++            ),
++            title: Text(
++              album.title,
++              maxLines: 1,
++              overflow: TextOverflow.ellipsis,
++              style: const TextStyle(
++                color: AppTheme.textPrimary,
++                fontSize: 15,
++                fontWeight: FontWeight.w600,
++              ),
++            ),
++            subtitle: Text(
++              album.artistName.isNotEmpty ? 'Album • ${album.artistName}' : 'Album',
++              maxLines: 1,
++              overflow: TextOverflow.ellipsis,
++              style: const TextStyle(
++                color: AppTheme.textSecondary,
++                fontSize: 13,
++              ),
++            ),
++            trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
++            onTap: () {
++              Navigator.push(
++                context,
++                MaterialPageRoute(builder: (_) => AlbumScreen(album: album)),
++              );
++            },
++          )),
++        ],
++
++        // Dedicated Playlists View
++        if (_selectedFilter == 'playlists') ...[
++          Padding(
++            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
++            child: Text(
++              '${_playlists.length} ${_playlists.length == 1 ? "Playlist trovata" : "Playlist trovate"}',
++              style: const TextStyle(
++                color: AppTheme.textSecondary,
++                fontSize: 14,
++                fontWeight: FontWeight.w600,
++              ),
++            ),
++          ),
++          ..._playlists.map((pl) => ListTile(
++            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
++            leading: ClipRRect(
++              borderRadius: BorderRadius.circular(8),
++              child: CachedNetworkImage(
++                imageUrl: pl.coverUrl,
++                width: 52,
++                height: 52,
++                fit: BoxFit.cover,
++                memCacheWidth: 104,
++                memCacheHeight: 104,
++                placeholder: (c, u) => Container(width: 52, height: 52, color: AppTheme.surfaceContainerHighest),
++                errorWidget: (c, u, e) => Container(
++                  width: 52,
++                  height: 52,
++                  color: AppTheme.surfaceContainerHighest,
++                  child: const Icon(Icons.playlist_play_rounded, color: AppTheme.textSecondary),
++                ),
++              ),
++            ),
++            title: Text(
++              pl.title,
++              maxLines: 1,
++              overflow: TextOverflow.ellipsis,
++              style: const TextStyle(
++                color: AppTheme.textPrimary,
++                fontSize: 15,
++                fontWeight: FontWeight.w600,
++              ),
++            ),
++            subtitle: Text(
++              pl.subtitle.isNotEmpty ? pl.subtitle : 'Playlist',
++              maxLines: 1,
++              overflow: TextOverflow.ellipsis,
++              style: const TextStyle(
++                color: AppTheme.textSecondary,
++                fontSize: 13,
++              ),
++            ),
++            trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
++            onTap: () {
++              Navigator.push(
++                context,
++                MaterialPageRoute(
++                  builder: (_) => PlaylistScreen(
++                    title: pl.title,
++                    subtitle: pl.subtitle,
++                    tracks: const [],
++                    playlistId: pl.id,
++                  ),
++                ),
++              );
++            },
++          )),
++        ],
++
++        // Combined "all" view: Artists Carousel
++        if (_selectedFilter == 'all' && _artists.isNotEmpty) ...[
+           const Padding(
+             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+             child: Text(
+@@ -405,8 +505,8 @@ class _SearchScreenState extends State<SearchScreen> {
+           ),
+         ],
+ 
+-        // Albums Carousel if any
+-        if (_albums.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'albums')) ...[
++        // Combined "all" view: Albums Carousel
++        if (_selectedFilter == 'all' && _albums.isNotEmpty) ...[
+           const Padding(
+             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+             child: Text(
+@@ -479,8 +579,8 @@ class _SearchScreenState extends State<SearchScreen> {
+           ),
+         ],
+ 
+-        // Playlists Carousel if any
+-        if (_playlists.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'playlists')) ...[
++        // Combined "all" view: Playlists Carousel
++        if (_selectedFilter == 'all' && _playlists.isNotEmpty) ...[
+           const Padding(
+             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+             child: Text(
+@@ -560,13 +660,15 @@ class _SearchScreenState extends State<SearchScreen> {
+           ),
+         ],
+ 
+-        // Tracks List
++        // Tracks List (for 'all' or 'tracks')
+         if (_tracks.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'tracks')) ...[
+-          const Padding(
+-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
++          Padding(
++            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+             child: Text(
+-              'Brani',
+-              style: TextStyle(
++              _selectedFilter == 'tracks'
++                  ? '${_tracks.length} ${_tracks.length == 1 ? "Brano trovato" : "Brani trovati"}'
++                  : 'Brani',
++              style: const TextStyle(
+                 color: AppTheme.textPrimary,
+                 fontSize: 18,
+                 fontWeight: FontWeight.bold,
+diff --git a/lib/ui/widgets/glass_container.dart b/lib/ui/widgets/glass_container.dart
+index 3c6a9e5..5a8ba16 100644
+--- a/lib/ui/widgets/glass_container.dart
++++ b/lib/ui/widgets/glass_container.dart
+@@ -30,45 +30,35 @@ class GlassContainer extends StatelessWidget {
+ 
+   @override
+   Widget build(BuildContext context) {
+-    final isApple = Theme.of(context).platform == TargetPlatform.iOS || Theme.of(context).platform == TargetPlatform.macOS;
+-    final enableBlur = isApple && blur > 0;
+-
+-    Widget container = Container(
+-      width: width,
+-      height: height,
+-      padding: padding,
+-      decoration: BoxDecoration(
+-        color: color ?? (enableBlur ? AppTheme.card.withOpacity(0.60) : AppTheme.surfaceContainerHigh.withOpacity(0.85)),
+-        borderRadius: BorderRadius.circular(borderRadius),
+-        border: border ??
+-            Border.all(
+-              color: Colors.white.withOpacity(enableBlur ? 0.14 : 0.08),
+-              width: enableBlur ? 0.8 : 1.0,
+-            ),
+-        boxShadow: [
+-          BoxShadow(
+-            color: Colors.black.withOpacity(enableBlur ? 0.20 : 0.18),
+-            blurRadius: enableBlur ? 20 : 10,
+-            offset: Offset(0, enableBlur ? 8 : 4),
++    Widget content = ClipRRect(
++      borderRadius: BorderRadius.circular(borderRadius),
++      child: BackdropFilter(
++        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
++        child: Container(
++          width: width,
++          height: height,
++          padding: padding,
++          decoration: BoxDecoration(
++            color: color ?? AppTheme.card.withOpacity(0.60),
++            borderRadius: BorderRadius.circular(borderRadius),
++            border: border ??
++                Border.all(
++                  color: Colors.white.withOpacity(0.14),
++                  width: 0.8,
++                ),
++            boxShadow: [
++              BoxShadow(
++                color: Colors.black.withOpacity(0.20),
++                blurRadius: 20,
++                offset: const Offset(0, 8),
++              ),
++            ],
+           ),
+-        ],
++          child: child,
++        ),
+       ),
+-      child: child,
+     );
+ 
+-    Widget content = enableBlur
+-        ? ClipRRect(
+-            borderRadius: BorderRadius.circular(borderRadius),
+-            child: BackdropFilter(
+-              filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+-              child: container,
+-            ),
+-          )
+-        : ClipRRect(
+-            borderRadius: BorderRadius.circular(borderRadius),
+-            child: container,
+-          );
+-
+     if (margin != null) {
+       content = Padding(padding: margin!, child: content);
+     }
