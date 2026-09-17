@@ -31,27 +31,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Album> _albums = [];
   List<Playlist> _playlists = [];
 
-  final List<String> _trendingSearches = [
-    'Sfera Ebbasta',
-    'Geolier',
-    'Annalisa',
-    'Lazza',
-    'Travis Scott',
-    'The Weeknd',
-    'Tedua',
-    'Rose Villain',
-    'Marracash',
-    'Capo Plaza',
-  ];
 
-  final List<Map<String, dynamic>> _genreCards = [
-    {'title': 'Trap Italia', 'color': Color(0xFFFA2D48), 'icon': Icons.whatshot_rounded},
-    {'title': 'Pop Hits', 'color': Color(0xFFFF6B6B), 'icon': Icons.star_rounded},
-    {'title': 'Hip Hop & Rap', 'color': Color(0xFF7928CA), 'icon': Icons.mic_rounded},
-    {'title': 'Dance & EDM', 'color': Color(0xFF0070F3), 'icon': Icons.graphic_eq_rounded},
-    {'title': 'Chill & Relax', 'color': Color(0xFF10B981), 'icon': Icons.spa_rounded},
-    {'title': 'Rock & Indie', 'color': Color(0xFFF59E0B), 'icon': Icons.album_rounded},
-  ];
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
@@ -174,7 +154,7 @@ class _SearchScreenState extends State<SearchScreen> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryAccent))
                   : _searchCtrl.text.isEmpty
-                      ? _buildSearchDiscovery()
+                      ? _buildEmptyPrompt()
                       : _buildSearchResults(),
             ),
           ],
@@ -213,123 +193,62 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildSearchDiscovery() {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 180),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '🔥 Di tendenza',
-            style: AppTheme.syne(
-              color: AppTheme.textPrimary,
-              fontSize: 15.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
+  Widget _buildEmptyPrompt() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 120),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.surfaceContainerHigh.withOpacity(0.6),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+              ),
+              child: const Icon(
+                Icons.search_rounded,
+                size: 34,
+                color: AppTheme.textSecondary,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _trendingSearches.map((s) {
-              return ActionChip(
-                label: Text(s),
-                backgroundColor: AppTheme.surfaceContainerHigh,
-                labelStyle: AppTheme.inter(
-                  color: AppTheme.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                side: BorderSide(color: Colors.white.withOpacity(0.06)),
-                onPressed: () {
-                  _searchCtrl.text = s;
-                  _onSearchChanged(s);
-                },
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 28),
-          Text(
-            'Esplora per Genere',
-            style: AppTheme.syne(
-              color: AppTheme.textPrimary,
-              fontSize: 15.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
+            const SizedBox(height: 18),
+            Text(
+              'Cerca su Preluded',
+              style: AppTheme.syne(
+                color: AppTheme.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _genreCards.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 2.2,
+            const SizedBox(height: 6),
+            Text(
+              'Digita un brano, artista, album o playlist',
+              style: AppTheme.inter(
+                color: AppTheme.textMuted,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-            itemBuilder: (context, i) {
-              final card = _genreCards[i];
-              final color = card['color'] as Color;
-              return Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(16),
-                child: InkWell(
-                  onTap: () {
-                    _searchCtrl.text = card['title'] as String;
-                    _onSearchChanged(_searchCtrl.text);
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [color.withOpacity(0.85), color.withOpacity(0.45)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: color.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            card['title'] as String,
-                            style: AppTheme.syne(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        Icon(card['icon'] as IconData, color: Colors.white.withOpacity(0.9), size: 28),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildSearchResults() {
-    if (_tracks.isEmpty && _artists.isEmpty && _albums.isEmpty && _playlists.isEmpty) {
+    final hasResults = switch (_selectedFilter) {
+      'tracks' => _tracks.isNotEmpty,
+      'artists' => _artists.isNotEmpty,
+      'albums' => _albums.isNotEmpty,
+      'playlists' => _playlists.isNotEmpty,
+      _ => _tracks.isNotEmpty || _artists.isNotEmpty || _albums.isNotEmpty || _playlists.isNotEmpty,
+    };
+
+    if (!hasResults) {
       return const Center(
         child: Text('Nessun risultato trovato', style: TextStyle(color: AppTheme.textSecondary, fontSize: 16)),
       );
@@ -339,8 +258,189 @@ class _SearchScreenState extends State<SearchScreen> {
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 180),
       children: [
-        // Artists Carousel if any
-        if (_artists.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'artists')) ...[
+        // Dedicated Artists View
+        if (_selectedFilter == 'artists') ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Text(
+              '${_artists.length} ${_artists.length == 1 ? "Artista trovato" : "Artisti trovati"}',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ..._artists.map((artist) => ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: CircleAvatar(
+              radius: 28,
+              backgroundColor: AppTheme.surfaceContainerHighest,
+              backgroundImage: artist.picture.isNotEmpty ? NetworkImage(artist.picture) : null,
+              child: artist.picture.isEmpty
+                  ? const Icon(Icons.person_rounded, color: AppTheme.textSecondary, size: 28)
+                  : null,
+            ),
+            title: Text(
+              artist.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: const Text(
+              'Artista',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ArtistScreen(artist: artist)),
+              );
+            },
+          )),
+        ],
+
+        // Dedicated Albums View
+        if (_selectedFilter == 'albums') ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Text(
+              '${_albums.length} ${_albums.length == 1 ? "Album trovato" : "Album trovati"}',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ..._albums.map((album) => ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: CachedNetworkImage(
+                imageUrl: album.coverUrl,
+                width: 52,
+                height: 52,
+                fit: BoxFit.cover,
+                memCacheWidth: 104,
+                memCacheHeight: 104,
+                placeholder: (c, u) => Container(width: 52, height: 52, color: AppTheme.surfaceContainerHighest),
+                errorWidget: (c, u, e) => Container(
+                  width: 52,
+                  height: 52,
+                  color: AppTheme.surfaceContainerHighest,
+                  child: const Icon(Icons.album_rounded, color: AppTheme.textSecondary),
+                ),
+              ),
+            ),
+            title: Text(
+              album.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              album.artistName.isNotEmpty ? 'Album • ${album.artistName}' : 'Album',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => AlbumScreen(album: album)),
+              );
+            },
+          )),
+        ],
+
+        // Dedicated Playlists View
+        if (_selectedFilter == 'playlists') ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Text(
+              '${_playlists.length} ${_playlists.length == 1 ? "Playlist trovata" : "Playlist trovate"}',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ..._playlists.map((pl) => ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: CachedNetworkImage(
+                imageUrl: pl.coverUrl,
+                width: 52,
+                height: 52,
+                fit: BoxFit.cover,
+                memCacheWidth: 104,
+                memCacheHeight: 104,
+                placeholder: (c, u) => Container(width: 52, height: 52, color: AppTheme.surfaceContainerHighest),
+                errorWidget: (c, u, e) => Container(
+                  width: 52,
+                  height: 52,
+                  color: AppTheme.surfaceContainerHighest,
+                  child: const Icon(Icons.playlist_play_rounded, color: AppTheme.textSecondary),
+                ),
+              ),
+            ),
+            title: Text(
+              pl.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              pl.subtitle.isNotEmpty ? pl.subtitle : 'Playlist',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PlaylistScreen(
+                    title: pl.title,
+                    subtitle: pl.subtitle,
+                    tracks: const [],
+                    playlistId: pl.id,
+                  ),
+                ),
+              );
+            },
+          )),
+        ],
+
+        // Combined "all" view: Artists Carousel
+        if (_selectedFilter == 'all' && _artists.isNotEmpty) ...[
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Text(
@@ -405,8 +505,8 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ],
 
-        // Albums Carousel if any
-        if (_albums.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'albums')) ...[
+        // Combined "all" view: Albums Carousel
+        if (_selectedFilter == 'all' && _albums.isNotEmpty) ...[
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Text(
@@ -479,8 +579,8 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ],
 
-        // Playlists Carousel if any
-        if (_playlists.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'playlists')) ...[
+        // Combined "all" view: Playlists Carousel
+        if (_selectedFilter == 'all' && _playlists.isNotEmpty) ...[
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Text(
@@ -560,13 +660,15 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ],
 
-        // Tracks List
+        // Tracks List (for 'all' or 'tracks')
         if (_tracks.isNotEmpty && (_selectedFilter == 'all' || _selectedFilter == 'tracks')) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Text(
-              'Brani',
-              style: TextStyle(
+              _selectedFilter == 'tracks'
+                  ? '${_tracks.length} ${_tracks.length == 1 ? "Brano trovato" : "Brani trovati"}'
+                  : 'Brani',
+              style: const TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,

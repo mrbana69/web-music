@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/library_state.dart';
@@ -420,7 +421,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              const Text('Versione v${AppConfig.appVersion} Android Native', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              Text(
+                                'Versione v${AppConfig.appVersion} ${Platform.isWindows ? "Windows Desktop" : (Platform.isAndroid ? "Android Native" : (Platform.isIOS ? "iOS Native" : (Platform.isMacOS ? "macOS Desktop" : (Platform.isLinux ? "Linux Desktop" : "Web"))))}',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 6),

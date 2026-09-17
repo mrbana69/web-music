@@ -5,6 +5,7 @@ import '../../providers/player_state.dart';
 import '../../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/track_tile.dart';
+import '../widgets/mini_player.dart';
 
 class PlaylistScreen extends StatefulWidget {
   final String title;
@@ -213,6 +214,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
         ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 880),
+            child: const MiniPlayer(),
+          ),
+        ),
       ),
     );
   }

@@ -20,18 +20,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Track> _quickPicks = [];
   Map<String, List<Track>> _sections = {};
   bool _isLoading = true;
-  String _activeMood = '';
   String? _lastYtmCookie;
   bool? _lastIsGoogleLoggedIn;
-
-  final List<String> _moodFilters = const [
-    'Relax',
-    'Energia',
-    'Allenamento',
-    'Focus',
-    'Viaggio',
-    'Party',
-  ];
 
   @override
   void initState() {
@@ -42,6 +32,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final api = context.read<ApiService>();
+    final library = context.read<LibraryState>();
+    library.repairHistoryArtists(api);
     try {
       final qp = await api.fetchQuickPicks();
       final sec = await api.fetchHomeSections();
@@ -139,39 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
 
-            // 2. Material 3 Mood / Activity Filter Pills
-            SliverToBoxAdapter(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: _moodFilters.map((mood) {
-                    final isSelected = _activeMood == mood;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(mood),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setState(() => _activeMood = selected ? mood : '');
-                        },
-                        backgroundColor: AppTheme.surfaceContainerLow,
-                        selectedColor: AppTheme.primaryContainer,
-                        labelStyle: AppTheme.inter(
-                          color: isSelected ? Colors.white : AppTheme.textSecondary,
-                          fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                        ),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        side: BorderSide(
-                          color: isSelected ? AppTheme.primaryAccentLight.withOpacity(0.4) : AppTheme.border,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
+
 
             if (_isLoading)
               const SliverFillRemaining(
@@ -230,30 +190,34 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // 5. Dynamic YouTube Music Shelves
+              // 5. Dynamic YouTube Music Shelves (filtering out duplicate Scelte rapide)
               for (final entry in _sections.entries) ...[
-                SliverToBoxAdapter(
-                  child: SectionHeader(
-                    title: entry.key,
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 215,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: entry.value.length,
-                      itemBuilder: (context, i) {
-                        final track = entry.value[i];
-                        return QuickPickCard(
-                          track: track,
-                          onTap: () => player.playTrack(track, newQueue: entry.value, index: i),
-                        );
-                      },
+                if (!entry.key.toLowerCase().contains('scelt') &&
+                    !entry.key.toLowerCase().contains('quick') &&
+                    !entry.key.toLowerCase().contains('picks')) ...[
+                  SliverToBoxAdapter(
+                    child: SectionHeader(
+                      title: entry.key,
                     ),
                   ),
-                ),
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 215,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: entry.value.length,
+                        itemBuilder: (context, i) {
+                          final track = entry.value[i];
+                          return QuickPickCard(
+                            track: track,
+                            onTap: () => player.playTrack(track, newQueue: entry.value, index: i),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
               ],
 
               // Bottom padding for miniplayer & navbar

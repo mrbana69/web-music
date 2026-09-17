@@ -12,14 +12,21 @@ import 'lyrics_view.dart';
 import 'queue_view.dart';
 
 class FullPlayerScreen extends StatefulWidget {
-  const FullPlayerScreen({super.key});
+  final int initialTab;
+  const FullPlayerScreen({super.key, this.initialTab = 0});
 
   @override
   State<FullPlayerScreen> createState() => _FullPlayerScreenState();
 }
 
 class _FullPlayerScreenState extends State<FullPlayerScreen> {
-  int _activeSheetIndex = 0; // 0 = Player, 1 = Lyrics, 2 = Queue
+  late int _activeSheetIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeSheetIndex = widget.initialTab;
+  }
 
   String _formatDuration(Duration d) {
     final min = d.inMinutes;
@@ -129,11 +136,16 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
 
                   // --- Body: Player, Lyrics, or Queue ---
                   Expanded(
-                    child: _activeSheetIndex == 1
-                        ? const LyricsView()
-                        : (_activeSheetIndex == 2
-                            ? const QueueView()
-                            : _buildPlayerBody(context, player, track, isLiked, maxSeconds)),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 640),
+                        child: _activeSheetIndex == 1
+                            ? const LyricsView()
+                            : (_activeSheetIndex == 2
+                                ? const QueueView()
+                                : _buildPlayerBody(context, player, track, isLiked, maxSeconds)),
+                      ),
+                    ),
                   ),
 
                   // --- Bottom Centered Action Icons (Lyrics, Queue, Share) ---
@@ -201,9 +213,12 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
         return SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
               SizedBox(height: spacingTop),
 
               // 1. Large Squircle 32px Artwork with Dynamic Glow
@@ -365,51 +380,57 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                       color: player.isShuffle ? AppTheme.primaryAccent : Colors.white.withOpacity(0.6),
                       size: isCompact ? 22 : 24,
                     ),
+                    mouseCursor: SystemMouseCursors.click,
+                    tooltip: 'Riproduzione casuale',
                     onPressed: player.toggleShuffle,
                   ),
 
                   // Previous
                   IconButton(
                     icon: Icon(Icons.skip_previous_rounded, color: Colors.white, size: isCompact ? 36 : 42),
+                    mouseCursor: SystemMouseCursors.click,
+                    tooltip: 'Brano precedente',
                     onPressed: player.previousTrack,
                   ),
 
                   // Play / Pause Large FAB
-                  GestureDetector(
-                    onTap: player.togglePlay,
-                    child: Container(
-                      width: isCompact ? 64 : 72,
-                      height: isCompact ? 64 : 72,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppTheme.primaryAccent,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.primaryAccent.withOpacity(0.45),
-                            blurRadius: 18,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: player.isBuffering
-                          ? const Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                  Material(
+                    color: AppTheme.primaryAccent,
+                    shape: const CircleBorder(),
+                    elevation: 6,
+                    shadowColor: AppTheme.primaryAccent.withOpacity(0.45),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      mouseCursor: SystemMouseCursors.click,
+                      onTap: player.togglePlay,
+                      splashColor: Colors.white.withOpacity(0.25),
+                      highlightColor: Colors.white.withOpacity(0.12),
+                      child: SizedBox(
+                        width: isCompact ? 64 : 72,
+                        height: isCompact ? 64 : 72,
+                        child: player.isBuffering
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 26,
+                                  height: 26,
+                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                                ),
+                              )
+                            : Icon(
+                                player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: isCompact ? 36 : 40,
                               ),
-                            )
-                          : Icon(
-                              player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: isCompact ? 36 : 40,
-                            ),
+                      ),
                     ),
                   ),
 
                   // Next
                   IconButton(
                     icon: Icon(Icons.skip_next_rounded, color: Colors.white, size: isCompact ? 36 : 42),
+                    mouseCursor: SystemMouseCursors.click,
+                    tooltip: 'Brano successivo',
                     onPressed: player.nextTrack,
                   ),
 
@@ -422,6 +443,8 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
                       color: player.loopMode != LoopMode.off ? AppTheme.primaryAccent : Colors.white.withOpacity(0.6),
                       size: isCompact ? 22 : 24,
                     ),
+                    mouseCursor: SystemMouseCursors.click,
+                    tooltip: 'Ripetizione',
                     onPressed: player.cycleRepeat,
                   ),
                 ],
@@ -429,9 +452,11 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
               SizedBox(height: spacingBottom),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
+  },
+);
   }
 
   Widget _buildBottomIconButton({

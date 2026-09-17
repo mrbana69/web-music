@@ -3,6 +3,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/track.dart';
+import '../config/app_config.dart';
 import 'api_service.dart';
 import 'storage_service.dart';
 import 'local_stream_proxy.dart';
@@ -53,40 +54,45 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
       ? _tracksQueue[_currentIndex]
       : null;
 
+  void _broadcastState() {
+    final playing = _player.playing;
+    final procState = const {
+      ProcessingState.idle: AudioProcessingState.idle,
+      ProcessingState.loading: AudioProcessingState.loading,
+      ProcessingState.buffering: AudioProcessingState.buffering,
+      ProcessingState.ready: AudioProcessingState.ready,
+      ProcessingState.completed: AudioProcessingState.completed,
+    }[_player.processingState] ?? AudioProcessingState.idle;
+
+    playbackState.add(playbackState.value.copyWith(
+      controls: [
+        MediaControl.skipToPrevious,
+        if (playing) MediaControl.pause else MediaControl.play,
+        MediaControl.skipToNext,
+        MediaControl.stop,
+      ],
+      systemActions: const {
+        MediaAction.seek,
+        MediaAction.seekForward,
+        MediaAction.seekBackward,
+      },
+      androidCompactActionIndices: const [0, 1, 2],
+      processingState: procState,
+      playing: playing,
+      updatePosition: _player.position,
+      bufferedPosition: _player.bufferedPosition,
+      speed: _player.speed,
+      queueIndex: _currentIndex,
+    ));
+  }
+
   void _initPlayerListeners() {
     // 1. Playback Events
-    _player.playbackEventStream.listen((PlaybackEvent event) {
-      final playing = _player.playing;
-      playbackState.add(playbackState.value.copyWith(
-        controls: [
-          MediaControl.skipToPrevious,
-          if (playing) MediaControl.pause else MediaControl.play,
-          MediaControl.skipToNext,
-          MediaControl.stop,
-        ],
-        systemActions: const {
-          MediaAction.seek,
-          MediaAction.seekForward,
-          MediaAction.seekBackward,
-        },
-        androidCompactActionIndices: const [0, 1, 2],
-        processingState: const {
-          ProcessingState.idle: AudioProcessingState.idle,
-          ProcessingState.loading: AudioProcessingState.loading,
-          ProcessingState.buffering: AudioProcessingState.buffering,
-          ProcessingState.ready: AudioProcessingState.ready,
-          ProcessingState.completed: AudioProcessingState.completed,
-        }[_player.processingState]!,
-        playing: playing,
-        updatePosition: _player.position,
-        bufferedPosition: _player.bufferedPosition,
-        speed: _player.speed,
-        queueIndex: _currentIndex,
-      ));
-    });
+    _player.playbackEventStream.listen((_) => _broadcastState());
 
-    // 2. Track Completion -> Auto Next
+    // 2. Track Completion & State Changes (emits on playing and processingState change)
     _player.playerStateStream.listen((state) {
+      _broadcastState();
       if (state.processingState == ProcessingState.completed) {
         if (_loopMode == LoopMode.one) {
           _player.seek(Duration.zero);
@@ -97,7 +103,10 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
       }
     });
 
-    // 3. Duration Stream
+    // 3. Playing Stream
+    _player.playingStream.listen((_) => _broadcastState());
+
+    // 4. Duration Stream
     _player.durationStream.listen((dur) {
       final item = mediaItem.value;
       if (item != null && dur != null) {
@@ -106,16 +115,40 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
     });
   }
 
-  Future<void> loadAndPlayTrack(Track track, {List<Track>? newQueue, int index = 0}) async {
+  Future<void> loadAndPlayTrack(Track track, {List<Track>? newQueue, int? index}) async {
     if (newQueue != null && newQueue.isNotEmpty) {
       _tracksQueue = List.from(newQueue);
-      _currentIndex = index.clamp(0, _tracksQueue.length - 1);
+      _currentIndex = (index ?? 0).clamp(0, _tracksQueue.length - 1);
+    } else if (index != null && index >= 0 && index < _tracksQueue.length) {
+      _currentIndex = index;
     } else {
-      _tracksQueue = [track];
-      _currentIndex = 0;
+      final foundIdx = _tracksQueue.indexWhere((t) => t.id == track.id);
+      if (foundIdx != -1) {
+        _currentIndex = foundIdx;
+      } else if (_tracksQueue.isEmpty) {
+        _tracksQueue = [track];
+        _currentIndex = 0;
+      }
     }
 
-    final targetTrack = _tracksQueue[_currentIndex];
+    var targetTrack = _tracksQueue[_currentIndex];
+    final vId = targetTrack.videoId.isNotEmpty ? targetTrack.videoId : targetTrack.id;
+
+    // Auto-resolve artist name if missing or generic
+    final isGeneric = targetTrack.artistName.isEmpty ||
+        targetTrack.artistName.toLowerCase() == 'unknown artist' ||
+        targetTrack.artistName.toLowerCase() == 'artista sconosciuto' ||
+        targetTrack.artistName.toLowerCase() == 'artista';
+    if (isGeneric && vId.isNotEmpty) {
+      try {
+        final vid = await _api.yt.videos.get(vId).timeout(const Duration(seconds: 3));
+        if (vid.author.isNotEmpty) {
+          targetTrack = targetTrack.copyWith(artistName: AppConfig.sanitizeArtist(vid.author));
+          _tracksQueue[_currentIndex] = targetTrack;
+        }
+      } catch (_) {}
+    }
+
     await _storage.addToHistory(targetTrack);
 
     // Update MediaItem for iOS Lock Screen & Android Notification
@@ -137,7 +170,6 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
       artUri: Uri.parse(t.coverUrl),
     )).toList());
 
-    final vId = targetTrack.videoId.isNotEmpty ? targetTrack.videoId : targetTrack.id;
     try {
       if (!_localProxy.isRunning) {
         await _localProxy.start();
@@ -197,10 +229,16 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    await _player.play();
+    _broadcastState();
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() async {
+    await _player.pause();
+    _broadcastState();
+  }
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
@@ -210,10 +248,10 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
     if (_tracksQueue.isEmpty) return;
     if (_currentIndex < _tracksQueue.length - 1) {
       _currentIndex++;
-      await loadAndPlayTrack(_tracksQueue[_currentIndex]);
+      await loadAndPlayTrack(_tracksQueue[_currentIndex], index: _currentIndex);
     } else if (_loopMode == LoopMode.all) {
       _currentIndex = 0;
-      await loadAndPlayTrack(_tracksQueue[_currentIndex]);
+      await loadAndPlayTrack(_tracksQueue[_currentIndex], index: _currentIndex);
     }
   }
 
@@ -225,7 +263,7 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
     }
     if (_currentIndex > 0) {
       _currentIndex--;
-      await loadAndPlayTrack(_tracksQueue[_currentIndex]);
+      await loadAndPlayTrack(_tracksQueue[_currentIndex], index: _currentIndex);
     } else {
       await _player.seek(Duration.zero);
     }
@@ -234,6 +272,7 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> stop() async {
     await _player.stop();
+    _broadcastState();
     return super.stop();
   }
 

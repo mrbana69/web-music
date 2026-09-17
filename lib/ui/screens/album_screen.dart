@@ -1,11 +1,19 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../models/album.dart';
+import '../../models/artist.dart';
+import '../../models/track.dart';
 import '../../providers/player_state.dart';
+import '../../providers/library_state.dart';
 import '../../services/api_service.dart';
+import '../../config/app_config.dart';
 import '../theme/app_theme.dart';
-import '../widgets/track_tile.dart';
+import '../widgets/mini_player.dart';
+import '../widgets/stitch_track_row.dart';
+import 'artist_screen.dart';
 
 class AlbumScreen extends StatefulWidget {
   final Album album;
@@ -35,7 +43,13 @@ class _AlbumScreenState extends State<AlbumScreen> {
       final fullAlbum = await api.fetchAlbum(_album.id);
       if (fullAlbum != null && mounted) {
         setState(() {
-          _album = fullAlbum;
+          _album = fullAlbum.copyWith(
+            coverUrl: fullAlbum.coverUrl.isNotEmpty ? fullAlbum.coverUrl : _album.coverUrl,
+            artistName: (fullAlbum.artistName.isNotEmpty && fullAlbum.artistName != 'Artista')
+                ? fullAlbum.artistName
+                : _album.artistName,
+            artistId: fullAlbum.artistId.isNotEmpty ? fullAlbum.artistId : _album.artistId,
+          );
           _isLoading = false;
         });
         return;
@@ -44,123 +58,596 @@ class _AlbumScreenState extends State<AlbumScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  String _formatTotalDuration() {
+    if (_album.tracks.isEmpty) return '';
+    final totalSeconds = _album.tracks.fold<int>(0, (sum, t) => sum + (t.durationMs ~/ 1000));
+    final minutes = totalSeconds ~/ 60;
+    if (minutes >= 60) {
+      final hours = minutes ~/ 60;
+      final remMin = minutes % 60;
+      return '$hours h $remMin min';
+    }
+    return '$minutes min';
+  }
+
+  void _shareAlbum() {
+    final shareUrl = AppConfig.getShareUrl(_album.id);
+    Share.share('Ascolta l\'album ${_album.title} di ${_album.artistName} su Preluded: $shareUrl');
+  }
+
+  void _openArtistPage() {
+    if (_album.artistName.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ArtistScreen(
+          artist: Artist(
+            id: _album.artistId,
+            name: _album.artistName,
+            picture: _album.coverUrl,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final player = context.read<PlayerState>();
+    final player = context.watch<PlayerState>();
+    final library = context.watch<LibraryState>();
+    final isSaved = library.isAlbumSaved(_album.id);
+    final width = MediaQuery.of(context).size.width;
+    final isDesktop = width > 800;
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: const Color(0xFF131317),
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
+          // Frosted App Bar
           SliverAppBar(
-            expandedHeight: 280,
+            backgroundColor: const Color(0xFF131317).withOpacity(0.85),
             pinned: true,
-            backgroundColor: AppTheme.surfaceContainerLowest,
+            elevation: 0,
             leading: IconButton(
               icon: Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.4),
+                  color: Colors.black.withOpacity(0.45),
                   shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
                 ),
-                child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 17),
               ),
               onPressed: () => Navigator.pop(context),
             ),
-            flexibleSpace: FlexibleSpaceBar(
-              title: Text(
-                _album.title,
-                style: AppTheme.syne(fontWeight: FontWeight.w700, fontSize: 17, letterSpacing: -0.3),
-              ),
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: _album.coverUrl,
-                    fit: BoxFit.cover,
-                    memCacheWidth: 400,
-                    memCacheHeight: 400,
-                    errorWidget: (c, u, e) => Container(
-                      color: AppTheme.surfaceContainerHighest,
-                      child: const Icon(Icons.album_rounded, size: 64, color: AppTheme.textSecondary),
-                    ),
-                  ),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            title: Text(
+              _album.title,
+              style: AppTheme.syne(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
             ),
+            actions: [
+              IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.45),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                  ),
+                  child: const Icon(Icons.share_rounded, color: Colors.white, size: 17),
+                ),
+                tooltip: 'Condividi Album',
+                onPressed: _shareAlbum,
+              ),
+              const SizedBox(width: 8),
+            ],
           ),
+
+          // Immersive Ambient Hero Section
+          SliverToBoxAdapter(
+            child: _buildImmersiveHero(context, isDesktop, isSaved, library, player),
+          ),
+
+          // Tracks Header
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: EdgeInsets.fromLTRB(isDesktop ? 28 : 16, 20, isDesktop ? 28 : 16, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    _album.artistName,
-                    style: AppTheme.syne(color: AppTheme.primaryAccent, fontSize: 15, fontWeight: FontWeight.w700),
-                  ),
-                  if (_album.year.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text('Anno: ${_album.year}', style: AppTheme.inter(color: AppTheme.textMuted, fontSize: 13)),
-                  ],
-                  if (_album.tracks.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppTheme.primaryAccent,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                            ),
-                            icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-                            label: Text('Riproduci Album', style: AppTheme.syne(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.5)),
-                            onPressed: () => player.playTrack(_album.tracks.first, newQueue: _album.tracks, index: 0),
+                  Row(
+                    children: [
+                      Text(
+                        'Tracce',
+                        style: AppTheme.syne(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFA2D48).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFA2D48).withOpacity(0.3)),
+                        ),
+                        child: Text(
+                          '${_album.tracks.length}',
+                          style: AppTheme.syne(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFFFF525E),
                           ),
                         ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  Text(
-                    'Tracce',
-                    style: AppTheme.syne(fontSize: 16.5, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3),
+                      ),
+                    ],
                   ),
+                  if (_album.tracks.isNotEmpty)
+                    Text(
+                      _formatTotalDuration(),
+                      style: AppTheme.inter(color: Colors.white38, fontSize: 12.5, fontWeight: FontWeight.w500),
+                    ),
                 ],
               ),
             ),
           ),
+
+          // Tracks List
           if (_isLoading)
-            const SliverFillRemaining(
-              child: Center(
-                child: CircularProgressIndicator(color: AppTheme.primaryAccent),
-              ),
+            const SliverToBoxAdapter(
+              child: Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: Color(0xFFFA2D48)))),
             )
           else if (_album.tracks.isEmpty)
-            const SliverFillRemaining(
-              child: Center(
-                child: Text('Nessun brano disponibile per questo album', style: TextStyle(color: AppTheme.textSecondary)),
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                margin: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B1B1F),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Center(
+                  child: Text(
+                    'Nessun brano disponibile per questo album',
+                    style: AppTheme.inter(color: Colors.white60, fontSize: 13),
+                  ),
+                ),
               ),
             )
           else
             SliverList(
               delegate: SliverChildBuilderDelegate(
-                (context, i) => TrackTile(track: _album.tracks[i], queue: _album.tracks, index: i, showIndex: true),
+                (context, i) {
+                  final track = _album.tracks[i];
+                  return Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isDesktop ? 14 : 0),
+                    child: StitchTrackRow(
+                      track: track,
+                      queue: _album.tracks,
+                      index: i,
+                      customSubtitle: track.artistName.isNotEmpty ? track.artistName : _album.artistName,
+                    ),
+                  );
+                },
                 childCount: _album.tracks.length,
               ),
             ),
+
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 880),
+            child: const MiniPlayer(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImmersiveHero(
+    BuildContext context,
+    bool isDesktop,
+    bool isSaved,
+    LibraryState library,
+    PlayerState player,
+  ) {
+    final isSingle = _album.tracks.length <= 2 ||
+        _album.title.toLowerCase().contains('single') ||
+        _album.title.toLowerCase().contains('singolo');
+
+    return Container(
+      margin: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 28 : 14,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E0E11),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          // Ambient Radial Glow Halos
+          Positioned(
+            top: -50,
+            left: -30,
+            child: Container(
+              width: 320,
+              height: 320,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFFFA2D48).withOpacity(0.28),
+                    const Color(0xFFFE6B00).withOpacity(0.12),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Blurred Scrim Background
+          if (_album.coverUrl.isNotEmpty)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.16,
+                child: CachedNetworkImage(
+                  imageUrl: _album.coverUrl,
+                  fit: BoxFit.cover,
+                  memCacheWidth: 600,
+                  memCacheHeight: 600,
+                ),
+              ),
+            ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF0E0E11).withOpacity(0.65),
+                    const Color(0xFF0E0E11).withOpacity(0.95),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+          ),
+
+          // Hero Content
+          Padding(
+            padding: EdgeInsets.all(isDesktop ? 28.0 : 18.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Badges Row
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFA2D48).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFFA2D48).withOpacity(0.35)),
+                      ),
+                      child: Text(
+                        isSingle ? 'SINGOLO' : 'ALBUM',
+                        style: AppTheme.syne(
+                          color: const Color(0xFFFF525E),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ),
+                    if (_album.year.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.07),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        ),
+                        child: Text(
+                          _album.year,
+                          style: AppTheme.inter(
+                            color: Colors.white70,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF353438).withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.06)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.graphic_eq_rounded, color: Color(0xFFFFB693), size: 14),
+                          const SizedBox(width: 5),
+                          Text(
+                            'MASTER 24-BIT / 96KHZ DOLBY ATMOS',
+                            style: AppTheme.inter(
+                              color: const Color(0xFFFFB693),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Main Identity: Cover + Title & Artist
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // Album Cover with Glow
+                    Container(
+                      width: isDesktop ? 160 : 110,
+                      height: isDesktop ? 160 : 110,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFA2D48).withOpacity(0.35),
+                            blurRadius: 24,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: CachedNetworkImage(
+                          imageUrl: _album.coverUrl,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 360,
+                          memCacheHeight: 360,
+                          placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
+                          errorWidget: (c, u, e) => Container(
+                            color: AppTheme.surfaceContainerHighest,
+                            child: const Icon(Icons.album_rounded, color: Colors.white38, size: 48),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 18),
+
+                    // Title & Artist Info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _album.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.syne(
+                              color: Colors.white,
+                              fontSize: isDesktop ? 34 : 22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.8,
+                              height: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+
+                          // Clickable Artist Pill Chip
+                          if (_album.artistName.isNotEmpty)
+                            InkWell(
+                              onTap: _openArtistPage,
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 9,
+                                      backgroundColor: AppTheme.surfaceContainerHighest,
+                                      backgroundImage: _album.coverUrl.isNotEmpty ? NetworkImage(_album.coverUrl) : null,
+                                      child: _album.coverUrl.isEmpty ? const Icon(Icons.person, size: 10) : null,
+                                    ),
+                                    const SizedBox(width: 7),
+                                    Text(
+                                      _album.artistName,
+                                      style: AppTheme.inter(
+                                        color: Colors.white,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.chevron_right_rounded, color: Colors.white54, size: 16),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+
+                          // Track count & total duration
+                          Text(
+                            '${_album.tracks.length} brani • ${_formatTotalDuration()}',
+                            style: AppTheme.inter(
+                              color: Colors.white54,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+
+                // Action Bar
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // CTA "Riproduci Album"
+                    InkWell(
+                      onTap: () {
+                        if (_album.tracks.isNotEmpty) {
+                          player.playTrack(_album.tracks.first, newQueue: _album.tracks, index: 0);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(30),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFA2D48), Color(0xFFFF525E)],
+                          ),
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFA2D48).withOpacity(0.45),
+                              blurRadius: 18,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
+                            const SizedBox(width: 6),
+                            Text(
+                              'RIPRODUCI ALBUM',
+                              style: AppTheme.syne(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // "Salva in Libreria" Toggle Button
+                    InkWell(
+                      onTap: () => library.toggleSaveAlbum(_album.id),
+                      borderRadius: BorderRadius.circular(30),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: isSaved
+                              ? const Color(0xFF353438)
+                              : Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(
+                            color: isSaved
+                                ? const Color(0xFF34C759).withOpacity(0.4)
+                                : Colors.white.withOpacity(0.12),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isSaved ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                              color: isSaved ? const Color(0xFFFA2D48) : Colors.white,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isSaved ? 'SALVATO' : 'SALVA',
+                              style: AppTheme.syne(
+                                color: isSaved ? const Color(0xFFFF525E) : Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Shuffle Button
+                    InkWell(
+                      onTap: () {
+                        if (_album.tracks.isNotEmpty) {
+                          final shuffled = List<Track>.from(_album.tracks)..shuffle(Random());
+                          player.playTrack(shuffled.first, newQueue: shuffled, index: 0);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(30),
+                      child: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withOpacity(0.12)),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.shuffle_rounded, color: Colors.white, size: 19),
+                        ),
+                      ),
+                    ),
+
+                    // Share Button
+                    InkWell(
+                      onTap: _shareAlbum,
+                      borderRadius: BorderRadius.circular(30),
+                      child: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withOpacity(0.12)),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.share_rounded, color: Colors.white, size: 18),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

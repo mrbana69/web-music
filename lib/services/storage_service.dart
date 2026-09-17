@@ -1,4 +1,5 @@
-﻿import 'dart:convert';
+import 'dart:convert';
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/track.dart';
 import '../models/playlist.dart';
@@ -12,8 +13,11 @@ class StorageService {
   static const _keyCookie = 'preluded_ytm_cookie';
   static const _keyBackendUrl = 'preluded_backend_url';
   static const _keyGoogleUser = 'preluded_google_user';
+  static const _keyFollowedArtists = 'preluded_followed_artists';
+  static const _keySavedAlbums = 'preluded_saved_albums';
 
   final SharedPreferences _prefs;
+  final ValueNotifier<int> historyVersion = ValueNotifier(0);
   StorageService(this._prefs);
 
   static Future<StorageService> init() async {
@@ -190,6 +194,12 @@ class StorageService {
         .toList();
   }
 
+  Future<void> saveHistory(List<Track> list) async {
+    final encoded = list.map((t) => jsonEncode(t.toJson())).toList();
+    await _prefs.setStringList(_keyHistory, encoded);
+    historyVersion.value++;
+  }
+
   Future<void> addToHistory(Track track) async {
     final list = getHistory();
     list.removeWhere((t) => t.id == track.id || t.videoId == track.id);
@@ -197,15 +207,68 @@ class StorageService {
     if (list.length > 100) {
       list.removeRange(100, list.length);
     }
-    final encoded = list.map((t) => jsonEncode(t.toJson())).toList();
-    await _prefs.setStringList(_keyHistory, encoded);
+    await saveHistory(list);
   }
 
   Future<void> clearHistory() async {
     await _prefs.remove(_keyHistory);
+    historyVersion.value++;
   }
 
   Future<void> clearAllCache() async {
     await _prefs.clear();
+    historyVersion.value++;
+  }
+
+  // --- Followed Artists ---
+  List<String> getFollowedArtistIds() {
+    return _prefs.getStringList(_keyFollowedArtists) ?? [];
+  }
+
+  bool isArtistFollowed(String artistId) {
+    if (artistId.isEmpty) return false;
+    final list = getFollowedArtistIds();
+    return list.contains(artistId);
+  }
+
+  Future<bool> toggleFollowArtist(String artistId) async {
+    if (artistId.isEmpty) return false;
+    final list = List<String>.from(getFollowedArtistIds());
+    bool isNowFollowed;
+    if (list.contains(artistId)) {
+      list.remove(artistId);
+      isNowFollowed = false;
+    } else {
+      list.add(artistId);
+      isNowFollowed = true;
+    }
+    await _prefs.setStringList(_keyFollowedArtists, list);
+    return isNowFollowed;
+  }
+
+  // --- Saved Albums ---
+  List<String> getSavedAlbumIds() {
+    return _prefs.getStringList(_keySavedAlbums) ?? [];
+  }
+
+  bool isAlbumSaved(String albumId) {
+    if (albumId.isEmpty) return false;
+    final list = getSavedAlbumIds();
+    return list.contains(albumId);
+  }
+
+  Future<bool> toggleSaveAlbum(String albumId) async {
+    if (albumId.isEmpty) return false;
+    final list = List<String>.from(getSavedAlbumIds());
+    bool isNowSaved;
+    if (list.contains(albumId)) {
+      list.remove(albumId);
+      isNowSaved = false;
+    } else {
+      list.add(albumId);
+      isNowSaved = true;
+    }
+    await _prefs.setStringList(_keySavedAlbums, list);
+    return isNowSaved;
   }
 }
