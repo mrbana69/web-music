@@ -280,3 +280,4 @@ class StitchTrackRow extends StatelessWidget {
     );
   }
 }
+
