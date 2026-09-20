@@ -57,6 +57,8 @@ class AppTheme {
     end: Alignment.bottomRight,
   );
 
+  static bool isTesting = false;
+
   // --- Font Helper Methods (Syne for Headings/Display, Inter for Body/Sub) ---
   static TextStyle syne({
     double fontSize = 14.5,
@@ -64,13 +66,26 @@ class AppTheme {
     Color color = textPrimary,
     double? letterSpacing = -0.3,
     double? height,
+    List<Shadow>? shadows,
   }) {
+    if (isTesting) {
+      return TextStyle(
+        fontFamily: 'Roboto',
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        letterSpacing: letterSpacing,
+        height: height,
+        shadows: shadows,
+      );
+    }
     return GoogleFonts.syne(
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
       letterSpacing: letterSpacing,
       height: height,
+      shadows: shadows,
     );
   }
 
@@ -80,13 +95,26 @@ class AppTheme {
     Color color = textSecondary,
     double? letterSpacing,
     double? height,
+    List<Shadow>? shadows,
   }) {
+    if (isTesting) {
+      return TextStyle(
+        fontFamily: 'Roboto',
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        letterSpacing: letterSpacing,
+        height: height,
+        shadows: shadows,
+      );
+    }
     return GoogleFonts.inter(
       fontSize: fontSize,
       fontWeight: fontWeight,
       color: color,
       letterSpacing: letterSpacing,
       height: height,
+      shadows: shadows,
     );
   }
 

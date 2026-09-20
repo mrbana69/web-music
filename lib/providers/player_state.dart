@@ -29,6 +29,8 @@ class PlayerState extends ChangeNotifier {
   StreamSubscription? _mediaItemSub;
   StreamSubscription? _positionSub;
 
+  String? _lastLoadedTrackId;
+
   PlayerState(this._audioHandler, this._api) {
     _initListeners();
   }
@@ -77,26 +79,38 @@ class PlayerState extends ChangeNotifier {
       }
     });
 
-    // 2. MediaItem (Track Metadata)
+    // 3. MediaItem (Track Metadata)
     _mediaItemSub = _audioHandler.mediaItem.listen((item) {
       if (item != null) {
+        final trackIdChanged = _lastLoadedTrackId != item.id;
+        _lastLoadedTrackId = item.id;
         _duration = item.duration ?? Duration.zero;
         final matching = _audioHandler.currentTrack;
         if (matching != null && matching.id == item.id) {
-          _currentTrack = matching;
+          _currentTrack = matching.copyWith(
+            coverUrl: matching.effectiveCoverUrl,
+            albumName: matching.albumName.isNotEmpty ? matching.albumName : _currentTrack?.albumName,
+            artistName: matching.artistName.isNotEmpty ? matching.artistName : _currentTrack?.artistName,
+          );
         } else {
+          final art = item.artUri?.toString() ?? '';
+          final validArt = art.isNotEmpty && !art.contains('resources.tidal.com')
+              ? art
+              : (_currentTrack?.effectiveCoverUrl ?? 'https://i.ytimg.com/vi/${item.id}/hqdefault.jpg');
           _currentTrack = Track(
             id: item.id,
             videoId: item.id,
             title: item.title,
             artistName: item.artist ?? 'Artist',
             albumName: item.album ?? '',
-            coverUrl: item.artUri?.toString() ?? '',
+            coverUrl: validArt,
             durationMs: item.duration?.inMilliseconds ?? 210000,
           );
         }
         _updateAmbientColor(_currentTrack?.coverUrl);
-        fetchLyricsForCurrentTrack();
+        if (trackIdChanged) {
+          fetchLyricsForCurrentTrack();
+        }
         notifyListeners();
       }
     });
@@ -108,15 +122,18 @@ class PlayerState extends ChangeNotifier {
     });
   }
 
-  Future<void> _updateAmbientColor(String? imageUrl) async {
-    if (imageUrl == null || imageUrl.isEmpty) return;
+  Future<void> _updateAmbientColor([String? explicitCover]) async {
+    final cover = explicitCover ?? _currentTrack?.effectiveCoverUrl;
+    if (cover == null || cover.isEmpty) return;
+
     try {
       final palette = await PaletteGenerator.fromImageProvider(
-        NetworkImage(imageUrl),
-        size: const Size(100, 100),
-        maximumColorCount: 8,
+        NetworkImage(cover),
+        maximumColorCount: 16,
       );
+
       _ambientColor = palette.dominantColor?.color ??
+          palette.mutedColor?.color ??
           palette.vibrantColor?.color ??
           const Color(0xFFFA2D48);
       notifyListeners();
@@ -124,13 +141,32 @@ class PlayerState extends ChangeNotifier {
   }
 
   Future<void> playTrack(Track track, {List<Track>? newQueue, int index = 0}) async {
-    _currentTrack = track;
+    final effectiveTrack = track.copyWith(
+      coverUrl: track.effectiveCoverUrl,
+    );
+    _currentTrack = effectiveTrack;
     if (newQueue != null) {
-      _queue = newQueue;
+      _queue = newQueue.map((t) => t.copyWith(coverUrl: t.effectiveCoverUrl)).toList();
       _currentIndex = index;
     }
+    _isPlaying = true;
+    _isBuffering = true;
     notifyListeners();
-    await _audioHandler.loadAndPlayTrack(track, newQueue: newQueue, index: index);
+    await _audioHandler.loadAndPlayTrack(effectiveTrack, newQueue: _queue, index: index);
+  }
+
+  Future<int> startMix(Track track) async {
+    final mix = await _api.fetchMix(track);
+    if (mix.isNotEmpty) {
+      final fullQueue = [track, ...mix];
+      _queue = fullQueue;
+      _currentIndex = 0;
+      _currentTrack = track;
+      _audioHandler.setQueue(fullQueue, 0);
+      notifyListeners();
+      return mix.length;
+    }
+    return 0;
   }
 
   Future<void> togglePlay() async {

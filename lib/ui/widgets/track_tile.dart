@@ -40,7 +40,13 @@ class TrackTile extends StatelessWidget {
         color: isCurrent ? AppTheme.surfaceContainerHigh.withOpacity(0.7) : Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
-          onTap: onTap ?? () => player.playTrack(track, newQueue: queue, index: index),
+          onTap: onTap ?? () {
+            if (isCurrent) {
+              player.togglePlay();
+            } else {
+              player.playTrack(track, newQueue: queue, index: index);
+            }
+          },
           borderRadius: BorderRadius.circular(16),
           splashColor: AppTheme.primaryAccent.withOpacity(0.12),
           highlightColor: AppTheme.primaryAccent.withOpacity(0.06),
@@ -86,7 +92,7 @@ class TrackTile extends StatelessWidget {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: CachedNetworkImage(
-                          imageUrl: track.coverUrl,
+                          imageUrl: track.effectiveCoverUrl,
                           width: 48,
                           height: 48,
                           fit: BoxFit.cover,
@@ -95,10 +101,25 @@ class TrackTile extends StatelessWidget {
                           placeholder: (c, u) => Container(
                             color: AppTheme.surfaceContainerHighest,
                           ),
-                          errorWidget: (c, u, e) => Container(
-                            color: AppTheme.surfaceContainerHighest,
-                            child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary, size: 24),
-                          ),
+                          errorWidget: (c, u, e) {
+                            final vId = track.effectiveVideoId;
+                            if (vId.isNotEmpty) {
+                              return Image.network(
+                                'https://i.ytimg.com/vi/$vId/hqdefault.jpg',
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  color: AppTheme.surfaceContainerHighest,
+                                  child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary, size: 24),
+                                ),
+                              );
+                            }
+                            return Container(
+                              color: AppTheme.surfaceContainerHighest,
+                              child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary, size: 24),
+                            );
+                          },
                         ),
                       ),
                     ),

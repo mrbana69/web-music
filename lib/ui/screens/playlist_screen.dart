@@ -65,7 +65,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final player = context.read<PlayerState>();
+    final player = context.watch<PlayerState>();
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -215,16 +215,22 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 880),
-            child: const MiniPlayer(),
-          ),
-        ),
-      ),
+      bottomNavigationBar: player.currentTrack != null
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  heightFactor: 1.0,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 880),
+                    child: const MiniPlayer(),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../models/artist.dart';
 import '../../models/album.dart';
 import '../../models/track.dart';
+import '../../models/playlist.dart';
 import '../../providers/player_state.dart';
 import '../../providers/library_state.dart';
 import '../../services/api_service.dart';
@@ -14,6 +15,7 @@ import '../theme/app_theme.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/stitch_track_row.dart';
 import 'album_screen.dart';
+import 'playlist_screen.dart';
 
 class ArtistScreen extends StatefulWidget {
   final Artist artist;
@@ -42,10 +44,13 @@ class _ArtistScreenState extends State<ArtistScreen> {
     setState(() => _isLoading = true);
     try {
       final api = context.read<ApiService>();
-      final fullArtist = await api.fetchArtist(_artist.id);
+      var fullArtist = await api.fetchArtist(_artist.id);
+      if (fullArtist == null && _artist.name.isNotEmpty && _artist.name != 'Artista') {
+        fullArtist = await api.fetchArtist(_artist.name);
+      }
       if (fullArtist != null && mounted) {
         setState(() {
-          _artist = fullArtist;
+          _artist = fullArtist!;
           _isLoading = false;
         });
         return;
@@ -54,13 +59,19 @@ class _ArtistScreenState extends State<ArtistScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  List<Album> get _filteredAlbums {
+  List<dynamic> get _filteredDiscography {
+    final albums = _artist.albums;
+    final singles = _artist.singles;
+    final playlists = _artist.playlists;
+
     if (_selectedDiscographyFilter == 'albums') {
-      return _artist.albums.where((a) => !a.title.toLowerCase().contains('single') && !a.title.toLowerCase().contains('singolo')).toList();
+      return albums;
     } else if (_selectedDiscographyFilter == 'singles') {
-      return _artist.albums.where((a) => a.title.toLowerCase().contains('single') || a.title.toLowerCase().contains('singolo') || a.tracks.length <= 2).toList();
+      return singles;
+    } else if (_selectedDiscographyFilter == 'playlists') {
+      return playlists;
     }
-    return _artist.albums;
+    return [...albums, ...singles, ...playlists];
   }
 
   void _shareArtist() {
@@ -94,7 +105,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
           child: Text(
             _artist.bio.isNotEmpty
                 ? _artist.bio
-                : 'Riccardo Fabbriconi, noto come Blanco, è una delle voci più innovative ed energiche della musica contemporanea, unendo sonorità rock, melodramma ed elettronica con produzioni Spatial Hi-Fi su Preluded.',
+                : 'Scopri i brani più popolari e la discografia completa di ${_artist.name} su Preluded.',
             style: AppTheme.inter(color: Colors.white70, fontSize: 14, height: 1.6),
           ),
         ),
@@ -196,11 +207,9 @@ class _ArtistScreenState extends State<ArtistScreen> {
                                 queue: _artist.topTracks,
                                 index: e.key,
                                 showTopBadge: e.key == 0,
-                                customSubtitle: 'Singolo • Preluded Hi-Fi',
+                                customSubtitle: e.value.albumName.isNotEmpty ? e.value.albumName : 'Singolo',
                               );
                             }),
-                          const SizedBox(height: 24),
-                          _buildAcousticSignatureModule(),
                         ],
                       ),
                     ),
@@ -212,10 +221,12 @@ class _ArtistScreenState extends State<ArtistScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildTourDatesCard(),
-                          const SizedBox(height: 20),
-                          _buildExclusiveVinylCard(),
-                          const SizedBox(height: 20),
+                          if (_artist.name.toUpperCase().contains('BLANCO')) ...[
+                            _buildTourDatesCard(),
+                            const SizedBox(height: 20),
+                            _buildExclusiveVinylCard(),
+                            const SizedBox(height: 20),
+                          ],
                           _buildBiographyCard(),
                         ],
                       ),
@@ -246,14 +257,14 @@ class _ArtistScreenState extends State<ArtistScreen> {
                     queue: _artist.topTracks,
                     index: i,
                     showTopBadge: i == 0,
-                    customSubtitle: 'Singolo • Preluded Hi-Fi',
+                    customSubtitle: displayedTracks[i].albumName.isNotEmpty ? displayedTracks[i].albumName : 'Singolo',
                   ),
                   childCount: displayedTracks.length,
                 ),
               ),
 
             // Discography Carousel for Mobile
-            if (_artist.albums.isNotEmpty)
+            if (_artist.albums.isNotEmpty || _artist.singles.isNotEmpty || _artist.playlists.isNotEmpty)
               SliverToBoxAdapter(
                 child: _buildMobileDiscographySection(),
               ),
@@ -268,7 +279,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
           ],
 
           // Discography Grid for Desktop
-          if (isDesktop && _artist.albums.isNotEmpty)
+          if (isDesktop && (_artist.albums.isNotEmpty || _artist.singles.isNotEmpty || _artist.playlists.isNotEmpty))
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
@@ -279,16 +290,22 @@ class _ArtistScreenState extends State<ArtistScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 880),
-            child: const MiniPlayer(),
-          ),
-        ),
-      ),
+      bottomNavigationBar: player.currentTrack != null
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: isDesktop ? 24 : 8, vertical: isDesktop ? 8 : 4),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  heightFactor: 1.0,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 880),
+                    child: const MiniPlayer(),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 
@@ -444,45 +461,23 @@ class _ArtistScreenState extends State<ArtistScreen> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            '#42 NEL MONDO • 3.045.864 ASCOLTATORI',
-                            style: AppTheme.inter(
-                              color: Colors.white70,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
+                          Flexible(
+                            child: Text(
+                              isDesktop ? '#42 NEL MONDO • 3.045.864 ASCOLTATORI' : '3.0M ASCOLTATORI',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTheme.inter(
+                                color: Colors.white70,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
 
-                    // Hi-Fi Master Tag
-                    if (isDesktop)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF353438).withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withOpacity(0.06)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.graphic_eq_rounded, color: Color(0xFFFFB693), size: 14),
-                            const SizedBox(width: 6),
-                            Text(
-                              'MASTER 24-BIT / 96KHZ DOLBY ATMOS',
-                              style: AppTheme.inter(
-                                color: const Color(0xFFFFB693),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                   ],
                 ),
                 const SizedBox(height: 22),
@@ -524,15 +519,22 @@ class _ArtistScreenState extends State<ArtistScreen> {
                             color: Color(0xFF131317),
                           ),
                           child: ClipOval(
-                            child: CachedNetworkImage(
-                              imageUrl: _artist.picture,
-                              fit: BoxFit.cover,
-                              memCacheWidth: 320,
-                              memCacheHeight: 320,
-                              placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
-                              errorWidget: (c, u, e) => Container(
-                                color: AppTheme.surfaceContainerHighest,
-                                child: const Icon(Icons.person_rounded, color: Colors.white54, size: 40),
+                            child: SizedBox(
+                              width: isDesktop ? 136 : 102,
+                              height: isDesktop ? 136 : 102,
+                              child: CachedNetworkImage(
+                                imageUrl: _artist.picture,
+                                width: isDesktop ? 136 : 102,
+                                height: isDesktop ? 136 : 102,
+                                fit: BoxFit.cover,
+                                alignment: Alignment.center,
+                                memCacheWidth: 400,
+                                memCacheHeight: 400,
+                                placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
+                                errorWidget: (c, u, e) => Container(
+                                  color: AppTheme.surfaceContainerHighest,
+                                  child: const Icon(Icons.person_rounded, color: Colors.white54, size: 40),
+                                ),
                               ),
                             ),
                           ),
@@ -571,16 +573,6 @@ class _ArtistScreenState extends State<ArtistScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'PRELUDED ORIGINAL FOCUS',
-                            style: AppTheme.syne(
-                              color: const Color(0xFFFFB3B2),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
                             _artist.name.toUpperCase(),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -591,21 +583,6 @@ class _ArtistScreenState extends State<ArtistScreen> {
                               letterSpacing: -1.2,
                               height: 1.05,
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Icon(Icons.trending_up_rounded, color: Color(0xFF34C759), size: 16),
-                              const SizedBox(width: 5),
-                              Text(
-                                '+14.2% questa settimana su Preluded',
-                                style: AppTheme.inter(
-                                  color: const Color(0xFF34C759),
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
                           ),
                         ],
                       ),
@@ -820,101 +797,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
     );
   }
 
-  // --- Acoustic Signature Equalizer Module ---
-  Widget _buildAcousticSignatureModule() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B1B1F),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.tune_rounded, color: Color(0xFFFF525E), size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'ACOUSTIC SIGNATURE',
-                    style: AppTheme.syne(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                'Hi-Res Spatial Render Active',
-                style: AppTheme.inter(
-                  color: const Color(0xFFFFB693),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Interactive live audio spectrum visualization bars
-          SizedBox(
-            height: 48,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _spectrumBar(0.65, const Color(0xFFFA2D48)),
-                _spectrumBar(0.85, const Color(0xFFFA2D48)),
-                _spectrumBar(1.00, const Color(0xFFFF525E)),
-                _spectrumBar(0.55, const Color(0xFFFE6B00)),
-                _spectrumBar(0.80, const Color(0xFFFE6B00)),
-                _spectrumBar(0.40, const Color(0xFFFFB693)),
-                _spectrumBar(0.75, const Color(0xFFFA2D48)),
-                _spectrumBar(0.95, const Color(0xFFFF525E)),
-                _spectrumBar(0.60, const Color(0xFFFE6B00)),
-                _spectrumBar(0.50, const Color(0xFFFA2D48)),
-                _spectrumBar(0.35, const Color(0xFFFFB693)),
-                _spectrumBar(0.20, const Color(0xFFFE6B00)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('20 Hz (SUB)', style: AppTheme.inter(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.w600)),
-              Text('1.2 kHz (VOCAL EDGE)', style: AppTheme.inter(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.w600)),
-              Text('20 kHz (AIR)', style: AppTheme.inter(color: Colors.white30, fontSize: 10, fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _spectrumBar(double factor, Color color) {
-    return Expanded(
-      child: Container(
-        height: 48 * factor,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.85),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.3),
-              blurRadius: 4,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   // --- Right Column Cards for Desktop ---
   Widget _buildTourDatesCard() {
@@ -1129,7 +1012,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
           Text(
             _artist.bio.isNotEmpty
                 ? _artist.bio
-                : 'Riccardo Fabbriconi, in arte Blanco, classe 2003, è una delle voci più prorompenti e innovative della scena musicale contemporanea. Con il suo stile crudo, viscerale e melodrammatico, unisce sonorità punk rock all\'immediatezza dell\'urban pop con produzioni Spatial Hi-Fi su Preluded.',
+                : 'Scopri i brani più popolari e la discografia completa di ${_artist.name} su Preluded.',
             maxLines: 4,
             overflow: TextOverflow.ellipsis,
             style: AppTheme.inter(
@@ -1166,14 +1049,17 @@ class _ArtistScreenState extends State<ArtistScreen> {
 
   // --- Discography Section for Mobile (Horizontal Snap Carousel) ---
   Widget _buildMobileDiscographySection() {
-    final albums = _filteredAlbums;
+    final items = _filteredDiscography;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
                 'Discografia',
@@ -1185,12 +1071,17 @@ class _ArtistScreenState extends State<ArtistScreen> {
                 ),
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   _filterChip('Tutto', 'all'),
                   const SizedBox(width: 6),
                   _filterChip('Album', 'albums'),
                   const SizedBox(width: 6),
                   _filterChip('Singoli', 'singles'),
+                  if (_artist.playlists.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    _filterChip('Playlist', 'playlists'),
+                  ],
                 ],
               ),
             ],
@@ -1202,10 +1093,10 @@ class _ArtistScreenState extends State<ArtistScreen> {
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: albums.length,
+            itemCount: items.length,
             itemBuilder: (context, i) {
-              final album = albums[i];
-              return _buildDiscographyCard(album, 136);
+              final item = items[i];
+              return _buildDiscographyCard(item, 136);
             },
           ),
         ),
@@ -1215,7 +1106,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
 
   // --- Discography Section for Desktop (Responsive Grid) ---
   Widget _buildDesktopDiscographyGrid() {
-    final albums = _filteredAlbums;
+    final items = _filteredDiscography;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1239,10 +1130,14 @@ class _ArtistScreenState extends State<ArtistScreen> {
                 _filterChip('Album', 'albums'),
                 const SizedBox(width: 8),
                 _filterChip('Singoli & EP', 'singles'),
+                if (_artist.playlists.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  _filterChip('Playlist', 'playlists'),
+                ],
               ],
             ),
             Text(
-              '${albums.length} pubblicazioni',
+              '${items.length} pubblicazioni',
               style: AppTheme.inter(color: Colors.white38, fontSize: 13),
             ),
           ],
@@ -1255,12 +1150,12 @@ class _ArtistScreenState extends State<ArtistScreen> {
             maxCrossAxisExtent: 180,
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
-            childAspectRatio: 0.75,
+            childAspectRatio: 0.68,
           ),
-          itemCount: albums.length,
+          itemCount: items.length,
           itemBuilder: (context, i) {
-            final album = albums[i];
-            return _buildDiscographyCard(album, double.infinity);
+            final item = items[i];
+            return _buildDiscographyCard(item, double.infinity);
           },
         ),
       ],
@@ -1290,20 +1185,49 @@ class _ArtistScreenState extends State<ArtistScreen> {
     );
   }
 
-  Widget _buildDiscographyCard(Album album, double width) {
-    final isSingle = album.title.toLowerCase().contains('single') ||
-        album.title.toLowerCase().contains('singolo') ||
-        album.tracks.length <= 2;
+  Widget _buildDiscographyCard(dynamic item, double width) {
+    final isAlbum = item is Album;
+    final Album? album = isAlbum ? item as Album : null;
+    final Playlist? playlist = !isAlbum && item is Playlist ? item as Playlist : null;
+
+    final isSingle = isAlbum && (album!.type == 'Single' ||
+        album.title.toLowerCase().contains('single') ||
+        album.title.toLowerCase().contains('singolo'));
+    final isEp = isAlbum && album!.type == 'EP';
+
+    final badgeText = isAlbum
+        ? (isSingle ? 'SINGOLO' : (isEp ? 'EP' : 'ALBUM'))
+        : 'PLAYLIST';
+
+    final title = isAlbum ? album!.title : (playlist?.title ?? '');
+    final coverUrl = isAlbum ? album!.coverUrl : (playlist?.coverUrl ?? '');
+    final subtitle = isAlbum
+        ? (isSingle ? 'Singolo • ${album!.year}' : (isEp ? 'EP • ${album!.year}' : 'Album • ${album!.year}'))
+        : (playlist?.subtitle.isNotEmpty ?? false ? playlist!.subtitle : 'Playlist • Preluded');
 
     return Container(
       width: width == double.infinity ? null : width,
       margin: width == double.infinity ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 6),
       child: InkWell(
         onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => AlbumScreen(album: album)),
-          );
+          if (isAlbum) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => AlbumScreen(album: album!)),
+            );
+          } else if (playlist != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PlaylistScreen(
+                  title: playlist.title,
+                  subtitle: playlist.subtitle,
+                  tracks: playlist.tracks,
+                  playlistId: playlist.id,
+                ),
+              ),
+            );
+          }
         },
         borderRadius: BorderRadius.circular(16),
         child: Column(
@@ -1318,14 +1242,14 @@ class _ArtistScreenState extends State<ArtistScreen> {
                   child: AspectRatio(
                     aspectRatio: 1.0,
                     child: CachedNetworkImage(
-                      imageUrl: album.coverUrl,
+                      imageUrl: coverUrl,
                       fit: BoxFit.cover,
                       memCacheWidth: 280,
                       memCacheHeight: 280,
                       placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
                       errorWidget: (c, u, e) => Container(
                         color: AppTheme.surfaceContainerHighest,
-                        child: const Icon(Icons.album_rounded, color: Colors.white38, size: 36),
+                        child: Icon(isAlbum ? Icons.album_rounded : Icons.playlist_play_rounded, color: Colors.white38, size: 36),
                       ),
                     ),
                   ),
@@ -1342,7 +1266,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
                       border: Border.all(color: Colors.white.withOpacity(0.1)),
                     ),
                     child: Text(
-                      isSingle ? 'SINGOLO' : 'ALBUM',
+                      badgeText,
                       style: AppTheme.syne(
                         color: Colors.white,
                         fontSize: 8.5,
@@ -1356,7 +1280,7 @@ class _ArtistScreenState extends State<ArtistScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              album.title,
+              title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTheme.inter(
@@ -1367,7 +1291,9 @@ class _ArtistScreenState extends State<ArtistScreen> {
             ),
             const SizedBox(height: 2),
             Text(
-              album.year.isNotEmpty ? album.year : (isSingle ? 'Singolo' : 'Album'),
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: AppTheme.inter(
                 color: Colors.white54,
                 fontSize: 11,

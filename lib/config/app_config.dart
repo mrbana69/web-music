@@ -13,14 +13,14 @@ class AppConfig {
   static String getShareUrl(String trackId) => '$shareBaseUrl/$trackId';
 
   static String formatArtwork(String? rawUrl, {String size = '500x500'}) {
-    if (rawUrl == null || rawUrl.isEmpty) {
-      return 'https://resources.tidal.com/images/default/500x500.jpg';
+    if (rawUrl == null || rawUrl.isEmpty || rawUrl.contains('resources.tidal.com/images/default')) {
+      return '';
     }
     String str = rawUrl.trim();
     if (str.contains('googleusercontent.com') || str.contains('ggpht.com')) {
-      str = str.replaceAll(RegExp(r'=[ws]\d+.*$'), '=w500-h500-l90-rj');
-      if (!str.contains('=w500-h500-l90-rj') && !str.contains('=')) {
-        str += '=w500-h500-l90-rj';
+      str = str.replaceAll(RegExp(r'=[ws]\d+.*$'), '=w500-h500-c-l90-rj');
+      if (!str.contains('=w500-h500-c-l90-rj') && !str.contains('=')) {
+        str += '=w500-h500-c-l90-rj';
       }
       return str;
     }
@@ -33,7 +33,7 @@ class AppConfig {
     if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('data:')) {
       return str;
     }
-    return 'https://resources.tidal.com/images/' + str.replaceAll('-', '/') + '/' + size + '.jpg';
+    return '';
   }
 
   static String sanitizeArtist(dynamic raw) {

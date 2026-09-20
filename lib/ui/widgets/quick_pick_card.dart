@@ -44,7 +44,7 @@ class QuickPickCard extends StatelessWidget {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: CachedNetworkImage(
-                        imageUrl: track.coverUrl,
+                        imageUrl: track.effectiveCoverUrl,
                         width: 148,
                         height: 148,
                         fit: BoxFit.cover,
@@ -63,12 +63,29 @@ class QuickPickCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        errorWidget: (c, u, e) => Container(
-                          width: 148,
-                          height: 148,
-                          color: AppTheme.surfaceContainerHighest,
-                          child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary, size: 36),
-                        ),
+                        errorWidget: (c, u, e) {
+                          final vId = track.effectiveVideoId;
+                          if (vId.isNotEmpty) {
+                            return Image.network(
+                              'https://i.ytimg.com/vi/$vId/hqdefault.jpg',
+                              width: 148,
+                              height: 148,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                width: 148,
+                                height: 148,
+                                color: AppTheme.surfaceContainerHighest,
+                                child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary, size: 36),
+                              ),
+                            );
+                          }
+                          return Container(
+                            width: 148,
+                            height: 148,
+                            color: AppTheme.surfaceContainerHighest,
+                            child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary, size: 36),
+                          );
+                        },
                       ),
                     ),
                   ),

@@ -8,6 +8,7 @@ class Album {
   final String artistId;
   final String coverUrl;
   final String year;
+  final String type;
   final List<Track> tracks;
 
   Album({
@@ -17,6 +18,7 @@ class Album {
     this.artistId = '',
     required this.coverUrl,
     this.year = '',
+    this.type = 'Album',
     this.tracks = const [],
   });
 
@@ -33,6 +35,7 @@ class Album {
       artistId: json['artistId']?.toString() ?? '',
       coverUrl: AppConfig.formatArtwork(rawCover),
       year: json['year']?.toString() ?? json['releaseDate']?.toString() ?? '',
+      type: json['type']?.toString() ?? 'Album',
       tracks: trackItems,
     );
   }
@@ -44,6 +47,7 @@ class Album {
     String? artistId,
     String? coverUrl,
     String? year,
+    String? type,
     List<Track>? tracks,
   }) {
     return Album(
@@ -53,6 +57,7 @@ class Album {
       artistId: artistId ?? this.artistId,
       coverUrl: coverUrl ?? this.coverUrl,
       year: year ?? this.year,
+      type: type ?? this.type,
       tracks: tracks ?? this.tracks,
     );
   }
@@ -64,5 +69,6 @@ class Album {
     'artistId': artistId,
     'coverUrl': coverUrl,
     'year': year,
+    'type': type,
   };
 }

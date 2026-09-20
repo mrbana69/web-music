@@ -88,15 +88,28 @@ class MiniPlayer extends StatelessWidget {
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: CachedNetworkImage(
-                          imageUrl: track.coverUrl,
+                          imageUrl: track.effectiveCoverUrl,
                           fit: BoxFit.cover,
                           memCacheWidth: 120,
                           memCacheHeight: 120,
                           placeholder: (c, u) => Container(color: AppTheme.surfaceContainerLowest),
-                          errorWidget: (c, u, e) => Container(
-                            color: AppTheme.surfaceContainerLowest,
-                            child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary),
-                          ),
+                          errorWidget: (c, u, e) {
+                            final vId = track.effectiveVideoId;
+                            if (vId.isNotEmpty) {
+                              return Image.network(
+                                'https://i.ytimg.com/vi/$vId/hqdefault.jpg',
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  color: AppTheme.surfaceContainerLowest,
+                                  child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary),
+                                ),
+                              );
+                            }
+                            return Container(
+                              color: AppTheme.surfaceContainerLowest,
+                              child: const Icon(Icons.music_note_rounded, color: AppTheme.textSecondary),
+                            );
+                          },
                         ),
                       ),
                     ),

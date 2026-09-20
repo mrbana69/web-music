@@ -8,6 +8,8 @@ import '../theme/app_theme.dart';
 import '../widgets/section_header.dart';
 import '../widgets/quick_pick_card.dart';
 import '../widgets/track_tile.dart';
+import '../widgets/quick_picks_grid.dart';
+import '../widgets/mood_chips_bar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,6 +21,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<Track> _quickPicks = [];
   Map<String, List<Track>> _sections = {};
+  List<Map<String, String>> _moodChips = [];
+  String? _selectedMoodParam;
+  String _selectedMoodTitle = '';
   bool _isLoading = true;
   String? _lastYtmCookie;
   bool? _lastIsGoogleLoggedIn;
@@ -35,10 +40,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final library = context.read<LibraryState>();
     library.repairHistoryArtists(api);
     try {
-      final qp = await api.fetchQuickPicks();
-      final sec = await api.fetchHomeSections();
+      final chipsFuture = api.fetchHomeChips();
+      final qpFuture = api.fetchQuickPicks(params: _selectedMoodParam);
+      final secFuture = api.fetchHomeSections(params: _selectedMoodParam);
+
+      final chips = await chipsFuture;
+      final qp = await qpFuture;
+      final sec = await secFuture;
+
       if (mounted) {
         setState(() {
+          _moodChips = chips;
           _quickPicks = qp;
           _sections = sec;
           _isLoading = false;
@@ -47,6 +59,14 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _onMoodSelected(Map<String, String>? chip) {
+    setState(() {
+      _selectedMoodParam = chip?['params'];
+      _selectedMoodTitle = chip?['title'] ?? '';
+    });
+    _loadData();
   }
 
   String _getGreeting() {
@@ -133,6 +153,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
 
+            // 2. Mood / Category Filter Chips Bar
+            if (_moodChips.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 6),
+                  child: MoodChipsBar(
+                    chips: _moodChips,
+                    selectedParam: _selectedMoodParam,
+                    onChipSelected: _onMoodSelected,
+                  ),
+                ),
+              ),
+
             if (_isLoading)
               const SliverFillRemaining(
                 child: Center(
@@ -140,32 +173,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
             else ...[
-              // 3. Scelte Rapide (Quick Picks) Carousel
-              if (_quickPicks.isNotEmpty) ...[
-                const SliverToBoxAdapter(
-                  child: SectionHeader(
-                    title: 'Scelte rapide',
-                    subtitle: 'Basate sui tuoi ascolti',
-                  ),
-                ),
+              // 3. Scelte Rapide 4-Row Column Grid Carousel
+              if (_quickPicks.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 215,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _quickPicks.length,
-                      itemBuilder: (context, i) {
-                        final track = _quickPicks[i];
-                        return QuickPickCard(
-                          track: track,
-                          onTap: () => player.playTrack(track, newQueue: _quickPicks, index: i),
-                        );
-                      },
-                    ),
+                  child: QuickPicksGrid(
+                    tracks: _quickPicks,
+                    onPlayAll: () {
+                      if (_quickPicks.isNotEmpty) {
+                        player.playTrack(_quickPicks[0], newQueue: _quickPicks, index: 0);
+                      }
+                    },
                   ),
                 ),
-              ],
 
               // 4. Di nuovo all'ascolto (History)
               if (library.history.isNotEmpty) ...[
@@ -209,10 +228,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         itemCount: entry.value.length,
                         itemBuilder: (context, i) {
                           final track = entry.value[i];
-                          return QuickPickCard(
-                            track: track,
-                            onTap: () => player.playTrack(track, newQueue: entry.value, index: i),
-                          );
+                            return QuickPickCard(
+                              track: track,
+                              onTap: () {
+                                if (player.currentTrack?.id == track.id) {
+                                  player.togglePlay();
+                                } else {
+                                  player.playTrack(track, newQueue: entry.value, index: i);
+                                }
+                              },
+                            );
                         },
                       ),
                     ),

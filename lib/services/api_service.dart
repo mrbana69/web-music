@@ -79,6 +79,32 @@ class ApiService {
     return results;
   }
 
+  String _extractLargestThumbnail(dynamic node) {
+    if (node == null) return '';
+    final foundUrls = <String>[];
+    void search(dynamic current) {
+      if (current is Map) {
+        if (current.containsKey('thumbnails') && current['thumbnails'] is List) {
+          for (final t in current['thumbnails'] as List) {
+            final u = (t as Map)['url']?.toString();
+            if (u != null && u.isNotEmpty && !u.contains('avatar')) {
+              foundUrls.add(u);
+            }
+          }
+        }
+        for (final v in current.values) {
+          search(v);
+        }
+      } else if (current is List) {
+        for (final item in current) {
+          search(item);
+        }
+      }
+    }
+    search(node);
+    return foundUrls.isNotEmpty ? foundUrls.last : '';
+  }
+
   String? _generateSapisidHash(String cookieString, [String origin = 'https://music.youtube.com']) {
     try {
       String? sapisid;
@@ -92,7 +118,7 @@ class ApiService {
           if (idx != -1) {
             final k = part.substring(0, idx).trim();
             final v = part.substring(idx + 1).trim();
-            if (k.isNotEmpty && !cookieMap.containsKey(k)) {
+            if (k.isNotEmpty) {
               cookieMap[k] = v;
             }
           }
@@ -128,8 +154,91 @@ class ApiService {
   }
 
   // --- 1. Quick Picks / Personalized Recommendations ---
-  Future<List<Track>> fetchQuickPicks({int limit = 20}) async {
-    // 1. If cookies are present, try fetching user listening history first!
+  Future<List<Track>> fetchQuickPicks({String? params, int limit = 20}) async {
+    // 1. Fetch directly from FEmusic_home (with user cookies if present, yielding authentic personalized Quick Picks!)
+    try {
+      final uri = Uri.parse('$_innertubeEndpoint/browse?prettyPrint=false');
+      final payload = jsonEncode({
+        'context': _buildClientContext(),
+        'browseId': 'FEmusic_home',
+        if (params != null && params.isNotEmpty) 'params': params,
+      });
+
+      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        final carouselShelves = _findNodes(data, 'musicCarouselShelfRenderer');
+        final standardShelves = _findNodes(data, 'musicShelfRenderer');
+        final allShelves = [...carouselShelves, ...standardShelves];
+
+        final tracks = <Track>[];
+
+        // Try exact "Scelte rapide" / "Quick picks" shelf first
+        for (final shelf in allShelves) {
+          final title = shelf['header']?['musicCarouselShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text']?.toString() ??
+                        shelf['header']?['musicShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text']?.toString() ?? '';
+          final titleLower = title.toLowerCase();
+          if (titleLower.contains('scelt') || titleLower.contains('quick')) {
+            final contents = shelf['contents'] as List? ?? [];
+            for (final item in contents) {
+              final track = _parseTrackFromItem(item as Map);
+              if (track != null && !tracks.any((t) => t.id == track.id)) {
+                tracks.add(track);
+              }
+            }
+            if (tracks.isNotEmpty) break;
+          }
+        }
+
+        // If no matching titled shelf, try any personalized shelf
+        if (tracks.isEmpty) {
+          for (final shelf in allShelves) {
+            final title = shelf['header']?['musicCarouselShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text']?.toString() ??
+                          shelf['header']?['musicShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text']?.toString() ?? '';
+            final titleLower = title.toLowerCase();
+            final isPersonalized = titleLower.contains('ascolta') ||
+                                   titleLower.contains('preferit') ||
+                                   titleLower.contains('insieme') ||
+                                   titleLower.contains('listen') ||
+                                   titleLower.contains('again') ||
+                                   titleLower.contains('brani') ||
+                                   titleLower.contains('consigli');
+            if (isPersonalized) {
+              final contents = shelf['contents'] as List? ?? [];
+              for (final item in contents) {
+                final track = _parseTrackFromItem(item as Map);
+                if (track != null && !tracks.any((t) => t.id == track.id)) {
+                  tracks.add(track);
+                }
+              }
+              if (tracks.length >= 10) break;
+            }
+          }
+        }
+
+        // If still empty, take first shelf with items
+        if (tracks.isEmpty && allShelves.isNotEmpty) {
+          for (final shelf in allShelves) {
+            final contents = shelf['contents'] as List? ?? [];
+            for (final item in contents) {
+              final track = _parseTrackFromItem(item as Map);
+              if (track != null && !tracks.any((t) => t.id == track.id)) {
+                tracks.add(track);
+              }
+            }
+            if (tracks.isNotEmpty) break;
+          }
+        }
+
+        if (tracks.isNotEmpty) {
+          return tracks.take(limit).toList();
+        }
+      }
+    } catch (e) {
+      print('ApiService fetchQuickPicks error: $e');
+    }
+
+    // 2. Fallback: if user is logged in, try FEmusic_history
     final cookie = _storage.getYtmCookie();
     if (cookie != null && cookie.isNotEmpty) {
       try {
@@ -153,84 +262,55 @@ class ApiService {
             }
           }
           if (historyTracks.isNotEmpty) {
-            print('[ApiService] fetchQuickPicks loaded ${historyTracks.length} tracks from FEmusic_history');
             return historyTracks.take(limit).toList();
           }
         }
-      } catch (e) {
-        print('[ApiService] History quick picks error: $e');
-      }
+      } catch (_) {}
     }
 
-    // 2. Otherwise/Fallback: Fetch from FEmusic_home shelves
+    return _getFallbackPicks();
+  }
+
+  // --- 1.1 Home Category / Mood Chips ---
+  Future<List<Map<String, String>>> fetchHomeChips() async {
     try {
       final uri = Uri.parse('$_innertubeEndpoint/browse?prettyPrint=false');
       final payload = jsonEncode({
         'context': _buildClientContext(),
         'browseId': 'FEmusic_home',
       });
-
-      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
+      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 8));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final carouselShelves = _findNodes(data, 'musicCarouselShelfRenderer');
-        final standardShelves = _findNodes(data, 'musicShelfRenderer');
-        final allShelves = [...carouselShelves, ...standardShelves];
-
-        final tracks = <Track>[];
-
-        // Try personalized shelves first
-        for (final shelf in allShelves) {
-          final title = shelf['header']?['musicCarouselShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text']?.toString() ??
-                        shelf['header']?['musicShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text']?.toString() ?? '';
-          final titleLower = title.toLowerCase();
-          final isPersonalized = titleLower.contains('ascolta') ||
-                                 titleLower.contains('preferit') ||
-                                 titleLower.contains('scelt') ||
-                                 titleLower.contains('quick') ||
-                                 titleLower.contains('insieme') ||
-                                 titleLower.contains('listen') ||
-                                 titleLower.contains('again') ||
-                                 titleLower.contains('brani') ||
-                                 titleLower.contains('consigli');
-          if (isPersonalized) {
-            final contents = shelf['contents'] as List? ?? [];
-            for (final item in contents) {
-              final track = _parseTrackFromItem(item as Map);
-              if (track != null && !tracks.any((t) => t.id == track.id)) {
-                tracks.add(track);
-              }
-            }
-            if (tracks.length >= 10) break;
+        final chips = <Map<String, String>>[];
+        final chipNodes = _findNodes(data, 'chipCloudChipRenderer');
+        for (final node in chipNodes) {
+          final title = node['text']?['runs']?[0]?['text']?.toString() ?? '';
+          final params = node['navigationEndpoint']?['browseEndpoint']?['params']?.toString() ?? '';
+          if (title.isNotEmpty) {
+            chips.add({'title': title, 'params': params});
           }
         }
-
-        // If no matching titled shelf, take the first shelf with items
-        if (tracks.isEmpty && allShelves.isNotEmpty) {
-          for (final shelf in allShelves) {
-            final contents = shelf['contents'] as List? ?? [];
-            for (final item in contents) {
-              final track = _parseTrackFromItem(item as Map);
-              if (track != null && !tracks.any((t) => t.id == track.id)) {
-                tracks.add(track);
-              }
-            }
-            if (tracks.isNotEmpty) break;
-          }
-        }
-
-        if (tracks.isNotEmpty) {
-          return tracks.take(limit).toList();
-        }
+        if (chips.isNotEmpty) return chips;
       }
-    } catch (e) {
-      print('ApiService fetchQuickPicks error: $e');
-    }
-    return _getFallbackPicks();
+    } catch (_) {}
+    return [
+      {'title': 'Podcast', 'params': 'ggNCSgQIDBADSgQICRABSgQIBxABSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIDRABSgQIChABSgQIBhABSgQIBRAB'},
+      {'title': 'Energia pura', 'params': 'ggNCSgQIDBABSgQICRADSgQIBxABSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIDRABSgQIChABSgQIBhABSgQIBRAB'},
+      {'title': 'Relax', 'params': 'ggNCSgQIDBABSgQICRABSgQIBxADSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIDRABSgQIChABSgQIBhABSgQIBRAB'},
+      {'title': 'Benessere', 'params': 'ggNCSgQIDBABSgQICRABSgQIBxABSgQICBADSgQIBBABSgQIDhABSgQIAxABSgQIDRABSgQIChABSgQIBhABSgQIBRAB'},
+      {'title': 'Attività fisica', 'params': 'ggNCSgQIDBABSgQICRABSgQIBxABSgQICBABSgQIBBADSgQIDhABSgQIAxABSgQIDRABSgQIChABSgQIBhABSgQIBRAB'},
+      {'title': 'Festa', 'params': 'ggNCSgQIDBABSgQICRABSgQIBxABSgQICBABSgQIBBABSgQIDhADSgQIAxABSgQIDRABSgQIChABSgQIBhABSgQIBRAB'},
+      {'title': 'Tragitto giornaliero', 'params': 'ggNCSgQIDBABSgQICRABSgQIBxABSgQICBABSgQIBBABSgQIDhABSgQIAxADSgQIDRABSgQIChABSgQIBhABSgQIBRAB'},
+      {'title': 'Romantico', 'params': 'ggNCSgQIDBABSgQICRABSgQIBxABSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIDRADSgQIChABSgQIBhABSgQIBRAB'},
+      {'title': 'Malinconico', 'params': 'ggNCSgQIDBABSgQICRABSgQIBxABSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIDRABSgQIChADSgQIBhABSgQIBRAB'},
+      {'title': 'Concentrazione', 'params': 'ggNCSgQIDBABSgQICRABSgQIBxABSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIDRABSgQIChABSgQIBhADSgQIBRAB'},
+      {'title': 'Riposo', 'params': 'ggNCSgQIDBABSgQICRABSgQIBxABSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIDRABSgQIChABSgQIBhABSgQIBRAD'},
+    ];
   }
 
   // --- 2. Home Feed Shelves ---
-  Future<Map<String, List<Track>>> fetchHomeSections() async {
+  Future<Map<String, List<Track>>> fetchHomeSections({String? params}) async {
     final sections = <String, List<Track>>{};
 
     // 1. If logged in, add "Ascoltati di recente" from FEmusic_history at the top!
@@ -271,6 +351,7 @@ class ApiService {
       final payload = jsonEncode({
         'context': _buildClientContext(),
         'browseId': 'FEmusic_home',
+        if (params != null && params.isNotEmpty) 'params': params,
       });
 
       final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
@@ -284,6 +365,10 @@ class ApiService {
           final title = shelf['header']?['musicCarouselShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text']?.toString() ??
                         shelf['header']?['musicShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text']?.toString() ?? '';
           if (title.isEmpty) continue;
+
+          // Skip "Scelte rapide" as it is rendered separately in the top hero grid
+          final titleLower = title.toLowerCase();
+          if (titleLower.contains('scelt') || titleLower.contains('quick')) continue;
 
           final contents = shelf['contents'] as List? ?? [];
           final items = <Track>[];
@@ -338,49 +423,61 @@ class ApiService {
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
 
-        // 1. Process card shelf (Top result artist & top tracks)
+        // 1. Process card shelf (Top result artist, album, or top tracks)
         final cardShelves = _findNodes(data, 'musicCardShelfRenderer');
         String cardArtistName = '';
         for (final card in cardShelves) {
           final title = card['title']?['runs']?[0]?['text']?.toString() ?? '';
           final browseId = card['title']?['runs']?[0]?['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
           final thumbs = (card['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
-          final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
-          if (title.isNotEmpty && browseId.isNotEmpty) {
+          final thumb = thumbs.isNotEmpty ? (thumbs.last['url']?.toString() ?? '') : '';
+
+          final cardSubtitleRuns = card['subtitle']?['runs'] as List? ?? [];
+          final cardSubtitle = cardSubtitleRuns.map((r) => r['text']?.toString() ?? '').join('').toLowerCase();
+          final cardIsVideo = cardSubtitle.startsWith('video') || (thumb.contains('i.ytimg.com') && !cardSubtitle.contains('brano'));
+
+          if (!cardIsVideo && title.isNotEmpty && browseId.isNotEmpty) {
             cardArtistName = title;
             if (!artists.any((a) => a.id == browseId)) {
               artists.add(Artist(id: browseId, name: AppConfig.sanitizeArtist(title), picture: AppConfig.formatArtwork(thumb)));
             }
           }
-          final cardContents = card['contents'] as List? ?? [];
-          for (final c in cardContents) {
-            final r = (c as Map)['musicResponsiveListItemRenderer'];
-            if (r != null) {
-              final flexCols = r['flexColumns'] as List? ?? [];
-              final col0 = flexCols.isNotEmpty ? (flexCols[0] as Map)['musicResponsiveListItemFlexColumnRenderer'] : null;
-              final songTitle = col0?['text']?['runs']?[0]?['text']?.toString() ?? '';
-              final vId = col0?['text']?['runs']?[0]?['navigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ??
-                          r['playlistItemData']?['videoId']?.toString() ??
-                          r['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ?? '';
-              final cThumbs = (r['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
-                               r['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
-              final cThumb = cThumbs.isNotEmpty ? cThumbs.last['url']?.toString() : thumb;
 
-              if (songTitle.isNotEmpty && vId.isNotEmpty && !tracks.any((t) => t.id == vId)) {
-                tracks.add(Track(
-                  id: vId,
-                  videoId: vId,
-                  title: songTitle,
-                  artistName: AppConfig.sanitizeArtist(cardArtistName.isNotEmpty ? cardArtistName : 'Artista'),
-                  coverUrl: AppConfig.formatArtwork(cThumb),
-                  durationMs: 210000,
-                ));
+          // Only include card contents if the card is NOT a music video shelf
+          if (!cardIsVideo) {
+            final cardContents = card['contents'] as List? ?? [];
+            for (final c in cardContents) {
+              final r = (c as Map)['musicResponsiveListItemRenderer'];
+              if (r != null) {
+                final flexCols = r['flexColumns'] as List? ?? [];
+                final col0 = flexCols.isNotEmpty ? (flexCols[0] as Map)['musicResponsiveListItemFlexColumnRenderer'] : null;
+                final songTitle = col0?['text']?['runs']?[0]?['text']?.toString() ?? '';
+                final vId = col0?['text']?['runs']?[0]?['navigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ??
+                            r['playlistItemData']?['videoId']?.toString() ??
+                            r['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ?? '';
+                final cThumbs = (r['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
+                                 r['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
+                final cThumb = cThumbs.isNotEmpty ? cThumbs.last['url']?.toString() : thumb;
+
+                if (songTitle.isNotEmpty && vId.isNotEmpty && !tracks.any((t) => t.id == vId)) {
+                  tracks.add(Track(
+                    id: vId,
+                    videoId: vId,
+                    title: songTitle,
+                    artistName: AppConfig.sanitizeArtist(cardArtistName.isNotEmpty ? cardArtistName : 'Artista'),
+                    coverUrl: AppConfig.formatArtwork(cThumb),
+                    durationMs: 210000,
+                  ));
+                }
               }
             }
           }
         }
 
-        // 2. Process all responsive items across all 30+ sections
+        // 2. Process all responsive items across all sections
+        final officialTracks = <Track>[];
+        final videoTracks = <Track>[];
+
         final responsiveNodes = _findNodes(data, 'musicResponsiveListItemRenderer');
         for (final node in responsiveNodes) {
           final flexCols = node['flexColumns'] as List? ?? [];
@@ -418,13 +515,17 @@ class ApiService {
 
           final thumbs = (node['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
                           node['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
-          final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
+          final thumb = thumbs.isNotEmpty ? (thumbs.last['url']?.toString() ?? '') : '';
 
           final subLower = subFull.toLowerCase();
           final isArtist = pageType == 'MUSIC_PAGE_TYPE_ARTIST' || subLower.startsWith('artista') || subLower.startsWith('artist') || filter == 'artists';
           final isAlbum = pageType == 'MUSIC_PAGE_TYPE_ALBUM' || subLower.startsWith('album') || subLower.startsWith('singolo') || subLower.startsWith('ep') || filter == 'albums';
           final isPlaylist = pageType == 'MUSIC_PAGE_TYPE_PLAYLIST' || subLower.startsWith('playlist') || filter == 'playlists';
-          final isTrack = vId.isNotEmpty || subLower.startsWith('brano') || subLower.startsWith('canzone') || subLower.startsWith('song') || subLower.startsWith('video') || filter == 'tracks' || filter == 'songs';
+
+          // Distinguish official studio tracks from music video uploads
+          final isVideo = subLower.startsWith('video') || (thumb.contains('i.ytimg.com') && !subLower.startsWith('brano') && !subLower.startsWith('song'));
+          final isOfficialTrack = !isVideo && (subLower.startsWith('brano') || subLower.startsWith('canzone') || subLower.startsWith('song') || filter == 'tracks' || filter == 'songs' || thumb.contains('googleusercontent.com') || thumb.contains('ggpht.com'));
+          final isTrack = (isOfficialTrack || isVideo || vId.isNotEmpty) && !isArtist && !isAlbum && !isPlaylist;
 
           if (isArtist && (browseId.startsWith('UC') || browseId.isNotEmpty)) {
             if (!artists.any((a) => a.name.toLowerCase() == title.toLowerCase())) {
@@ -474,15 +575,27 @@ class ApiService {
             trackArtist = artistCandidates.join(', ');
             if (trackArtist.isEmpty) trackArtist = cardArtistName.isNotEmpty ? cardArtistName : 'Artista';
 
-            if (!tracks.any((t) => t.id == vId)) {
-              tracks.add(Track(
-                id: vId,
-                videoId: vId,
-                title: title,
-                artistName: AppConfig.sanitizeArtist(trackArtist),
-                coverUrl: AppConfig.formatArtwork(thumb),
-                durationMs: 210000,
-              ));
+            final trk = Track(
+              id: vId,
+              videoId: vId,
+              title: title,
+              artistName: AppConfig.sanitizeArtist(trackArtist),
+              coverUrl: AppConfig.formatArtwork(thumb),
+              durationMs: 210000,
+            );
+
+            if (isOfficialTrack) {
+              if (!officialTracks.any((t) => t.id == vId)) {
+                officialTracks.add(trk);
+              }
+            } else if (isVideo) {
+              if (!videoTracks.any((t) => t.id == vId)) {
+                videoTracks.add(trk);
+              }
+            } else {
+              if (!officialTracks.any((t) => t.id == vId)) {
+                officialTracks.add(trk);
+              }
             }
           }
         }
@@ -491,8 +604,12 @@ class ApiService {
         final twoRowNodes = _findNodes(data, 'musicTwoRowItemRenderer');
         for (final node in twoRowNodes) {
           final t = _parseTrackFromItem(node);
-          if (t != null && !tracks.any((x) => x.id == t.id)) {
-            tracks.add(t);
+          if (t != null && !officialTracks.any((x) => x.id == t.id) && !videoTracks.any((x) => x.id == t.id)) {
+            if (t.coverUrl.contains('googleusercontent.com') || t.coverUrl.contains('ggpht.com')) {
+              officialTracks.add(t);
+            } else {
+              videoTracks.add(t);
+            }
             continue;
           }
           final art = _parseArtistFromItem(node);
@@ -511,6 +628,25 @@ class ApiService {
             continue;
           }
         }
+
+        // 4. Assemble final tracks list: prioritize official audio releases!
+        for (final t in officialTracks) {
+          if (!tracks.any((x) => x.id == t.id)) {
+            tracks.add(t);
+          }
+        }
+
+        // Deduplicate video tracks against official releases by title
+        for (final vt in videoTracks) {
+          final normVTitle = vt.title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+          final hasOfficialMatch = tracks.any((ot) {
+            final normOTitle = ot.title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+            return normOTitle == normVTitle || (normVTitle.contains(normOTitle) && normOTitle.length >= 4);
+          });
+          if (!hasOfficialMatch && !tracks.any((x) => x.id == vt.id)) {
+            tracks.add(vt);
+          }
+        }
       }
     } catch (e) {
       print('ApiService search error: $e');
@@ -522,6 +658,83 @@ class ApiService {
       'albums': albums.take(limit).toList(),
       'playlists': playlists.take(limit).toList(),
     };
+  }
+
+  // --- 3b. Resolve Official High-Resolution Track Artwork ---
+  Future<Map<String, String>?> resolveOfficialArtwork(Track track) async {
+    try {
+      // 1. Clean title and artist
+      String cleanTitle = track.title
+          .replaceAll(RegExp(r'\s*\(official\s*(?:video|audio|music\s*video|hd|4k|visualizer)?\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\[official\s*(?:video|audio|music\s*video|hd|4k|visualizer)?\]', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\(visualizer\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\[visualizer\]', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\(audio\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\[audio\]', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\(video\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\(con\s+[^)]+\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\(feat\.\s+[^)]+\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*\(ft\.\s+[^)]+\)', caseSensitive: false), '')
+          .replaceAll(RegExp(r'\s*-\s*official.*$', caseSensitive: false), '')
+          .trim();
+
+      String cleanArtist = track.artistName;
+      if (cleanArtist.toLowerCase() == 'artista' ||
+          cleanArtist.toLowerCase() == 'unknown artist' ||
+          cleanArtist.toLowerCase() == 'artista sconosciuto') {
+        cleanArtist = '';
+      } else {
+        if (cleanArtist.contains(',')) {
+          cleanArtist = cleanArtist.split(',')[0].trim();
+        }
+        if (cleanArtist.contains('&')) {
+          cleanArtist = cleanArtist.split('&')[0].trim();
+        }
+        if (cleanArtist.contains(' e ')) {
+          cleanArtist = cleanArtist.split(' e ')[0].trim();
+        }
+      }
+
+      final query = cleanArtist.isNotEmpty ? '$cleanArtist $cleanTitle' : cleanTitle;
+
+      // Primary: iTunes Search API (instant, official 600x600 square studio artwork)
+      try {
+        final itunesUri = Uri.parse('https://itunes.apple.com/search?term=${Uri.encodeComponent(query)}&entity=song&limit=3');
+        final itunesRes = await _client.get(itunesUri).timeout(const Duration(seconds: 4));
+        if (itunesRes.statusCode == 200) {
+          final itunesData = jsonDecode(itunesRes.body) as Map<String, dynamic>;
+          final results = itunesData['results'] as List? ?? [];
+          if (results.isNotEmpty) {
+            final item = results[0] as Map;
+            final rawArt = item['artworkUrl100']?.toString() ?? '';
+            if (rawArt.isNotEmpty) {
+              final highRes = rawArt.replaceAll('100x100bb', '600x600bb');
+              return {
+                'coverUrl': highRes,
+                'album': item['collectionName']?.toString() ?? '',
+                'artist': item['artistName']?.toString() ?? cleanArtist,
+              };
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Secondary: YouTube Music tracks search (filter: 'tracks')
+      try {
+        final ytmRes = await search(query, filter: 'tracks', limit: 3);
+        final ytmTracks = (ytmRes['tracks'] as List<Track>?) ?? [];
+        for (final t in ytmTracks) {
+          if (t.coverUrl.contains('googleusercontent.com') || t.coverUrl.contains('ggpht.com')) {
+            return {
+              'coverUrl': t.coverUrl,
+              'album': t.albumName,
+              'artist': t.artistName,
+            };
+          }
+        }
+      } catch (_) {}
+    } catch (_) {}
+    return null;
   }
 
   // --- 4. Resolve Audio Stream with Multi-Source Fallback ---
@@ -688,31 +901,62 @@ class ApiService {
         'playlistId': 'RDAMVM$vId',
       });
 
-      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 8));
+      final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final playlist = data['contents']?['singleColumnMusicWatchNextResultsRenderer']?['tabbedRenderer']?['watchNextTabbedResultsRenderer']?['tabs']?[0]?['tabRenderer']?['content']?['musicQueueRenderer']?['content']?['playlistPanelRenderer']?['contents'] as List? ?? [];
-        
-        final tracks = <Track>[];
-        for (final item in playlist) {
-          final renderer = (item as Map)['playlistPanelVideoRenderer'] as Map?;
-          if (renderer != null) {
-            final tId = renderer['videoId']?.toString() ?? '';
-            final title = renderer['title']?['runs']?[0]?['text']?.toString() ?? '';
-            final artist = ((renderer['shortBylineText']?['runs'] as List?) ?? []).map((r) => r['text']).join('');
-            final thumbs = renderer['thumbnail']?['thumbnails'] as List? ?? [];
-            final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
+        final panelNodes = _findNodes(data, 'playlistPanelVideoRenderer');
 
-            if (tId.isNotEmpty && title.isNotEmpty && tId != vId) {
-              tracks.add(Track(
-                id: tId,
-                videoId: tId,
-                title: title,
-                artistName: AppConfig.sanitizeArtist(artist),
-                coverUrl: AppConfig.formatArtwork(thumb),
-                durationMs: 210000,
-              ));
+        final tracks = <Track>[];
+        final seenIds = <String>{vId};
+
+        for (final renderer in panelNodes) {
+          final tId = renderer['videoId']?.toString() ?? '';
+          if (tId.isEmpty || seenIds.contains(tId)) continue;
+          seenIds.add(tId);
+
+          final title = renderer['title']?['runs']?[0]?['text']?.toString() ?? '';
+          final shortArtist = ((renderer['shortBylineText']?['runs'] as List?) ?? []).map((r) => r['text']).join('');
+
+          String artistId = '';
+          String albumName = '';
+          String albumId = '';
+          final longRuns = (renderer['longBylineText']?['runs'] as List?) ?? [];
+          for (final run in longRuns) {
+            final endpoint = run['navigationEndpoint']?['browseEndpoint'];
+            final pageType = endpoint?['browseEndpointContextSupportedConfigs']?['browseEndpointContextMusicConfig']?['pageType']?.toString() ?? '';
+            if (pageType == 'MUSIC_PAGE_TYPE_ARTIST') {
+              artistId = endpoint?['browseId']?.toString() ?? '';
+            } else if (pageType == 'MUSIC_PAGE_TYPE_ALBUM') {
+              albumId = endpoint?['browseId']?.toString() ?? '';
+              albumName = run['text']?.toString() ?? '';
             }
+          }
+
+          final thumb = _extractLargestThumbnail(renderer['thumbnail']);
+
+          int durationMs = 210000;
+          final durText = renderer['lengthText']?['runs']?[0]?['text']?.toString();
+          if (durText != null) {
+            final parts = durText.split(':').map((s) => int.tryParse(s) ?? 0).toList();
+            if (parts.length == 2) {
+              durationMs = (parts[0] * 60 + parts[1]) * 1000;
+            } else if (parts.length == 3) {
+              durationMs = (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+            }
+          }
+
+          if (title.isNotEmpty) {
+            tracks.add(Track(
+              id: tId,
+              videoId: tId,
+              title: title,
+              artistName: AppConfig.sanitizeArtist(shortArtist.isNotEmpty ? shortArtist : track.artistName),
+              artistId: artistId,
+              albumName: albumName,
+              albumId: albumId,
+              coverUrl: AppConfig.formatArtwork(thumb.isNotEmpty ? thumb : track.coverUrl),
+              durationMs: durationMs,
+            ));
           }
         }
         if (tracks.isNotEmpty) return tracks;
@@ -720,16 +964,42 @@ class ApiService {
     } catch (e) {
       print('ApiService fetchMix error: $e');
     }
+
+    // Fallback: search tracks by artist
+    try {
+      final fallbackQuery = '${track.artistName} mix';
+      final searchRes = await search(fallbackQuery, filter: 'tracks', limit: 25);
+      final tracks = searchRes['tracks'] as List<Track>? ?? [];
+      final filtered = tracks.where((t) => t.id != vId && t.videoId != vId).toList();
+      if (filtered.isNotEmpty) return filtered;
+    } catch (_) {}
+
     return [];
   }
 
   // --- 7. Artist Details ---
   Future<Artist?> fetchArtist(String artistId) async {
     try {
+      var targetId = artistId.trim();
+
+      // If artistId is not a channel ID (e.g. name or empty), perform fallback search!
+      if (!targetId.startsWith('UC')) {
+        if (targetId.isNotEmpty) {
+          final searchRes = await search(targetId, filter: 'artists');
+          final found = (searchRes['artists'] as List<Artist>).firstOrNull;
+          if (found != null && found.id.startsWith('UC')) {
+            targetId = found.id;
+          }
+        }
+        if (!targetId.startsWith('UC')) {
+          return null;
+        }
+      }
+
       final uri = Uri.parse('$_innertubeEndpoint/browse?prettyPrint=false');
       final payload = jsonEncode({
         'context': _buildClientContext(),
-        'browseId': artistId,
+        'browseId': targetId,
       });
 
       final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
@@ -737,11 +1007,20 @@ class ApiService {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         final header = data['header']?['musicImmersiveHeaderRenderer'] ??
                        data['header']?['musicVisualHeaderRenderer'] ??
-                       data['header']?['musicResponsiveHeaderRenderer'];
+                       data['header']?['musicResponsiveHeaderRenderer'] ??
+                       data['header']?['musicHeaderRenderer'];
         final name = header?['title']?['runs']?[0]?['text']?.toString() ?? 'Artista';
+        
+        // Robust thumbnail search
+        String thumb = '';
         final thumbs = (header?['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
                         header?['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
-        final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
+        if (thumbs.isNotEmpty) {
+          thumb = thumbs.last['url']?.toString() ?? '';
+        } else {
+          thumb = _extractLargestThumbnail(header ?? data);
+        }
+
         final desc = header?['description']?['runs']?[0]?['text']?.toString() ?? '';
 
         // Extract top tracks
@@ -751,28 +1030,92 @@ class ApiService {
           final t = _parseTrackFromItem(item);
           if (t != null) {
             topTracks.add(t.copyWith(
-              artistName: t.artistName == 'Artista' || t.artistName.isEmpty ? name : t.artistName,
+              artistName: (t.artistName == 'Artista' || t.artistName.isEmpty) ? name : t.artistName,
+              artistId: t.artistId.isEmpty ? targetId : t.artistId,
             ));
           }
         }
 
-        // Extract albums and singles
-        final rawAlbums = _findNodes(data, 'musicTwoRowItemRenderer');
+        // Extract carousels for Album, Singles & EPs, Playlists, etc.
+        final carousels = _findNodes(data, 'musicCarouselShelfRenderer');
+
         final albums = <Album>[];
-        for (final item in rawAlbums) {
-          final al = _parseAlbumFromTwoRow(item, name);
-          if (al != null && !albums.any((a) => a.id == al.id)) {
-            albums.add(al);
+        final singles = <Album>[];
+        final playlists = <Playlist>[];
+
+        for (final c in carousels) {
+          final cTitle = (c['header']?['musicCarouselShelfBasicHeaderRenderer']?['title']?['runs']?[0]?['text'] ?? '').toString().toLowerCase();
+          final items = _findNodes(c, 'musicTwoRowItemRenderer');
+
+          for (final item in items) {
+            final subRuns = item['subtitle']?['runs'] as List? ?? [];
+            final subText = subRuns.map((r) => r['text']?.toString() ?? '').join('');
+            final subLower = subText.toLowerCase();
+            final bId = item['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ??
+                        item['title']?['runs']?[0]?['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
+
+            if (bId.startsWith('UC')) {
+              // Related artist, ignore here
+              continue;
+            }
+
+            if (bId.startsWith('VL') || bId.startsWith('PL') || subLower.contains('playlist') || cTitle.contains('playlist') || cTitle.contains('primo piano') || cTitle.contains('featured') || cTitle.contains('appare in')) {
+              final pl = _parsePlaylistFromItem(item);
+              if (pl != null && !playlists.any((p) => p.id == pl.id)) {
+                playlists.add(pl);
+              }
+            } else if (cTitle.contains('singol') || cTitle.contains('single') || cTitle.contains('ep') || subLower.contains('singol') || subLower.contains('single') || subLower.contains('ep')) {
+              final isEp = cTitle.contains('ep') || subLower.contains('ep');
+              final al = _parseAlbumFromTwoRow(item, name, targetId, isEp ? 'EP' : 'Single');
+              if (al != null && !singles.any((s) => s.id == al.id)) {
+                singles.add(al);
+              }
+            } else if (cTitle.contains('album') || subLower.contains('album') || bId.startsWith('MPREb_') || bId.startsWith('OLAK5uy_')) {
+              final al = _parseAlbumFromTwoRow(item, name, targetId, 'Album');
+              if (al != null && !albums.any((a) => a.id == al.id)) {
+                albums.add(al);
+              }
+            }
+          }
+        }
+
+        // Fallback: If no carousels were categorized, parse generic musicTwoRowItemRenderer
+        if (albums.isEmpty && singles.isEmpty && playlists.isEmpty) {
+          final rawAlbums = _findNodes(data, 'musicTwoRowItemRenderer');
+          for (final item in rawAlbums) {
+            final subRuns = item['subtitle']?['runs'] as List? ?? [];
+            final subText = subRuns.map((r) => r['text']?.toString() ?? '').join('').toLowerCase();
+            final bId = item['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
+            if (bId.startsWith('UC')) continue;
+
+            if (bId.startsWith('VL') || bId.startsWith('PL') || subText.contains('playlist')) {
+              final pl = _parsePlaylistFromItem(item);
+              if (pl != null && !playlists.any((p) => p.id == pl.id)) {
+                playlists.add(pl);
+              }
+            } else if (subText.contains('singol') || subText.contains('single') || subText.contains('ep')) {
+              final al = _parseAlbumFromTwoRow(item, name, targetId, subText.contains('ep') ? 'EP' : 'Single');
+              if (al != null && !singles.any((s) => s.id == al.id)) {
+                singles.add(al);
+              }
+            } else {
+              final al = _parseAlbumFromTwoRow(item, name, targetId, 'Album');
+              if (al != null && !albums.any((a) => a.id == al.id)) {
+                albums.add(al);
+              }
+            }
           }
         }
 
         return Artist(
-          id: artistId,
+          id: targetId,
           name: AppConfig.sanitizeArtist(name),
           picture: AppConfig.formatArtwork(thumb),
           bio: desc,
           topTracks: topTracks,
           albums: albums,
+          singles: singles,
+          playlists: playlists,
         );
       }
     } catch (e) {
@@ -784,10 +1127,31 @@ class ApiService {
   // --- 8. Album Details ---
   Future<Album?> fetchAlbum(String albumId) async {
     try {
+      var targetId = albumId.trim();
+
+      // If targetId is an OLAK5uy_ playlist ID, prefix with 'VL' for YouTube Music InnerTube
+      if (targetId.startsWith('OLAK5uy_')) {
+        targetId = 'VL$targetId';
+      }
+
+      // If targetId is not a valid album browse ID (e.g. title or empty), perform fallback search!
+      if (!targetId.startsWith('MPREb_') && !targetId.startsWith('VL')) {
+        if (targetId.isNotEmpty) {
+          final searchRes = await search(targetId, filter: 'albums');
+          final found = (searchRes['albums'] as List<Album>).firstOrNull;
+          if (found != null && (found.id.startsWith('MPREb_') || found.id.startsWith('OLAK5uy_') || found.id.startsWith('VL'))) {
+            targetId = found.id.startsWith('OLAK5uy_') ? 'VL${found.id}' : found.id;
+          }
+        }
+        if (!targetId.startsWith('MPREb_') && !targetId.startsWith('VL')) {
+          return null;
+        }
+      }
+
       final uri = Uri.parse('$_innertubeEndpoint/browse?prettyPrint=false');
       final payload = jsonEncode({
         'context': _buildClientContext(),
-        'browseId': albumId,
+        'browseId': targetId,
       });
 
       final res = await _client.post(uri, headers: _buildInnertubeHeaders(), body: payload).timeout(const Duration(seconds: 10));
@@ -796,7 +1160,7 @@ class ApiService {
         
         final respHeader = _findNodes(data, 'musicResponsiveHeaderRenderer').firstOrNull;
         final detailHeader = _findNodes(data, 'musicDetailHeaderRenderer').firstOrNull;
-        final header = respHeader ?? detailHeader ?? data['header']?['musicDetailHeaderRenderer'] ?? data['header']?['musicResponsiveHeaderRenderer'];
+        final header = respHeader ?? detailHeader ?? data['header']?['musicDetailHeaderRenderer'] ?? data['header']?['musicResponsiveHeaderRenderer'] ?? data['header']?['musicEditablePlaylistDetailHeaderRenderer']?['header']?['musicResponsiveHeaderRenderer'];
 
         final title = header?['title']?['runs']?[0]?['text']?.toString() ?? 'Album';
         
@@ -808,40 +1172,62 @@ class ApiService {
           final t = (r as Map)['text']?.toString() ?? '';
           final bId = r['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
           if (t.isNotEmpty && artist.isEmpty) artist = t;
-          if (bId.isNotEmpty && artistId.isEmpty) artistId = bId;
-        }
-        if (artist.isEmpty) {
-          final subRuns = header?['subtitle']?['runs'] as List? ?? [];
-          for (final r in subRuns) {
-            final t = (r as Map)['text']?.toString() ?? '';
-            final bId = r['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
-            if (bId.startsWith('UC') || bId.startsWith('FEmusic_library')) {
-              artist = t;
-              artistId = bId;
-              break;
-            }
-          }
-        }
-        if (artist.isEmpty) {
-          artist = 'Artista';
+          if (bId.isNotEmpty && artistId.isEmpty && bId.startsWith('UC')) artistId = bId;
         }
 
-        // Extract year
         final subRuns = header?['subtitle']?['runs'] as List? ?? [];
-        String year = '';
         for (final r in subRuns) {
-          final txt = (r as Map)['text']?.toString() ?? '';
-          final yearMatch = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(txt);
-          if (yearMatch != null) {
-            year = yearMatch.group(1) ?? '';
+          final t = (r as Map)['text']?.toString() ?? '';
+          final bId = r['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
+          if (bId.startsWith('UC')) {
+            if (artist.isEmpty || artist == 'Artista') artist = t;
+            if (artistId.isEmpty) artistId = bId;
             break;
           }
         }
 
-        // Extract cover artwork
+        // Secondary fallback for artist in subtitle (non-metadata text)
+        if (artist.isEmpty || artist == 'Artista') {
+          for (final r in subRuns) {
+            final t = (r as Map)['text']?.toString() ?? '';
+            if (t != 'Album' && t != 'Singolo' && t != 'EP' && t != ' • ' && !t.contains('19') && !t.contains('20') && !t.contains('brano') && !t.contains('brani')) {
+              artist = t;
+              break;
+            }
+          }
+        }
+        if (artist.isEmpty) artist = 'Artista';
+
+        // Extract year & release type
+        String year = '';
+        String type = 'Album';
+        for (final r in subRuns) {
+          final txt = (r as Map)['text']?.toString() ?? '';
+          final lower = txt.toLowerCase();
+          if (lower.contains('singol') || lower.contains('single')) {
+            type = 'Single';
+          } else if (lower.contains('ep')) {
+            type = 'EP';
+          } else if (lower.contains('album')) {
+            type = 'Album';
+          }
+          final yearMatch = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(txt);
+          if (yearMatch != null) {
+            year = yearMatch.group(1) ?? '';
+          }
+        }
+
+        // Robust cover artwork extraction
+        String cover = '';
         final thumbs = (header?['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
                         header?['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
-        final cover = thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
+        if (thumbs.isNotEmpty) {
+          cover = thumbs.last['url']?.toString() ?? '';
+        } else {
+          cover = _extractLargestThumbnail(header ?? data);
+        }
+
+        final formattedAlbumCover = AppConfig.formatArtwork(cover);
 
         // Extract tracks
         final rawTracks = _findNodes(data, 'musicResponsiveListItemRenderer');
@@ -849,25 +1235,34 @@ class ApiService {
         for (final item in rawTracks) {
           final t = _parseTrackFromItem(item);
           if (t != null) {
+            final hasTrackCover = t.coverUrl.isNotEmpty && !t.coverUrl.contains('resources.tidal.com/images/default');
+            final hasAlbumCover = formattedAlbumCover.isNotEmpty && !formattedAlbumCover.contains('resources.tidal.com/images/default');
+            final effectiveCover = hasTrackCover
+                ? t.coverUrl
+                : (hasAlbumCover
+                    ? formattedAlbumCover
+                    : (t.videoId.isNotEmpty ? 'https://i.ytimg.com/vi/${t.videoId}/hqdefault.jpg' : formattedAlbumCover));
+
             tracks.add(t.copyWith(
               albumName: title,
-              albumId: albumId,
+              albumId: targetId,
               artistName: (t.artistName.isNotEmpty && t.artistName != 'Artista' && t.artistName != 'Unknown Artist')
                   ? t.artistName
                   : (artist != 'Artista' ? artist : t.artistName),
               artistId: t.artistId.isNotEmpty ? t.artistId : artistId,
-              coverUrl: t.coverUrl.isNotEmpty ? t.coverUrl : cover,
+              coverUrl: effectiveCover,
             ));
           }
         }
 
         return Album(
-          id: albumId,
+          id: targetId,
           title: title,
           artistName: AppConfig.sanitizeArtist(artist),
           artistId: artistId,
           coverUrl: AppConfig.formatArtwork(cover),
           year: year,
+          type: type,
           tracks: tracks,
         );
       }
@@ -924,34 +1319,62 @@ class ApiService {
     return null;
   }
 
-  Album? _parseAlbumFromTwoRow(Map item, String defaultArtist) {
+  Album? _parseAlbumFromTwoRow(Map item, String defaultArtist, [String defaultArtistId = '', String explicitType = '']) {
     try {
       final renderer = item['musicTwoRowItemRenderer'] ?? item;
       final nav = renderer['navigationEndpoint'] ?? renderer['title']?['runs']?[0]?['navigationEndpoint'];
       final bId = nav?['browseEndpoint']?['browseId']?.toString();
       if (bId == null || bId.isEmpty) return null;
 
+      // Filter: only allow genuine album or single browse IDs (reject related artists UC... and playlists)
+      final pageType = nav?['browseEndpoint']?['browseEndpointContextSupportedConfigs']?['browseEndpointContextMusicConfig']?['pageType']?.toString() ?? '';
+      final isAlbumId = bId.startsWith('MPREb_') || bId.startsWith('OLAK5uy_') || pageType == 'MUSIC_PAGE_TYPE_ALBUM';
+      if (!isAlbumId && (bId.startsWith('UC') || bId.startsWith('VLPL') || bId.startsWith('PL'))) return null;
+
       final title = renderer['title']?['runs']?[0]?['text']?.toString() ?? 'Album';
+      
+      // Robust thumbnail extraction
+      String thumb = '';
       final thumbs = (renderer['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
                       renderer['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
-      final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
+      if (thumbs.isNotEmpty) {
+        thumb = thumbs.last['url']?.toString() ?? '';
+      } else {
+        thumb = _extractLargestThumbnail(renderer);
+      }
 
       final subRuns = renderer['subtitle']?['runs'] as List? ?? [];
       String year = '';
+      String detectedType = explicitType;
       for (final r in subRuns) {
-        final txt = r['text']?.toString() ?? '';
-        if (txt.contains('202') || txt.contains('201') || txt.contains('199') || txt.contains('198')) {
-          year = txt;
-          break;
+        final txt = (r as Map)['text']?.toString() ?? '';
+        final lower = txt.toLowerCase();
+        if (detectedType.isEmpty) {
+          if (lower.contains('singol') || lower.contains('single')) {
+            detectedType = 'Single';
+          } else if (lower.contains('ep')) {
+            detectedType = 'EP';
+          } else if (lower.contains('album')) {
+            detectedType = 'Album';
+          }
         }
+        final m = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(txt);
+        if (m != null) {
+          year = m.group(1) ?? '';
+        }
+      }
+      if (detectedType.isEmpty) {
+        detectedType = 'Album';
       }
 
       return Album(
         id: bId,
         title: title,
         artistName: defaultArtist,
+        artistId: defaultArtistId,
         coverUrl: AppConfig.formatArtwork(thumb),
         year: year,
+        type: detectedType,
       );
     } catch (_) {
       return null;
@@ -966,30 +1389,27 @@ class ApiService {
         'context': _buildClientContext(),
       });
 
-      final headers = _buildInnertubeHeaders();
-      headers['Cookie'] = cookieString;
-      final auth = _generateSapisidHash(cookieString);
-      if (auth != null) headers['Authorization'] = auth;
+      final headers = _buildInnertubeHeaders(cookieString);
 
-      final res = await _client.post(uri, headers: headers, body: payload).timeout(const Duration(seconds: 6));
+      final res = await _client.post(uri, headers: headers, body: payload).timeout(const Duration(seconds: 8));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final actions = data['actions'] as List? ?? [];
-        if (actions.isNotEmpty) {
-          final header = actions[0]?['openPopupAction']?['popup']?['multiPageMenuRenderer']?['header']?['activeAccountHeaderRenderer'];
-          if (header != null) {
-            final name = header['accountName']?['runs']?[0]?['text']?.toString() ?? 'Utente Google';
-            final email = header['email']?['runs']?[0]?['text']?.toString() ?? '';
-            final thumbs = header['accountPhoto']?['thumbnails'] as List? ?? [];
-            final avatar = thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
+        final headerNodes = _findNodes(data, 'activeAccountHeaderRenderer');
+        if (headerNodes.isNotEmpty) {
+          final header = headerNodes.first;
+          final name = header['accountName']?['runs']?[0]?['text']?.toString() ??
+                       header['accountName']?['simpleText']?.toString() ?? 'Utente Google';
+          final email = header['email']?['runs']?[0]?['text']?.toString() ??
+                        header['email']?['simpleText']?.toString() ?? '';
+          final thumbs = header['accountPhoto']?['thumbnails'] as List? ?? [];
+          final avatar = thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
 
-            return GoogleUser(
-              name: name,
-              email: email,
-              avatarUrl: AppConfig.formatArtwork(avatar),
-              cookie: cookieString,
-            );
-          }
+          return GoogleUser(
+            name: name,
+            email: email,
+            avatarUrl: AppConfig.formatArtwork(avatar),
+            cookie: cookieString,
+          );
         }
       }
     } catch (e) {
@@ -1025,6 +1445,7 @@ class ApiService {
             final data = jsonDecode(res.body) as Map<String, dynamic>;
             final items = [
               ..._findNodes(data, 'musicResponsiveListItemRenderer'),
+              ..._findNodes(data, 'playlistPanelVideoRenderer'),
               ..._findNodes(data, 'musicTwoRowItemRenderer'),
             ];
             for (final item in items) {
@@ -1045,8 +1466,8 @@ class ApiService {
         }
       }
 
-      // 1.2 Playlists via Innertube (Try FEmusic_liked_playlists, FEmusic_library_landing)
-      for (final plBrowseId in ['FEmusic_liked_playlists', 'FEmusic_library_landing']) {
+      // 1.2 Playlists via Innertube (Try FEmusic_library_playlists, FEmusic_liked_playlists, FEmusic_library_landing)
+      for (final plBrowseId in ['FEmusic_library_playlists', 'FEmusic_liked_playlists', 'FEmusic_library_landing']) {
         try {
           final uri = Uri.parse('$_innertubeEndpoint/browse?prettyPrint=false');
           final payload = jsonEncode({
@@ -1068,9 +1489,6 @@ class ApiService {
               }
             }
             print('[syncGoogleLibrary] $plBrowseId parsed ${playlists.length} playlists (from ${items.length} raw nodes)');
-            if (playlists.isNotEmpty) {
-              break;
-            }
           } else {
             print('[syncGoogleLibrary] $plBrowseId returned non-200: ${res.body.substring(0, (res.body.length).clamp(0, 200))}');
           }
@@ -1184,6 +1602,7 @@ class ApiService {
     try {
       final twoRow = item['musicTwoRowItemRenderer'] as Map? ?? (item.containsKey('title') && item.containsKey('navigationEndpoint') ? item : null);
       final responsive = item['musicResponsiveListItemRenderer'] as Map? ?? (item.containsKey('flexColumns') ? item : null);
+      final panelVideo = item['playlistPanelVideoRenderer'] as Map? ?? (item.containsKey('shortBylineText') && item.containsKey('videoId') ? item : null);
 
       if (twoRow != null) {
         var title = twoRow['title']?['runs']?[0]?['text']?.toString() ?? '';
@@ -1285,6 +1704,36 @@ class ApiService {
           }
         }
 
+        String albumName = '';
+        String albumId = '';
+        int durationMs = 210000;
+
+        for (final col in flexCols) {
+          final runs = (col as Map)['musicResponsiveListItemFlexColumnRenderer']?['text']?['runs'] as List? ?? [];
+          for (final r in runs) {
+            final ep = (r as Map)['navigationEndpoint']?['browseEndpoint'];
+            final pageType = ep?['browseEndpointContextSupportedConfigs']?['browseEndpointContextMusicConfig']?['pageType']?.toString() ?? '';
+            final bId = ep?['browseId']?.toString() ?? '';
+            if (pageType == 'MUSIC_PAGE_TYPE_ALBUM' || bId.startsWith('MPREb_')) {
+              albumId = bId;
+              albumName = r['text']?.toString() ?? '';
+            }
+          }
+        }
+
+        final fixedCols = responsive['fixedColumns'] as List? ?? [];
+        if (fixedCols.isNotEmpty) {
+          final durText = (fixedCols[0] as Map)['musicResponsiveListItemFixedColumnRenderer']?['text']?['runs']?[0]?['text']?.toString();
+          if (durText != null) {
+            final parts = durText.split(':').map((s) => int.tryParse(s) ?? 0).toList();
+            if (parts.length == 2) {
+              durationMs = (parts[0] * 60 + parts[1]) * 1000;
+            } else if (parts.length == 3) {
+              durationMs = (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+            }
+          }
+        }
+
         String vId = responsive['playlistItemData']?['videoId']?.toString() ??
                     responsive['overlay']?['musicItemThumbnailOverlayRenderer']?['content']?['musicPlayButtonRenderer']?['playNavigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ??
                     col0?['text']?['runs']?[0]?['navigationEndpoint']?['watchEndpoint']?['videoId']?.toString() ??
@@ -1304,6 +1753,26 @@ class ApiService {
           }
         }
 
+        if (vId.isEmpty) {
+          void findVId(dynamic node) {
+            if (vId.isNotEmpty) return;
+            if (node is Map) {
+              if (node.containsKey('videoId') && node['videoId'] is String && (node['videoId'] as String).isNotEmpty) {
+                vId = node['videoId'] as String;
+                return;
+              }
+              for (final v in node.values) {
+                findVId(v);
+              }
+            } else if (node is List) {
+              for (final e in node) {
+                findVId(e);
+              }
+            }
+          }
+          findVId(responsive);
+        }
+
         final thumbs = (responsive['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ??
                         responsive['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
         final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
@@ -1315,8 +1784,52 @@ class ApiService {
             title: title,
             artistName: AppConfig.sanitizeArtist(artist.isNotEmpty ? artist : 'Artista'),
             artistId: artistId,
+            albumName: albumName,
+            albumId: albumId,
             coverUrl: AppConfig.formatArtwork(thumb),
-            durationMs: 210000,
+            durationMs: durationMs,
+          );
+        }
+      } else if (panelVideo != null) {
+        final vId = panelVideo['videoId']?.toString() ?? '';
+        final title = panelVideo['title']?['runs']?[0]?['text']?.toString() ?? '';
+        final shortArtist = ((panelVideo['shortBylineText']?['runs'] as List?) ?? []).map((r) => r['text']).join('');
+        String artistId = '';
+        String albumName = '';
+        String albumId = '';
+        final longRuns = (panelVideo['longBylineText']?['runs'] as List?) ?? [];
+        for (final run in longRuns) {
+          final endpoint = run['navigationEndpoint']?['browseEndpoint'];
+          final pageType = endpoint?['browseEndpointContextSupportedConfigs']?['browseEndpointContextMusicConfig']?['pageType']?.toString() ?? '';
+          if (pageType == 'MUSIC_PAGE_TYPE_ARTIST') {
+            artistId = endpoint?['browseId']?.toString() ?? '';
+          } else if (pageType == 'MUSIC_PAGE_TYPE_ALBUM') {
+            albumId = endpoint?['browseId']?.toString() ?? '';
+            albumName = run['text']?.toString() ?? '';
+          }
+        }
+        final thumb = _extractLargestThumbnail(panelVideo['thumbnail']);
+        int durationMs = 210000;
+        final durText = panelVideo['lengthText']?['runs']?[0]?['text']?.toString();
+        if (durText != null) {
+          final parts = durText.split(':').map((s) => int.tryParse(s) ?? 0).toList();
+          if (parts.length == 2) {
+            durationMs = (parts[0] * 60 + parts[1]) * 1000;
+          } else if (parts.length == 3) {
+            durationMs = (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+          }
+        }
+        if (title.isNotEmpty && vId.isNotEmpty) {
+          return Track(
+            id: vId,
+            videoId: vId,
+            title: title,
+            artistName: AppConfig.sanitizeArtist(shortArtist.isNotEmpty ? shortArtist : 'Artista'),
+            artistId: artistId,
+            albumName: albumName,
+            albumId: albumId,
+            coverUrl: AppConfig.formatArtwork(thumb),
+            durationMs: durationMs,
           );
         }
       }
@@ -1336,9 +1849,15 @@ class ApiService {
         final thumbs = (resp['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ?? resp['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
         final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
 
-        if (browseId.startsWith('UC') || browseId.startsWith('FEmusic_library_privately_owned_artist')) {
+        final nav = resp['navigationEndpoint'] ?? col0?['text']?['runs']?[0]?['navigationEndpoint'];
+        final pageType = nav?['browseEndpoint']?['browseEndpointContextSupportedConfigs']?['browseEndpointContextMusicConfig']?['pageType']?.toString() ?? '';
+        final subtitleRuns = (resp['subtitle']?['runs'] as List?) ?? [];
+        final subtitleText = subtitleRuns.map((r) => (r as Map)['text']).join('').toLowerCase();
+        final isArtist = pageType == 'MUSIC_PAGE_TYPE_ARTIST' || subtitleText.contains('artist') || subtitleText.contains('artista');
+
+        if (browseId.startsWith('UC') || browseId.startsWith('FEmusic_library') || (isArtist && title.isNotEmpty)) {
           return Artist(
-            id: browseId,
+            id: browseId.isNotEmpty ? browseId : title,
             name: AppConfig.sanitizeArtist(title),
             picture: AppConfig.formatArtwork(thumb),
           );
@@ -1358,7 +1877,48 @@ class ApiService {
         final browseId = resp['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ??
                          col0?['text']?['runs']?[0]?['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
         final title = resp['title']?['runs']?[0]?['text']?.toString() ?? col0?['text']?['runs']?[0]?['text']?.toString() ?? '';
-        final artist = ((col1?['text']?['runs'] as List?) ?? []).map((r) => r['text']).join('');
+        
+        String artist = '';
+        String artistId = '';
+        String year = '';
+        final runs = (col1?['text']?['runs'] as List?) ?? (resp['subtitle']?['runs'] as List?) ?? [];
+        for (final r in runs) {
+          final t = (r as Map)['text']?.toString() ?? '';
+          final bId = r['navigationEndpoint']?['browseEndpoint']?['browseId']?.toString() ?? '';
+          if (bId.startsWith('UC')) {
+            artistId = bId;
+            artist = t;
+          }
+          final yMatch = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(t);
+          if (yMatch != null) {
+            year = yMatch.group(1) ?? '';
+          }
+        }
+        if (artist.isEmpty) {
+          for (final r in runs) {
+            final t = (r as Map)['text']?.toString() ?? '';
+            if (t != 'Album' && t != 'Singolo' && t != 'EP' && t != ' • ' && !t.contains('19') && !t.contains('20')) {
+              artist = t;
+              break;
+            }
+          }
+        }
+
+        String type = 'Album';
+        for (final r in runs) {
+          final t = ((r as Map)['text']?.toString() ?? '').toLowerCase();
+          if (t.contains('singol') || t.contains('single')) {
+            type = 'Single';
+            break;
+          } else if (t.contains('ep')) {
+            type = 'EP';
+            break;
+          } else if (t.contains('album')) {
+            type = 'Album';
+            break;
+          }
+        }
+
         final thumbs = (resp['thumbnail']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails'] ?? resp['thumbnailRenderer']?['musicThumbnailRenderer']?['thumbnail']?['thumbnails']) as List? ?? [];
         final thumb = thumbs.isNotEmpty ? thumbs.last['url']?.toString() : '';
 
@@ -1366,8 +1926,11 @@ class ApiService {
           return Album(
             id: browseId,
             title: title,
-            artistName: AppConfig.sanitizeArtist(artist),
+            artistName: AppConfig.sanitizeArtist(artist.isNotEmpty ? artist : 'Artista'),
+            artistId: artistId,
             coverUrl: AppConfig.formatArtwork(thumb),
+            year: year,
+            type: type,
           );
         }
       }

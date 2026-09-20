@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/track.dart';
 import '../../providers/player_state.dart';
+import '../../providers/library_state.dart';
 import '../theme/app_theme.dart';
-import '../screens/full_player_screen.dart';
 import 'soundwave_visualizer.dart';
 
 class StitchTrackRow extends StatelessWidget {
@@ -23,12 +23,16 @@ class StitchTrackRow extends StatelessWidget {
     this.showTopBadge = false,
   });
 
+  String get _effectiveArtwork => track.effectiveCoverUrl;
+
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerState>();
+    final library = context.watch<LibraryState>();
     final isCurrent = player.currentTrack?.id == track.id ||
         (track.videoId.isNotEmpty && player.currentTrack?.videoId == track.videoId);
     final isPlaying = isCurrent && player.isPlaying;
+    final isLiked = library.isLiked(track.id);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -63,7 +67,12 @@ class StitchTrackRow extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            player.playTrack(track, newQueue: queue, index: index);
+            final effectiveTrack = track.copyWith(coverUrl: track.effectiveCoverUrl);
+            if (isCurrent) {
+              player.togglePlay();
+            } else {
+              player.playTrack(effectiveTrack, newQueue: queue, index: index);
+            }
           },
           borderRadius: BorderRadius.circular(16),
           splashColor: const Color(0xFFFA2D48).withOpacity(0.15),
@@ -127,15 +136,28 @@ class StitchTrackRow extends StatelessWidget {
                           fit: StackFit.expand,
                           children: [
                             CachedNetworkImage(
-                              imageUrl: track.coverUrl,
+                              imageUrl: _effectiveArtwork,
                               fit: BoxFit.cover,
                               memCacheWidth: 120,
                               memCacheHeight: 120,
                               placeholder: (c, u) => Container(color: AppTheme.surfaceContainerHighest),
-                              errorWidget: (c, u, e) => Container(
-                                color: AppTheme.surfaceContainerHighest,
-                                child: const Icon(Icons.music_note_rounded, color: Colors.white38, size: 20),
-                              ),
+                              errorWidget: (c, u, e) {
+                                final vId = track.effectiveVideoId;
+                                if (vId.isNotEmpty && _effectiveArtwork != 'https://i.ytimg.com/vi/$vId/hqdefault.jpg') {
+                                  return Image.network(
+                                    'https://i.ytimg.com/vi/$vId/hqdefault.jpg',
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      color: AppTheme.surfaceContainerHighest,
+                                      child: const Icon(Icons.music_note_rounded, color: Colors.white38, size: 20),
+                                    ),
+                                  );
+                                }
+                                return Container(
+                                  color: AppTheme.surfaceContainerHighest,
+                                  child: const Icon(Icons.music_note_rounded, color: Colors.white38, size: 20),
+                                );
+                              },
                             ),
                             if (isCurrent)
                               Container(
@@ -215,7 +237,7 @@ class StitchTrackRow extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            customSubtitle ?? (track.artistName.isNotEmpty ? track.artistName : 'Preluded Hi-Fi'),
+                            customSubtitle ?? (track.albumName.isNotEmpty ? track.albumName : (track.artistName.isNotEmpty ? track.artistName : 'Singolo')),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTheme.inter(
@@ -249,26 +271,16 @@ class StitchTrackRow extends StatelessWidget {
                       ),
                     ),
 
-                    // Lyrics button
+                    // Like / Heart button
                     IconButton(
                       icon: Icon(
-                        Icons.lyrics_rounded,
-                        color: isCurrent ? const Color(0xFFFF525E) : Colors.white38,
-                        size: 18,
+                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                        color: isLiked ? const Color(0xFFFA2D48) : Colors.white38,
+                        size: 20,
                       ),
-                      tooltip: 'Testo brano',
+                      tooltip: isLiked ? 'Rimuovi dai Preferiti' : 'Aggiungi ai Preferiti',
                       splashRadius: 18,
-                      onPressed: () {
-                        if (!isCurrent) {
-                          player.playTrack(track, newQueue: queue, index: index);
-                        }
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const FullPlayerScreen(initialTab: 1),
-                          ),
-                        );
-                      },
+                      onPressed: () => library.toggleLike(track),
                     ),
                   ],
                 ),

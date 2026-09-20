@@ -31,6 +31,21 @@ class Track {
     this.isLiked = false,
   });
 
+  String get effectiveVideoId => videoId.isNotEmpty ? videoId : id;
+
+  String get effectiveCoverUrl {
+    if (coverUrl.isNotEmpty &&
+        !coverUrl.contains('resources.tidal.com') &&
+        (coverUrl.startsWith('http://') || coverUrl.startsWith('https://'))) {
+      return coverUrl;
+    }
+    final vId = effectiveVideoId;
+    if (vId.isNotEmpty && vId.length >= 8) {
+      return 'https://i.ytimg.com/vi/$vId/hqdefault.jpg';
+    }
+    return coverUrl;
+  }
+
   String get formattedDuration {
     final totalSec = durationMs ~/ 1000;
     final minutes = totalSec ~/ 60;

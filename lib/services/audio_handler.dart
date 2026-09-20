@@ -7,9 +7,10 @@ import '../config/app_config.dart';
 import 'api_service.dart';
 import 'storage_service.dart';
 import 'local_stream_proxy.dart';
+import 'windows_smtc_service.dart';
 
 Future<AudioHandler> initAudioService(ApiService apiService, StorageService storageService) async {
-  return await AudioService.init(
+  final handler = await AudioService.init(
     builder: () => PreludedAudioHandler(apiService, storageService),
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.preluded.music.channel.audio',
@@ -19,6 +20,8 @@ Future<AudioHandler> initAudioService(ApiService apiService, StorageService stor
       androidNotificationIcon: 'mipmap/ic_launcher',
     ),
   );
+  WindowsSmtcService.initialize(handler);
+  return handler;
 }
 
 class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
@@ -31,6 +34,8 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
   int _currentIndex = 0;
   bool _isShuffle = false;
   LoopMode _loopMode = LoopMode.off;
+  bool _shouldPlayWhenReady = false;
+  bool _isStartingPendingPlayback = false;
 
   PreludedAudioHandler(this._api, this._storage) {
     _initAudioSession();
@@ -55,7 +60,7 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
       : null;
 
   void _broadcastState() {
-    final playing = _player.playing;
+    final playing = _player.playing || _shouldPlayWhenReady;
     final procState = const {
       ProcessingState.idle: AudioProcessingState.idle,
       ProcessingState.loading: AudioProcessingState.loading,
@@ -93,6 +98,17 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
     // 2. Track Completion & State Changes (emits on playing and processingState change)
     _player.playerStateStream.listen((state) {
       _broadcastState();
+
+      // Auto-start playback on Windows/platforms where play() during Opening was deferred
+      if (_shouldPlayWhenReady &&
+          (state.processingState == ProcessingState.ready ||
+           state.processingState == ProcessingState.buffering)) {
+        _startPendingPlayback();
+      }
+      if (state.playing) {
+        _shouldPlayWhenReady = false;
+      }
+
       if (state.processingState == ProcessingState.completed) {
         if (_loopMode == LoopMode.one) {
           _player.seek(Duration.zero);
@@ -113,6 +129,35 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
         mediaItem.add(item.copyWith(duration: dur));
       }
     });
+  }
+
+  Future<void> _startPendingPlayback() async {
+    if (_isStartingPendingPlayback || !_shouldPlayWhenReady || _player.playing) return;
+    _isStartingPendingPlayback = true;
+    try {
+      for (var attempt = 0; attempt < 5; attempt++) {
+        if (!_shouldPlayWhenReady || _player.playing) return;
+        await _player.play();
+        if (_player.playing) return;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    } catch (e) {
+      print('[AudioHandler] Delayed playback start failed: $e');
+    } finally {
+      _isStartingPendingPlayback = false;
+    }
+  }
+
+  Future<void> _playSourceWhenReady() async {
+    if (_player.processingState != ProcessingState.ready &&
+        _player.processingState != ProcessingState.buffering) {
+      await _player.processingStateStream
+          .firstWhere(
+            (state) => state == ProcessingState.ready || state == ProcessingState.buffering,
+          )
+          .timeout(const Duration(seconds: 10));
+    }
+    await _player.play();
   }
 
   Future<void> loadAndPlayTrack(Track track, {List<Track>? newQueue, int? index}) async {
@@ -151,25 +196,35 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
 
     await _storage.addToHistory(targetTrack);
 
-    // Update MediaItem for iOS Lock Screen & Android Notification
+    // Auto-resolve official studio square artwork if missing or YouTube video thumbnail
+    if (targetTrack.coverUrl.isEmpty || targetTrack.coverUrl.contains('i.ytimg.com')) {
+      _enrichTrackArtwork(targetTrack, _currentIndex);
+    }
+
+    // Update MediaItem for iOS Lock Screen & Android Notification & Windows SMTC
+    final effectiveCover = targetTrack.effectiveCoverUrl;
     final item = MediaItem(
       id: targetTrack.id,
       album: targetTrack.albumName,
       title: targetTrack.title,
       artist: targetTrack.artistName,
       duration: Duration(milliseconds: targetTrack.durationMs),
-      artUri: Uri.parse(targetTrack.coverUrl),
+      artUri: effectiveCover.isNotEmpty ? Uri.tryParse(effectiveCover) : null,
     );
     mediaItem.add(item);
-    queue.add(_tracksQueue.map((t) => MediaItem(
-      id: t.id,
-      album: t.albumName,
-      title: t.title,
-      artist: t.artistName,
-      duration: Duration(milliseconds: t.durationMs),
-      artUri: Uri.parse(t.coverUrl),
-    )).toList());
+    queue.add(_tracksQueue.map((t) {
+      final tCover = t.effectiveCoverUrl;
+      return MediaItem(
+        id: t.id,
+        album: t.albumName,
+        title: t.title,
+        artist: t.artistName,
+        duration: Duration(milliseconds: t.durationMs),
+        artUri: tCover.isNotEmpty ? Uri.tryParse(tCover) : null,
+      );
+    }).toList());
 
+    _shouldPlayWhenReady = true;
     try {
       if (!_localProxy.isRunning) {
         await _localProxy.start();
@@ -181,7 +236,28 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
         tag: item,
       );
       await _player.setAudioSource(audioSource);
-      await _player.play();
+      await _playSourceWhenReady();
+      _broadcastState();
+
+      // Retry playback triggers if platform (e.g. Windows) was in Opening state
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (_shouldPlayWhenReady && !_player.playing) {
+          _player.play();
+          _broadcastState();
+        }
+      });
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (_shouldPlayWhenReady && !_player.playing) {
+          _player.play();
+          _broadcastState();
+        }
+      });
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (_shouldPlayWhenReady && !_player.playing) {
+          _player.play();
+          _broadcastState();
+        }
+      });
 
       // Prefetch radio mix if queue is single track
       if (_tracksQueue.length == 1) {
@@ -199,8 +275,23 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
           },
           tag: item,
         );
+        _shouldPlayWhenReady = true;
         await _player.setAudioSource(fallbackSource);
-        await _player.play();
+        await _playSourceWhenReady();
+        _broadcastState();
+
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (_shouldPlayWhenReady && !_player.playing) {
+            _player.play();
+            _broadcastState();
+          }
+        });
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (_shouldPlayWhenReady && !_player.playing) {
+            _player.play();
+            _broadcastState();
+          }
+        });
 
         if (_tracksQueue.length == 1) {
           _fetchAndAppendMix(targetTrack);
@@ -211,31 +302,78 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
+  void _enrichTrackArtwork(Track track, int targetIndex) async {
+    try {
+      final result = await _api.resolveOfficialArtwork(track);
+      if (result != null && result['coverUrl'] != null && result['coverUrl']!.isNotEmpty) {
+        final newCover = result['coverUrl']!;
+        final newAlbum = (result['album'] != null && result['album']!.isNotEmpty)
+            ? result['album']!
+            : track.albumName;
+        final newArtist = (track.artistName.isEmpty ||
+                track.artistName.toLowerCase() == 'artista' ||
+                track.artistName.toLowerCase() == 'unknown artist') &&
+            result['artist'] != null &&
+            result['artist']!.isNotEmpty
+            ? result['artist']!
+            : track.artistName;
+
+        if (targetIndex >= 0 && targetIndex < _tracksQueue.length && _tracksQueue[targetIndex].id == track.id) {
+          final updated = _tracksQueue[targetIndex].copyWith(
+            coverUrl: newCover,
+            albumName: newAlbum.isNotEmpty ? newAlbum : _tracksQueue[targetIndex].albumName,
+            artistName: newArtist,
+          );
+          _tracksQueue[targetIndex] = updated;
+
+          if (_currentIndex == targetIndex) {
+            final currentVal = mediaItem.value;
+            final updatedItem = currentVal?.copyWith(
+              album: newAlbum.isNotEmpty ? newAlbum : currentVal.album,
+              artist: newArtist,
+              artUri: Uri.tryParse(newCover),
+            );
+            if (updatedItem != null) {
+              mediaItem.add(updatedItem);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('[AudioHandler] Artwork enrichment error for ${track.title}: $e');
+    }
+  }
+
   Future<void> _fetchAndAppendMix(Track seed) async {
     try {
       final mixTracks = await _api.fetchMix(seed);
       if (mixTracks.isNotEmpty) {
         _tracksQueue.addAll(mixTracks);
-        queue.add(_tracksQueue.map((t) => MediaItem(
-          id: t.id,
-          album: t.albumName,
-          title: t.title,
-          artist: t.artistName,
-          duration: Duration(milliseconds: t.durationMs),
-          artUri: Uri.parse(t.coverUrl),
-        )).toList());
+        queue.add(_tracksQueue.map((t) {
+          final tCover = t.effectiveCoverUrl;
+          return MediaItem(
+            id: t.id,
+            album: t.albumName,
+            title: t.title,
+            artist: t.artistName,
+            duration: Duration(milliseconds: t.durationMs),
+            artUri: tCover.isNotEmpty ? Uri.tryParse(tCover) : null,
+          );
+        }).toList());
       }
     } catch (_) {}
   }
 
   @override
   Future<void> play() async {
+    _shouldPlayWhenReady = true;
     await _player.play();
     _broadcastState();
   }
 
   @override
   Future<void> pause() async {
+    _shouldPlayWhenReady = false;
     await _player.pause();
     _broadcastState();
   }
@@ -271,6 +409,7 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> stop() async {
+    _shouldPlayWhenReady = false;
     await _player.stop();
     _broadcastState();
     return super.stop();
@@ -324,6 +463,21 @@ class PreludedAudioHandler extends BaseAudioHandler with SeekHandler {
       if (_currentIndex >= _tracksQueue.length) {
         _currentIndex = _tracksQueue.length - 1;
       }
+    }
+  }
+
+  void setQueue(List<Track> newQueue, int currentIndex) {
+    if (newQueue.isNotEmpty) {
+      _tracksQueue = List.from(newQueue);
+      _currentIndex = currentIndex.clamp(0, _tracksQueue.length - 1);
+      queue.add(_tracksQueue.map((t) => MediaItem(
+        id: t.id,
+        album: t.albumName,
+        title: t.title,
+        artist: t.artistName,
+        duration: Duration(milliseconds: t.durationMs),
+        artUri: Uri.tryParse(t.coverUrl),
+      )).toList());
     }
   }
 

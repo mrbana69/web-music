@@ -31,24 +31,67 @@ class _AlbumScreenState extends State<AlbumScreen> {
   void initState() {
     super.initState();
     _album = widget.album;
+    _patchAlbumTrackCovers();
     if (_album.tracks.isEmpty) {
       _loadAlbum();
     }
+  }
+
+  void _patchAlbumTrackCovers() {
+    final validAlbumCover = _album.coverUrl.isNotEmpty && !_album.coverUrl.contains('resources.tidal.com')
+        ? _album.coverUrl
+        : '';
+    final patchedTracks = _album.tracks.map((t) {
+      final tCover = t.coverUrl;
+      final hasRealCover = tCover.isNotEmpty && !tCover.contains('resources.tidal.com');
+      final effectiveCover = hasRealCover
+          ? tCover
+          : (validAlbumCover.isNotEmpty ? validAlbumCover : t.effectiveCoverUrl);
+      return t.copyWith(
+        coverUrl: effectiveCover,
+        albumName: _album.title.isNotEmpty ? _album.title : t.albumName,
+        albumId: _album.id.isNotEmpty ? _album.id : t.albumId,
+      );
+    }).toList();
+    _album = _album.copyWith(tracks: patchedTracks);
   }
 
   Future<void> _loadAlbum() async {
     setState(() => _isLoading = true);
     try {
       final api = context.read<ApiService>();
-      final fullAlbum = await api.fetchAlbum(_album.id);
+      var fullAlbum = await api.fetchAlbum(_album.id);
+      if (fullAlbum == null && _album.title.isNotEmpty && _album.title != 'Album') {
+        fullAlbum = await api.fetchAlbum(_album.title);
+      }
       if (fullAlbum != null && mounted) {
+        final albumCover = (fullAlbum.coverUrl.isNotEmpty && !fullAlbum.coverUrl.contains('resources.tidal.com'))
+            ? fullAlbum.coverUrl
+            : (_album.coverUrl.isNotEmpty && !_album.coverUrl.contains('resources.tidal.com')
+                ? _album.coverUrl
+                : '');
+
+        final updatedTracks = fullAlbum.tracks.map((t) {
+          final tCover = t.coverUrl;
+          final hasRealCover = tCover.isNotEmpty && !tCover.contains('resources.tidal.com');
+          final effectiveCover = hasRealCover
+              ? tCover
+              : (albumCover.isNotEmpty ? albumCover : t.effectiveCoverUrl);
+          return t.copyWith(
+            coverUrl: effectiveCover,
+            albumName: _album.title.isNotEmpty ? _album.title : t.albumName,
+            albumId: _album.id.isNotEmpty ? _album.id : t.albumId,
+          );
+        }).toList();
+
         setState(() {
-          _album = fullAlbum.copyWith(
-            coverUrl: fullAlbum.coverUrl.isNotEmpty ? fullAlbum.coverUrl : _album.coverUrl,
+          _album = fullAlbum!.copyWith(
+            coverUrl: albumCover.isNotEmpty ? albumCover : (updatedTracks.isNotEmpty ? updatedTracks.first.coverUrl : _album.coverUrl),
             artistName: (fullAlbum.artistName.isNotEmpty && fullAlbum.artistName != 'Artista')
                 ? fullAlbum.artistName
                 : _album.artistName,
             artistId: fullAlbum.artistId.isNotEmpty ? fullAlbum.artistId : _album.artistId,
+            tracks: updatedTracks,
           );
           _isLoading = false;
         });
@@ -222,10 +265,18 @@ class _AlbumScreenState extends State<AlbumScreen> {
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
                   final track = _album.tracks[i];
+                  final effectiveTrack = track.copyWith(
+                    coverUrl: track.coverUrl.isNotEmpty && !track.coverUrl.contains('resources.tidal.com')
+                        ? track.coverUrl
+                        : (_album.coverUrl.isNotEmpty && !_album.coverUrl.contains('resources.tidal.com')
+                            ? _album.coverUrl
+                            : track.effectiveCoverUrl),
+                    albumName: _album.title.isNotEmpty ? _album.title : track.albumName,
+                  );
                   return Padding(
                     padding: EdgeInsets.symmetric(horizontal: isDesktop ? 14 : 0),
                     child: StitchTrackRow(
-                      track: track,
+                      track: effectiveTrack,
                       queue: _album.tracks,
                       index: i,
                       customSubtitle: track.artistName.isNotEmpty ? track.artistName : _album.artistName,
@@ -239,16 +290,22 @@ class _AlbumScreenState extends State<AlbumScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
         ],
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 880),
-            child: const MiniPlayer(),
-          ),
-        ),
-      ),
+      bottomNavigationBar: player.currentTrack != null
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: isDesktop ? 24 : 8, vertical: isDesktop ? 8 : 4),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  heightFactor: 1.0,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 880),
+                    child: const MiniPlayer(),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 
@@ -262,6 +319,19 @@ class _AlbumScreenState extends State<AlbumScreen> {
     final isSingle = _album.tracks.length <= 2 ||
         _album.title.toLowerCase().contains('single') ||
         _album.title.toLowerCase().contains('singolo');
+    final String typeLower = _album.type.toLowerCase();
+    String releaseBadge;
+    Color releaseColor;
+    if (typeLower.contains('ep')) {
+      releaseBadge = 'EP';
+      releaseColor = const Color(0xFFFF9F0A);
+    } else if (typeLower.contains('singol') || typeLower.contains('single') || isSingle) {
+      releaseBadge = 'SINGOLO';
+      releaseColor = const Color(0xFF30D158);
+    } else {
+      releaseBadge = 'ALBUM';
+      releaseColor = const Color(0xFFFF525E);
+    }
 
     return Container(
       margin: EdgeInsets.symmetric(
@@ -346,14 +416,14 @@ class _AlbumScreenState extends State<AlbumScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFA2D48).withOpacity(0.2),
+                        color: releaseColor.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFFA2D48).withOpacity(0.35)),
+                        border: Border.all(color: releaseColor.withOpacity(0.35)),
                       ),
                       child: Text(
-                        isSingle ? 'SINGOLO' : 'ALBUM',
+                        releaseBadge,
                         style: AppTheme.syne(
-                          color: const Color(0xFFFF525E),
+                          color: releaseColor,
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.0,
@@ -378,30 +448,6 @@ class _AlbumScreenState extends State<AlbumScreen> {
                           ),
                         ),
                       ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF353438).withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withOpacity(0.06)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.graphic_eq_rounded, color: Color(0xFFFFB693), size: 14),
-                          const SizedBox(width: 5),
-                          Text(
-                            'MASTER 24-BIT / 96KHZ DOLBY ATMOS',
-                            style: AppTheme.inter(
-                              color: const Color(0xFFFFB693),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 20),

@@ -1,6 +1,7 @@
 import '../config/app_config.dart';
 import 'track.dart';
 import 'album.dart';
+import 'playlist.dart';
 
 class Artist {
   final String id;
@@ -9,6 +10,8 @@ class Artist {
   final String bio;
   final List<Track> topTracks;
   final List<Album> albums;
+  final List<Album> singles;
+  final List<Playlist> playlists;
   final List<Artist> relatedArtists;
 
   Artist({
@@ -18,6 +21,8 @@ class Artist {
     this.bio = '',
     this.topTracks = const [],
     this.albums = const [],
+    this.singles = const [],
+    this.playlists = const [],
     this.relatedArtists = const [],
   });
 
@@ -28,6 +33,12 @@ class Artist {
         .toList();
     final albumsList = (json['albums'] as List? ?? [])
         .map((a) => Album.fromJson(Map<String, dynamic>.from(a)))
+        .toList();
+    final singlesList = (json['singles'] as List? ?? [])
+        .map((s) => Album.fromJson(Map<String, dynamic>.from(s)))
+        .toList();
+    final playlistsList = (json['playlists'] as List? ?? [])
+        .map((p) => Playlist.fromJson(Map<String, dynamic>.from(p)))
         .toList();
     final relatedList = (json['similar'] as List? ?? json['related'] as List? ?? [])
         .map((r) => Artist.fromJson(Map<String, dynamic>.from(r)))
@@ -40,6 +51,8 @@ class Artist {
       bio: json['bio']?.toString() ?? json['description']?.toString() ?? '',
       topTracks: tracksList,
       albums: albumsList,
+      singles: singlesList,
+      playlists: playlistsList,
       relatedArtists: relatedList,
     );
   }

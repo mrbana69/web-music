@@ -7,6 +7,7 @@ import '../../models/track.dart';
 import '../../models/artist.dart';
 import '../../models/album.dart';
 import '../../models/playlist.dart';
+import '../../providers/player_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/track_tile.dart';
 import 'artist_screen.dart';
@@ -680,6 +681,15 @@ class _SearchScreenState extends State<SearchScreen> {
               track: entry.value,
               queue: _tracks,
               index: entry.key,
+              onTap: () {
+                FocusScope.of(context).unfocus();
+                final player = context.read<PlayerState>();
+                if (player.currentTrack?.id == entry.value.id || player.currentTrack?.videoId == entry.value.id) {
+                  player.togglePlay();
+                } else {
+                  player.playTrack(entry.value, newQueue: _tracks, index: entry.key);
+                }
+              },
             );
           }),
         ],

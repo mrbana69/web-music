@@ -7,6 +7,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:desktop_webview_window/desktop_webview_window.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/library_state.dart';
 import '../../services/api_service.dart';
 import '../../models/user.dart';
@@ -14,6 +15,7 @@ import '../theme/app_theme.dart';
 
 class GoogleLoginScreen extends StatefulWidget {
   const GoogleLoginScreen({super.key});
+
 
   @override
   State<GoogleLoginScreen> createState() => _GoogleLoginScreenState();
@@ -33,7 +35,9 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
   bool _isDesktopWindowOpen = false;
   String _desktopStatus = 'Preparazione accesso...';
   bool _desktopSuccess = false;
+  bool _isVerifyingDesktopAuth = false;
   GoogleUser? _detectedUser;
+  String _currentDesktopUrl = '';
 
   bool get _isDesktop => !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
 
@@ -48,11 +52,13 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
       return;
     }
 
+    final loginUserAgent = kIsWeb || _isDesktop
+        ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+        : 'Mozilla/5.0 (Linux; Android 14; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0';
+
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setUserAgent(
-        'Mozilla/5.0 (Linux; Android 14; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0',
-      )
+      ..setUserAgent(loginUserAgent)
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (progress) {
@@ -97,46 +103,144 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
     super.dispose();
   }
 
+  void _showManualCookieDialog() {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.vpn_key_rounded, color: Color(0xFF4285F4), size: 22),
+            SizedBox(width: 10),
+            Text('Accesso con Cookie / Token', style: TextStyle(color: Colors.white, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Se la finestra WebView2 non si apre o preferisci usare i tuoi cookie di YouTube Music, incollali qui sotto (deve includere SAPISID o LOGIN_INFO):',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: textController,
+              maxLines: 4,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'Incolla qui i cookie (es. SAPISID=...; LOGIN_INFO=...)',
+                hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                filled: true,
+                fillColor: AppTheme.surfaceContainerLowest,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annulla', style: TextStyle(color: AppTheme.textMuted)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.primaryAccent),
+            onPressed: () {
+              final text = textController.text.trim();
+              if (text.isNotEmpty) {
+                Navigator.pop(ctx);
+                _handleSuccessfulDesktopAuth(text);
+              }
+            },
+            child: const Text('Collega Account'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openExternalBrowser() async {
+    final opened = await launchUrl(
+      Uri.parse('https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F'),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Il browser esterno non condivide i cookie con l\'app. Per completare il collegamento usa la finestra integrata o incolla i cookie verificati.'),
+      ),
+    );
+  }
+
   Future<void> _openDesktopWebview() async {
     if (_desktopWebview != null) return;
 
     setState(() {
+      _desktopSuccess = false;
+      _detectedUser = null;
+      _currentDesktopUrl = '';
       _isLoading = true;
       _isDesktopWindowOpen = true;
       _desktopStatus = 'Apertura finestra browser per accesso Google...';
     });
 
     try {
-      final appSupportDir = await getApplicationSupportDirectory();
-      final cacheDir = Directory('${appSupportDir.path}/web_cache');
-      if (!await cacheDir.exists()) {
-        await cacheDir.create(recursive: true);
+      final isAvailable = await WebviewWindow.isWebviewAvailable();
+      if (!isAvailable) {
+        throw Exception('WebView2 Runtime non rilevato nel sistema.');
       }
 
-      final webview = await WebviewWindow.create(
-        configuration: CreateConfiguration(
-          windowWidth: 540,
-          windowHeight: 760,
-          title: 'Accesso Google - Preluded Music',
-          userDataFolderWindows: cacheDir.path,
-        ),
-      );
+      final appSupportDir = await getApplicationSupportDirectory();
+      final cacheDir = Directory('${appSupportDir.path}/web_cache');
+      if (await cacheDir.exists()) {
+        try {
+          await cacheDir.delete(recursive: true);
+        } catch (e) {
+          debugPrint('[GoogleLoginScreen Desktop] Could not reset WebView2 profile: $e');
+        }
+      }
+      await cacheDir.create(recursive: true);
+      final cleanCachePath = cacheDir.path.replaceAll('/', '\\');
+
+      Webview? webview;
+      try {
+        webview = await WebviewWindow.create(
+          configuration: CreateConfiguration(
+            windowWidth: 540,
+            windowHeight: 760,
+            title: 'Accesso Google - Preluded Music',
+            userDataFolderWindows: cleanCachePath,
+          ),
+        );
+      } catch (e1) {
+        debugPrint('[GoogleLoginScreen] Retrying WebviewWindow.create with default config: $e1');
+        webview = await WebviewWindow.create(
+          configuration: const CreateConfiguration(
+            windowWidth: 540,
+            windowHeight: 760,
+            title: 'Accesso Google - Preluded Music',
+          ),
+        );
+      }
 
       _desktopWebview = webview;
 
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _desktopStatus = 'Accedi con le tue credenziali Google nella finestra.';
+          _desktopStatus = 'Accedi con le tue credenziali Google nella finestra aperta.';
         });
       }
 
       webview.setOnUrlRequestCallback((url) {
         debugPrint('[GoogleLoginScreen Desktop] URL callback: $url');
-        if (url.contains('music.youtube.com') || url.contains('youtube.com')) {
-          _checkDesktopAuth();
-        }
-        return true; // PERMIT ALL NAVIGATIONS (returning false cancels page loading in WebView2!)
+        _currentDesktopUrl = url;
+        // Google can finish 2FA on accounts.google.com before redirecting to YouTube.
+        // Check cookies for every navigation so the redirect domain does not matter.
+        _checkDesktopAuth();
+        return true; // PERMIT ALL NAVIGATIONS
       });
 
       _periodicCheckTimer?.cancel();
@@ -153,92 +257,186 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
           setState(() {
             _isDesktopWindowOpen = false;
             if (!_isExtracting && !_desktopSuccess) {
-              _desktopStatus = 'Finestra chiusa. Se non hai completato l\'accesso, riaprila qui sotto.';
+              _desktopStatus = 'Finestra chiusa. Se non hai completato l\'accesso, puoi riaprirla o usare i metodi sotto.';
             }
           });
         }
       });
 
-      webview.launch(
-        'https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F',
-      );
+      await _launchDesktopUrlWhenReady(webview);
     } catch (e) {
       debugPrint('[GoogleLoginScreen Desktop] Error creating webview window: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
           _isDesktopWindowOpen = false;
-          _desktopStatus = 'Errore apertura finestra: $e';
+          _desktopStatus = 'Impossibile aprire la finestra integrata ($e).\nPuoi usare il browser esterno o incollare i cookie sotto.';
         });
       }
     }
   }
 
+  Future<void> _launchDesktopUrlWhenReady(Webview webview) async {
+    const url =
+        'https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F';
+
+    // create() can complete before the native WebView2 controller is ready.
+    for (var attempt = 0; attempt < 20; attempt++) {
+      try {
+        await webview.getAllCookies();
+        // Let WebView2 perform the initial navigation directly. The plugin's
+        // URL interception cancels NavigationStarting until the Dart callback
+        // answers, which can leave the first page blank.
+        webview.launch(url, triggerOnUrlRequestEvent: false);
+        // launch() is fire-and-forget in desktop_webview_window. Do not call
+        // reload here: it can race the initial navigation and blank the page.
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await webview.bringToForeground();
+        return;
+      } catch (e) {
+        if (attempt == 19) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    }
+  }
+
   Future<void> _checkDesktopAuth() async {
-    if (_desktopWebview == null || _isExtracting || _desktopSuccess) return;
+    if (_desktopWebview == null || _isExtracting || _isVerifyingDesktopAuth || _desktopSuccess) return;
+    _isVerifyingDesktopAuth = true;
 
     try {
-      // 1. Prova a estrarre tutti i cookie nativi da WebView2
+      // 1. Estrai cookie nativi da WebView2
       final cookies = await _desktopWebview!.getAllCookies();
-      final hasNativeSapisid = cookies.any((c) =>
+
+      // Check specifically for cookies belonging to youtube.com / music.youtube.com
+      final ytCookies = cookies.where((c) => c.domain.toLowerCase().contains('youtube.com')).toList();
+
+      final hasYtSapisid = ytCookies.any((c) =>
           c.name == 'SAPISID' ||
           c.name == '__Secure-3PAPISID' ||
           c.name == '__Secure-1PAPISID');
 
-      if (hasNativeSapisid) {
-        final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
-        await _handleSuccessfulDesktopAuth(cookieStr);
+      final hasYtSession = ytCookies.any((c) =>
+          c.name == 'LOGIN_INFO' ||
+          c.name == 'SID' ||
+          c.name == 'SSID');
+
+      // Cookie names alone are not proof of authentication. YouTube creates
+      // several cookies before login, so verify the account endpoint first.
+      if (hasYtSapisid && hasYtSession) {
+        final Map<String, String> cookieMap = {};
+
+        // 1. Base / Google cookies first
+        for (final c in cookies) {
+          if (!c.domain.toLowerCase().contains('youtube.com') && c.name.isNotEmpty && c.value.isNotEmpty) {
+            cookieMap[c.name] = c.value;
+          }
+        }
+
+        // 2. Overwrite with .youtube.com cookies (giving strict precedence to YouTube's SAPISID, SID, etc.)
+        for (final c in ytCookies) {
+          if (!c.domain.toLowerCase().contains('music.youtube.com') && c.name.isNotEmpty && c.value.isNotEmpty) {
+            cookieMap[c.name] = c.value;
+          }
+        }
+
+        // 3. Overwrite with music.youtube.com cookies (most specific)
+        for (final c in ytCookies) {
+          if (c.domain.toLowerCase().contains('music.youtube.com') && c.name.isNotEmpty && c.value.isNotEmpty) {
+            cookieMap[c.name] = c.value;
+          }
+        }
+
+        final cookieStr = cookieMap.entries.map((e) => '${e.key}=${e.value}').join('; ');
+        final api = context.read<ApiService>();
+        final verifiedUser = await api
+            .fetchYtmAccountInfo(cookieStr)
+            .timeout(const Duration(seconds: 5));
+        if (verifiedUser != null) {
+          await _handleSuccessfulDesktopAuth(cookieStr, verifiedUser: verifiedUser);
+        }
         return;
       }
 
-      // 2. Fallback su evaluateJavaScript document.cookie
-      final jsCookie = await _desktopWebview!.evaluateJavaScript('document.cookie');
-      String docStr = (jsCookie ?? '').toString();
-      if (docStr.startsWith('"') && docStr.endsWith('"') && docStr.length > 1) {
-        docStr = docStr.substring(1, docStr.length - 1);
-      }
-      docStr = docStr.replaceAll(r'\"', '"');
+      // 2. Fallback su evaluateJavaScript document.cookie on the current page.
+      if (_currentDesktopUrl.contains('google.com') || _currentDesktopUrl.contains('youtube.com')) {
+        final jsCookie = await _desktopWebview!.evaluateJavaScript('document.cookie');
+        String docStr = (jsCookie ?? '').toString();
+        if (docStr.startsWith('"') && docStr.endsWith('"') && docStr.length > 1) {
+          docStr = docStr.substring(1, docStr.length - 1);
+        }
+        docStr = docStr.replaceAll(r'\"', '"');
 
-      final hasSapisid = docStr.contains('SAPISID') ||
-          docStr.contains('__Secure-3PAPISID') ||
-          docStr.contains('__Secure-1PAPISID');
+        final hasSapisid = docStr.contains('SAPISID=') ||
+            docStr.contains('__Secure-3PAPISID=') ||
+            docStr.contains('__Secure-1PAPISID=');
+        final hasSession = docStr.contains('SID=') ||
+            docStr.contains('SSID=') ||
+            docStr.contains('LOGIN_INFO=');
 
-      if (hasSapisid) {
-        await _handleSuccessfulDesktopAuth(docStr);
+        if (hasSapisid && hasSession) {
+          final api = context.read<ApiService>();
+          final verifiedUser = await api
+              .fetchYtmAccountInfo(docStr)
+              .timeout(const Duration(seconds: 5));
+          if (verifiedUser != null) {
+            await _handleSuccessfulDesktopAuth(docStr, verifiedUser: verifiedUser);
+          }
+        }
       }
     } catch (e) {
       debugPrint('[GoogleLoginScreen Desktop] check error: $e');
+    } finally {
+      _isVerifyingDesktopAuth = false;
     }
   }
 
-  Future<void> _handleSuccessfulDesktopAuth(String rawCookies) async {
+  Future<void> _handleSuccessfulDesktopAuth(String rawCookies, {GoogleUser? verifiedUser}) async {
     if (_isExtracting || _desktopSuccess || !mounted) return;
     _isExtracting = true;
     _periodicCheckTimer?.cancel();
 
     setState(() {
-      _desktopStatus = 'Accesso rilevato! Sincronizzazione in corso...';
+      _desktopStatus = 'Accesso rilevato! Sincronizzazione profilo in corso...';
     });
 
     try {
       final api = context.read<ApiService>();
       final library = context.read<LibraryState>();
 
+      // 1. Salva i cookie di sessione
       await library.saveYtmCookie(rawCookies);
 
-      GoogleUser? fetchedUser;
+      // 2. Recupera info profilo reale YouTube Music
+      GoogleUser? fetchedUser = verifiedUser;
       try {
-        fetchedUser = await api.fetchYtmAccountInfo(rawCookies).timeout(const Duration(seconds: 4));
-      } catch (_) {}
+        fetchedUser ??= await api.fetchYtmAccountInfo(rawCookies).timeout(const Duration(seconds: 5));
+      } catch (e) {
+        debugPrint('[GoogleLoginScreen Desktop] fetchYtmAccountInfo error: $e');
+      }
 
-      final user = fetchedUser ?? GoogleUser(
-        name: 'Account Google',
-        email: '',
-        cookie: rawCookies,
-      );
+      if (fetchedUser == null) {
+        throw Exception('Cookie non autenticati o accesso Google non completato.');
+      }
+
+      final user = fetchedUser;
 
       await library.loginWithGoogle(user);
 
+      // 3. Sincronizzazione immediata di brani piaciuti e playlist
+      if (mounted) {
+        setState(() {
+          _desktopStatus = 'Sincronizzazione brani preferiti e playlist in corso...';
+        });
+      }
+
+      try {
+        await library.syncGoogleAccount(api).timeout(const Duration(seconds: 15));
+      } catch (e) {
+        debugPrint('[GoogleLoginScreen Desktop] syncGoogleAccount error: $e');
+      }
+
+      // 4. Chiudi la finestra WebView2
       try {
         _desktopWebview?.close();
         _desktopWebview = null;
@@ -248,11 +446,12 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
         setState(() {
           _isExtracting = false;
           _desktopSuccess = true;
-          _detectedUser = user;
+          _detectedUser = library.googleUser ?? user;
+          _desktopStatus = 'Sincronizzazione completata! (${library.likedTracks.length} preferiti, ${library.playlists.length} playlist)';
         });
 
-        // Ritorno automatico dopo 2.5 secondi se l'utente non clicca subito "Ritorna all'app"
-        Timer(const Duration(milliseconds: 2500), () {
+        // Ritorno automatico dopo 2 secondi
+        Timer(const Duration(milliseconds: 2000), () {
           if (mounted) {
             Navigator.pop(context, true);
           }
@@ -272,14 +471,12 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
   Future<String> _extractAllCookies() async {
     final Map<String, String> cookieMap = {};
 
-    // 1. YouTube Music domains MUST be prioritized.
-    // Cookies belonging to .youtube.com (SAPISID, __Secure-3PAPISID, LOGIN_INFO, SID)
-    // must NEVER be overwritten by .google.com cookies, otherwise SAPISIDHASH fails on music.youtube.com.
+    // 1. YouTube Music domains MUST be prioritized over Google accounts domains.
     final domains = [
-      'https://music.youtube.com',
-      'https://www.youtube.com',
-      'https://youtube.com',
       'https://accounts.google.com',
+      'https://youtube.com',
+      'https://www.youtube.com',
+      'https://music.youtube.com',
     ];
 
     // 1. Android Native CookieManager via MethodChannel (Essential for HttpOnly & secure cookies)
@@ -293,7 +490,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
             if (kv.length >= 2) {
               final k = kv[0].trim();
               final v = kv.sublist(1).join('=').trim();
-              if (k.isNotEmpty && !cookieMap.containsKey(k)) {
+              if (k.isNotEmpty) {
                 cookieMap[k] = v;
               }
             }
@@ -319,7 +516,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
           if (kv.length >= 2) {
             final k = kv[0].trim();
             final v = kv.sublist(1).join('=').trim();
-            if (k.isNotEmpty && !cookieMap.containsKey(k)) {
+            if (k.isNotEmpty) {
               cookieMap[k] = v;
             }
           }
@@ -332,6 +529,9 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
 
   Future<void> _checkAuthStatus(String url) async {
     print('[GoogleLoginScreen] Navigation to: $url');
+    if (!url.contains('music.youtube.com') && !url.contains('youtube.com')) {
+      return;
+    }
     await _extractAndAuthenticate(isManual: false);
   }
 
@@ -345,7 +545,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
           rawCookies.contains('__Secure-3PAPISID') ||
           rawCookies.contains('__Secure-1PAPISID');
       final hasLogin = rawCookies.contains('LOGIN_INFO') || rawCookies.contains('SID');
-      final hasAuth = hasSapisid || hasLogin;
+      final hasAuth = hasSapisid && hasLogin;
 
       if (!hasAuth) {
         _isExtracting = false;
@@ -369,34 +569,41 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
       final api = context.read<ApiService>();
       final library = context.read<LibraryState>();
 
-      // 1. Save cookies immediately
-      await library.saveYtmCookie(rawCookies);
-
-      // 2. Fetch profile info with safety timeout (max 3 seconds)
+      // 1. Verify the account before persisting any cookie state.
       GoogleUser? fetchedUser;
       try {
-        fetchedUser = await api.fetchYtmAccountInfo(rawCookies).timeout(const Duration(seconds: 3));
+        fetchedUser = await api.fetchYtmAccountInfo(rawCookies).timeout(const Duration(seconds: 5));
       } catch (_) {}
 
-      final user = fetchedUser ?? GoogleUser(
-        name: 'Account Google',
-        email: '',
-        cookie: rawCookies,
-      );
+      if (fetchedUser == null || fetchedUser.email.isEmpty) {
+        _isExtracting = false;
+        if (isManual && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Accesso non ancora completato. Completa il login Google e riprova.')),
+          );
+        }
+        return;
+      }
+
+      // 2. Save only verified cookies.
+      await library.saveYtmCookie(rawCookies);
+
+      final user = fetchedUser;
 
       await library.loginWithGoogle(user);
 
       if (mounted) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Accesso effettuato come ${user.name}!'),
-            backgroundColor: AppTheme.surfaceContainerHighest,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
       }
+
+      // Sync library data in the background so login is not blocked by it.
+      unawaited(() async {
+        try {
+          await library.syncGoogleAccount(api).timeout(const Duration(seconds: 15));
+        } catch (e) {
+          debugPrint('[GoogleLoginScreen Mobile] syncGoogleAccount error: $e');
+        }
+      }());
     } catch (e) {
       if (mounted) {
         setState(() => _isExtracting = false);
@@ -659,7 +866,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
                                 ),
                               ),
                             )
-                          else
+                          else ...[
                             ElevatedButton.icon(
                               onPressed: _openDesktopWebview,
                               style: ElevatedButton.styleFrom(
@@ -671,7 +878,26 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
                               icon: const Icon(Icons.open_in_new_rounded),
                               label: const Text('Riapri Finestra Accesso', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                             ),
-                          const SizedBox(height: 20),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: _openExternalBrowser,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                              icon: const Icon(Icons.public_rounded, size: 18),
+                              label: const Text('Apri Browser Esterno (solo fallback)', style: TextStyle(fontSize: 13)),
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: _showManualCookieDialog,
+                              icon: const Icon(Icons.vpn_key_rounded, size: 16, color: Color(0xFF4285F4)),
+                              label: const Text('Incolla Cookie / Token', style: TextStyle(color: Color(0xFF4285F4), fontSize: 13, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [

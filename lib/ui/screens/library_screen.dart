@@ -25,29 +25,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (loggedIn == true && mounted) {
       final library = context.read<LibraryState>();
       final api = context.read<ApiService>();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-              SizedBox(width: 12),
-              Text('Sincronizzazione libreria YouTube Music in corso...'),
-            ],
+      if (library.likedTracks.isEmpty && library.playlists.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                SizedBox(width: 12),
+                Text('Sincronizzazione libreria YouTube Music in corso...'),
+              ],
+            ),
+            backgroundColor: AppTheme.surfaceContainerHighest,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 4),
           ),
-          backgroundColor: AppTheme.surfaceContainerHighest,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      final success = await library.syncGoogleAccount(api);
+        );
+        await library.syncGoogleAccount(api);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              success
-                  ? 'Sincronizzazione completata: ${library.likedTracks.length} brani piaciuti, ${library.playlists.length} playlist!'
-                  : 'Sincronizzazione completata.',
+              'Libreria sincronizzata: ${library.likedTracks.length} brani piaciuti, ${library.playlists.length} playlist!',
             ),
             backgroundColor: AppTheme.surfaceContainerHighest,
             behavior: SnackBarBehavior.floating,
@@ -491,6 +491,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     SnackBar(content: Text(success ? 'Libreria sincronizzata!' : 'Sincronizzazione completata')),
                   );
                 }
+              },
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: Colors.white.withOpacity(0.15)),
+                minimumSize: const Size(double.infinity, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              icon: const Icon(Icons.login_rounded, color: Colors.white70),
+              label: const Text('Riconnetti / Cambia Account', style: TextStyle(color: Colors.white70)),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _handleGoogleSignIn(context);
               },
             ),
             const SizedBox(height: 10),

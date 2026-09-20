@@ -84,18 +84,23 @@ class LocalStreamProxy {
     final manifest = await _yt.videos.streamsClient.getManifest(videoId).timeout(const Duration(seconds: 8));
     final result = <StreamInfo>[];
 
-    // Priority 1: itag 18 from manifest.muxed (Universal MP4 container, AAC stereo audio).
-    // YouTube signs itag 18 with &ratebypass=yes, completely bypassing BotGuard/SABR 1MB cutoff.
-    // ExoPlayer natively hardware-decodes the AAC audio with 0 issues.
+    // Priority 1: itag 18 (MP4 container with AAC stereo audio and ratebypass=yes)
+    // itag 18 completely bypasses YouTube's 1MB cutoff / SABR throttling on all tracks!
     try {
       final muxed18 = manifest.muxed.where((s) => s.tag == 18).toList();
       if (muxed18.isNotEmpty) {
         result.addAll(muxed18);
-        print('[LocalStreamProxy] Added itag 18 (ratebypass=yes) for $videoId');
+        print('[LocalStreamProxy] Using itag 18 as primary stream for $videoId (ratebypass=yes, size=${muxed18.first.size.totalBytes})');
       }
     } catch (_) {}
 
-    // Priority 2: audioOnly streams (itag 140 AAC 128k, itag 251 Opus 160k, etc.)
+    // Priority 2: other muxed streams with compatible video/audio
+    try {
+      final otherMuxed = manifest.muxed.where((s) => s.tag != 18).toList();
+      result.addAll(otherMuxed);
+    } catch (_) {}
+
+    // Priority 3: audioOnly streams (itag 140 AAC, itag 251 Opus, etc.)
     final audios = manifest.audioOnly.toList();
     audios.sort((a, b) {
       int score(AudioStreamInfo s) {
@@ -108,11 +113,6 @@ class LocalStreamProxy {
       return score(b).compareTo(score(a));
     });
     result.addAll(audios);
-
-    // Priority 3: any remaining muxed streams
-    if (result.isEmpty && manifest.muxed.isNotEmpty) {
-      result.addAll(manifest.muxed);
-    }
 
     _cachedStreamInfos[videoId] = result;
     _cacheTimes[videoId] = DateTime.now();
@@ -165,17 +165,6 @@ class LocalStreamProxy {
         end = end.clamp(start, totalBytes - 1);
         final contentLength = end - start + 1;
 
-        req.response.statusCode = (rangeHeader != null) ? HttpStatus.partialContent : HttpStatus.ok;
-        final mimeType = audio.codec.mimeType.isNotEmpty ? audio.codec.mimeType : 'audio/mp4';
-        req.response.headers.set(HttpHeaders.contentTypeHeader, mimeType);
-        req.response.headers.set(HttpHeaders.contentLengthHeader, contentLength.toString());
-        req.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
-        req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
-        if (rangeHeader != null) {
-          req.response.headers.set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$totalBytes');
-        }
-        headerSent = true;
-
         // Stream upstream in 512KB safe segments with retry
         const chunkSize = 512 * 1024;
         int currentOffset = start;
@@ -203,6 +192,18 @@ class LocalStreamProxy {
 
                 final upstreamRes = await upstreamReq.close().timeout(const Duration(seconds: 10));
                 if (upstreamRes.statusCode == HttpStatus.partialContent || upstreamRes.statusCode == HttpStatus.ok) {
+                  if (!headerSent) {
+                    req.response.statusCode = (rangeHeader != null) ? HttpStatus.partialContent : HttpStatus.ok;
+                    final mimeType = audio.codec.mimeType.isNotEmpty ? audio.codec.mimeType : 'audio/mp4';
+                    req.response.headers.set(HttpHeaders.contentTypeHeader, mimeType);
+                    req.response.headers.set(HttpHeaders.contentLengthHeader, contentLength.toString());
+                    req.response.headers.set(HttpHeaders.acceptRangesHeader, 'bytes');
+                    req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+                    if (rangeHeader != null) {
+                      req.response.headers.set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$totalBytes');
+                    }
+                    headerSent = true;
+                  }
                   await req.response.addStream(upstreamRes);
                   chunkSuccess = true;
                   break;

@@ -125,7 +125,7 @@ void main() {
     test('Artwork URLs correctly formatted for high resolution', () {
       const googleUrl = 'https://lh3.googleusercontent.com/xyz=w120-h120';
       final formattedG = AppConfig.formatArtwork(googleUrl);
-      expect(formattedG, contains('=w500-h500-l90-rj'));
+      expect(formattedG, contains('=w500-h500-c-l90-rj'));
 
       const ytUrl = 'https://i.ytimg.com/vi/abc/default.jpg';
       final formattedYt = AppConfig.formatArtwork(ytUrl);
@@ -334,7 +334,7 @@ void main() {
       expect(lyrics!.plainText.isNotEmpty || lyrics.syncedLines.isNotEmpty, isTrue);
     }, timeout: const Timeout(Duration(seconds: 25)));
 
-    test('Live Artist Fetch: retrieves artist profile with top tracks and albums', () async {
+    test('Live Artist Fetch: retrieves artist profile with top tracks and categorized discography', () async {
       final searchRes = await api.search('Blanco', filter: 'artists');
       final artists = searchRes['artists'] as List<Artist>;
       if (artists.isNotEmpty) {
@@ -342,6 +342,8 @@ void main() {
         expect(artist, isNotNull);
         expect(artist!.name.isNotEmpty, isTrue);
         expect(artist.topTracks.isNotEmpty, isTrue);
+        expect(artist.albums.isNotEmpty, isTrue);
+        expect(artist.singles.isNotEmpty, isTrue);
       }
     }, timeout: const Timeout(Duration(seconds: 30)));
 

@@ -96,10 +96,11 @@ class _LyricsViewState extends State<LyricsView> {
             _lastActiveIndex = activeIndex;
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_scrollController.hasClients) {
-                final targetOffset = (activeIndex * 60.0) - 140.0;
+                final screenH = MediaQuery.of(context).size.height;
+                final targetOffset = (activeIndex * 82.0) - (screenH * 0.32);
                 _scrollController.animateTo(
                   targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-                  duration: const Duration(milliseconds: 350),
+                  duration: const Duration(milliseconds: 400),
                   curve: Curves.easeOutCubic,
                 );
               }
@@ -111,7 +112,7 @@ class _LyricsViewState extends State<LyricsView> {
               // Translation toggle if available
               if (lyrics.translation != null && lyrics.translation!.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
@@ -136,7 +137,7 @@ class _LyricsViewState extends State<LyricsView> {
                 child: ListView.builder(
                   controller: _scrollController,
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
                   itemCount: lyrics.syncedLines.length,
                   itemBuilder: (context, i) {
                     final line = lyrics.syncedLines[i];
@@ -147,24 +148,35 @@ class _LyricsViewState extends State<LyricsView> {
                       onTap: () {
                         player.seek(Duration(milliseconds: line.timestampMs));
                       },
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(20),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                        margin: const EdgeInsets.symmetric(vertical: 5),
                         decoration: BoxDecoration(
-                          color: isActive ? player.ambientColor.withOpacity(0.18) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(16),
+                          color: isActive ? player.ambientColor.withOpacity(0.20) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                          border: isActive
+                              ? Border.all(color: player.ambientColor.withOpacity(0.35), width: 1)
+                              : null,
                         ),
                         child: Text(
                           line.text,
                           style: AppTheme.syne(
                             color: isActive
                                 ? Colors.white
-                                : (isPassed ? Colors.white.withOpacity(0.45) : Colors.white.withOpacity(0.25)),
-                            fontSize: isActive ? 20 : 15.5,
-                            fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
-                            letterSpacing: -0.3,
+                                : (isPassed ? Colors.white.withOpacity(0.52) : Colors.white.withOpacity(0.26)),
+                            fontSize: isActive ? 32 : 22,
+                            fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                            letterSpacing: -0.4,
+                            shadows: isActive
+                                ? [
+                                    Shadow(
+                                      color: player.ambientColor.withOpacity(0.65),
+                                      blurRadius: 18,
+                                    ),
+                                  ]
+                                : null,
                           ),
                         ),
                       ),
@@ -181,15 +193,20 @@ class _LyricsViewState extends State<LyricsView> {
     // Plain lyrics view
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-      child: Text(
-        lyrics.plainText,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          height: 1.8,
-          letterSpacing: -0.2,
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 44),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Text(
+            lyrics.plainText,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 23,
+              fontWeight: FontWeight.w600,
+              height: 1.85,
+              letterSpacing: -0.3,
+            ),
+          ),
         ),
       ),
     );
