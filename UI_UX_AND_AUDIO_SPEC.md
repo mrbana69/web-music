@@ -98,3 +98,4 @@ If audio does not load on Android when testing the APK:
 
 > **DO NOT TOUCH iOS AUTHENTICATION**
 > The iOS login flow works properly and has been validated by the user. Do not modify `google_login_screen.dart` iOS specific branches, URL schemes, or authentication handlers.
+

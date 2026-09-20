@@ -193,16 +193,15 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
       }
 
       final appSupportDir = await getApplicationSupportDirectory();
-      final cacheDir = Directory('${appSupportDir.path}/web_cache');
-      if (await cacheDir.exists()) {
+      final profileDir = Directory('${appSupportDir.path}/web_profile');
+      if (!await profileDir.exists()) {
         try {
-          await cacheDir.delete(recursive: true);
+          await profileDir.create(recursive: true);
         } catch (e) {
-          debugPrint('[GoogleLoginScreen Desktop] Could not reset WebView2 profile: $e');
+          debugPrint('[GoogleLoginScreen Desktop] Could not create profile directory: $e');
         }
       }
-      await cacheDir.create(recursive: true);
-      final cleanCachePath = cacheDir.path.replaceAll('/', '\\');
+      final cleanProfilePath = profileDir.path.replaceAll('/', '\\');
 
       Webview? webview;
       try {
@@ -211,7 +210,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
             windowWidth: 540,
             windowHeight: 760,
             title: 'Accesso Google - Preluded Music',
-            userDataFolderWindows: cleanCachePath,
+            userDataFolderWindows: cleanProfilePath,
           ),
         );
       } catch (e1) {
@@ -227,6 +226,15 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
 
       _desktopWebview = webview;
 
+      // Set genuine Chrome Desktop User-Agent so Google never flags embedded WebView
+      try {
+        await webview.setUserAgent(
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        );
+      } catch (e) {
+        debugPrint('[GoogleLoginScreen Desktop] Could not set custom UserAgent: $e');
+      }
+
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -234,17 +242,12 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
         });
       }
 
-      webview.setOnUrlRequestCallback((url) {
-        debugPrint('[GoogleLoginScreen Desktop] URL callback: $url');
-        _currentDesktopUrl = url;
-        // Google can finish 2FA on accounts.google.com before redirecting to YouTube.
-        // Check cookies for every navigation so the redirect domain does not matter.
-        _checkDesktopAuth();
-        return true; // PERMIT ALL NAVIGATIONS
-      });
+      // DO NOT register setOnUrlRequestCallback: in WebView2, intercepting navigations
+      // cancels POST requests and 302 token exchanges, which breaks Google 2FA prompts.
+      // We rely on passive cookie detection via getAllCookies() in _periodicCheckTimer.
 
       _periodicCheckTimer?.cancel();
-      _periodicCheckTimer = Timer.periodic(const Duration(milliseconds: 1200), (_) {
+      _periodicCheckTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
         if (_desktopWebview != null && !_isExtracting && !_desktopSuccess) {
           _checkDesktopAuth();
         }
@@ -348,6 +351,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
         }
 
         final cookieStr = cookieMap.entries.map((e) => '${e.key}=${e.value}').join('; ');
+        if (!mounted) return;
         final api = context.read<ApiService>();
         final verifiedUser = await api
             .fetchYtmAccountInfo(cookieStr)
@@ -375,6 +379,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
             docStr.contains('LOGIN_INFO=');
 
         if (hasSapisid && hasSession) {
+          if (!mounted) return;
           final api = context.read<ApiService>();
           final verifiedUser = await api
               .fetchYtmAccountInfo(docStr)
