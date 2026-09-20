@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform, Directory;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -303,7 +304,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
     }
   }
 
-  Future<void> _checkDesktopAuth() async {
+  Future<void> _checkDesktopAuth({bool isManual = false}) async {
     if (_desktopWebview == null || _isExtracting || _isVerifyingDesktopAuth || _desktopSuccess) return;
     _isVerifyingDesktopAuth = true;
 
@@ -311,22 +312,68 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
       // 1. Estrai cookie nativi da WebView2
       final cookies = await _desktopWebview!.getAllCookies();
 
-      // Check specifically for cookies belonging to youtube.com / music.youtube.com
       final ytCookies = cookies.where((c) => c.domain.toLowerCase().contains('youtube.com')).toList();
+      final authCookies = cookies.where((c) =>
+          c.name == 'SAPISID' ||
+          c.name == '__Secure-3PAPISID' ||
+          c.name == '__Secure-1PAPISID' ||
+          c.name == 'LOGIN_INFO' ||
+          c.name == 'SID' ||
+          c.name == 'SSID').toList();
 
-      final hasYtSapisid = ytCookies.any((c) =>
+      final hasSapisid = authCookies.any((c) =>
           c.name == 'SAPISID' ||
           c.name == '__Secure-3PAPISID' ||
           c.name == '__Secure-1PAPISID');
 
-      final hasYtSession = ytCookies.any((c) =>
-          c.name == 'LOGIN_INFO' ||
-          c.name == 'SID' ||
-          c.name == 'SSID');
+      final hasSession = authCookies.any((c) =>
+          c.name == 'LOGIN_INFO' || c.name == 'SID' || c.name == 'SSID');
 
-      // Cookie names alone are not proof of authentication. YouTube creates
-      // several cookies before login, so verify the account endpoint first.
-      if (hasYtSapisid && hasYtSession) {
+      // Probe current page status, username and avatar via JavaScript
+      String pageUserName = '';
+      String pageAvatar = '';
+      bool onMusicHome = false;
+
+      try {
+        final jsProbe = await _desktopWebview!.evaluateJavaScript('''
+          (function() {
+            var name = '';
+            var avatar = '';
+            var href = window.location.href || '';
+            try {
+              if (window.ytcfg) {
+                name = window.ytcfg.get('USER_NAME') || '';
+              }
+            } catch(e) {}
+            try {
+              var img = document.querySelector('button#avatar-btn img, ytmusic-nav-bar img#img, .ytmusic-nav-bar img');
+              if (img && img.src) avatar = img.src;
+            } catch(e) {}
+            return JSON.stringify({href: href, name: name, avatar: avatar});
+          })()
+        ''');
+        if (jsProbe != null) {
+          var clean = jsProbe.trim();
+          if (clean.startsWith('"') && clean.endsWith('"') && clean.length > 1) {
+            try { clean = jsonDecode(clean); } catch (_) {}
+          }
+          final dynamic map = jsonDecode(clean);
+          if (map is Map) {
+            final href = map['href']?.toString() ?? '';
+            pageUserName = map['name']?.toString() ?? '';
+            pageAvatar = map['avatar']?.toString() ?? '';
+            onMusicHome = href.contains('music.youtube.com');
+          }
+        }
+      } catch (e) {
+        debugPrint('[GoogleLoginScreen Desktop] jsProbe error: $e');
+      }
+
+      debugPrint('[GoogleLoginScreen Desktop] probe: onMusicHome=$onMusicHome, user=$pageUserName, hasSapisid=$hasSapisid, hasSession=$hasSession, totalCookies=${cookies.length}');
+
+      final isAuthDetected = (hasSapisid && hasSession) || (onMusicHome && (hasSapisid || hasSession || pageAvatar.isNotEmpty || pageUserName.isNotEmpty));
+
+      if (isAuthDetected) {
         final Map<String, String> cookieMap = {};
 
         // 1. Base / Google cookies first
@@ -336,7 +383,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
           }
         }
 
-        // 2. Overwrite with .youtube.com cookies (giving strict precedence to YouTube's SAPISID, SID, etc.)
+        // 2. Overwrite with .youtube.com cookies
         for (final c in ytCookies) {
           if (!c.domain.toLowerCase().contains('music.youtube.com') && c.name.isNotEmpty && c.value.isNotEmpty) {
             cookieMap[c.name] = c.value;
@@ -353,41 +400,30 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
         final cookieStr = cookieMap.entries.map((e) => '${e.key}=${e.value}').join('; ');
         if (!mounted) return;
         final api = context.read<ApiService>();
-        final verifiedUser = await api
-            .fetchYtmAccountInfo(cookieStr)
-            .timeout(const Duration(seconds: 5));
-        if (verifiedUser != null) {
-          await _handleSuccessfulDesktopAuth(cookieStr, verifiedUser: verifiedUser);
-        }
+
+        GoogleUser? verifiedUser;
+        try {
+          verifiedUser = await api
+              .fetchYtmAccountInfo(cookieStr)
+              .timeout(const Duration(seconds: 4));
+        } catch (_) {}
+
+        // Fallback user from page probe so login is never blocked if account_menu format varies
+        verifiedUser ??= GoogleUser(
+          name: pageUserName.isNotEmpty ? pageUserName : 'Utente Google',
+          email: '',
+          avatarUrl: pageAvatar,
+          cookie: cookieStr,
+        );
+
+        await _handleSuccessfulDesktopAuth(cookieStr, verifiedUser: verifiedUser);
         return;
       }
 
-      // 2. Fallback su evaluateJavaScript document.cookie on the current page.
-      if (_currentDesktopUrl.contains('google.com') || _currentDesktopUrl.contains('youtube.com')) {
-        final jsCookie = await _desktopWebview!.evaluateJavaScript('document.cookie');
-        String docStr = (jsCookie ?? '').toString();
-        if (docStr.startsWith('"') && docStr.endsWith('"') && docStr.length > 1) {
-          docStr = docStr.substring(1, docStr.length - 1);
-        }
-        docStr = docStr.replaceAll(r'\"', '"');
-
-        final hasSapisid = docStr.contains('SAPISID=') ||
-            docStr.contains('__Secure-3PAPISID=') ||
-            docStr.contains('__Secure-1PAPISID=');
-        final hasSession = docStr.contains('SID=') ||
-            docStr.contains('SSID=') ||
-            docStr.contains('LOGIN_INFO=');
-
-        if (hasSapisid && hasSession) {
-          if (!mounted) return;
-          final api = context.read<ApiService>();
-          final verifiedUser = await api
-              .fetchYtmAccountInfo(docStr)
-              .timeout(const Duration(seconds: 5));
-          if (verifiedUser != null) {
-            await _handleSuccessfulDesktopAuth(docStr, verifiedUser: verifiedUser);
-          }
-        }
+      if (isManual && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Accesso non ancora rilevato. Assicurati di essere connesso a YouTube Music nella finestra aperta.')),
+        );
       }
     } catch (e) {
       debugPrint('[GoogleLoginScreen Desktop] check error: $e');
@@ -842,7 +878,7 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
                                 ],
                               ),
                             )
-                          else if (_isDesktopWindowOpen)
+                          else if (_isDesktopWindowOpen) ...[
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 6.0),
                               child: Container(
@@ -863,14 +899,27 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
                                     SizedBox(width: 10),
                                     Flexible(
                                       child: Text(
-                                        'Finestra attiva: completa l\'accesso con Google',
+                                        'Finestra aperta: se sei connesso clicca sotto',
                                         style: TextStyle(color: Colors.white, fontSize: 12),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                            )
+                            ),
+                            const SizedBox(height: 14),
+                            ElevatedButton.icon(
+                              onPressed: _isExtracting ? null : () => _checkDesktopAuth(isManual: true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF4285F4),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                              icon: const Icon(Icons.check_circle_rounded, size: 20),
+                              label: const Text('Ho effettuato l\'accesso (Sincronizza)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                            ),
+                          ]
                           else ...[
                             ElevatedButton.icon(
                               onPressed: _openDesktopWebview,

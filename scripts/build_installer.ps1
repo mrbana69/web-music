@@ -18,6 +18,8 @@ $releaseExe = "$projectRoot\build\windows\x64\runner\Release\preluded_music.exe"
 
 if (-not $SkipFlutterBuild -or -not (Test-Path $releaseExe)) {
     Write-Host "`n[1/3] Compilazione release Windows (Flutter)..." -ForegroundColor Yellow
+    Get-Process preluded_music -ErrorAction SilentlyContinue | Stop-Process -Force
+    Start-Sleep -Milliseconds 500
     flutter build windows --release
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Compilazione Flutter Windows fallita!"
