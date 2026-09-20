@@ -7,6 +7,7 @@ import '../../providers/player_state.dart';
 import '../../providers/library_state.dart';
 import '../theme/app_theme.dart';
 import '../screens/full_player_screen.dart';
+import 'glass_container.dart';
 
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key});
@@ -46,29 +47,11 @@ class MiniPlayer extends StatelessWidget {
             ),
           );
         },
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceContainerHigh.withOpacity(0.80),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.14), width: 0.8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 6),
-                  ),
-                  BoxShadow(
-                    color: player.ambientColor.withOpacity(0.25),
-                    blurRadius: 22,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
+        child: GlassContainer(
+          borderRadius: 22,
+          blur: 18,
+          ambientColor: player.ambientColor,
+          padding: EdgeInsets.zero,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -239,8 +222,6 @@ class MiniPlayer extends StatelessWidget {
           ),
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 }

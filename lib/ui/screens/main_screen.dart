@@ -141,8 +141,10 @@ class _MainScreenState extends State<MainScreen> {
     // --- Mobile & Compact Window Layout ---
     Widget navContainer = Container(
       decoration: BoxDecoration(
-        color: AppTheme.surfaceContainerLowest.withOpacity(isApple ? 0.85 : 0.96),
-        border: Border(top: BorderSide(color: AppTheme.border)),
+        color: AppTheme.surfaceContainerLowest.withOpacity(0.72),
+        border: Border(
+          top: BorderSide(color: Colors.white.withOpacity(0.12), width: 0.8),
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -187,14 +189,14 @@ class _MainScreenState extends State<MainScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const MiniPlayer(),
-                isApple
-                    ? ClipRRect(
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                          child: navContainer,
-                        ),
-                      )
-                    : navContainer,
+                RepaintBoundary(
+                  child: ClipRRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: navContainer,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

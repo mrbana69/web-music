@@ -88,12 +88,14 @@ class _FullPlayerScreenState extends State<FullPlayerScreen> {
               ),
             ),
 
-            // 2. Blur Backdrop Layer (Apple only to avoid GPU lag on Android)
+            // 2. High Performance Liquid Blur Backdrop Layer
             Positioned.fill(
               child: isApple
-                  ? BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 45, sigmaY: 45),
-                      child: Container(color: Colors.black.withOpacity(0.35)),
+                  ? RepaintBoundary(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                        child: Container(color: Colors.black.withOpacity(0.35)),
+                      ),
                     )
                   : Container(color: Colors.black.withOpacity(0.35)),
             ),

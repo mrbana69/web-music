@@ -333,6 +333,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: GlassContainer(
                         borderRadius: 16,
+                        isBackdropEnabled: false,
                         onTap: () {
                           Navigator.push(
                             context,
