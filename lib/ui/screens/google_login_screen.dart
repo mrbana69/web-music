@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io' show Platform, Directory;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -312,44 +311,50 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
       // 1. Estrai cookie nativi da WebView2
       final cookies = await _desktopWebview!.getAllCookies();
 
-      final ytCookies = cookies.where((c) => c.domain.toLowerCase().contains('youtube.com')).toList();
-      final authCookies = cookies.where((c) =>
-          c.name == 'SAPISID' ||
-          c.name == '__Secure-3PAPISID' ||
-          c.name == '__Secure-1PAPISID' ||
-          c.name == 'LOGIN_INFO' ||
-          c.name == 'SID' ||
-          c.name == 'SSID').toList();
+      final ytCookies = cookies.where((c) {
+        final d = c.domain.toLowerCase().replaceAll('\u0000', '').trim();
+        return d.endsWith('youtube.com') || d.contains('youtube.com');
+      }).toList();
 
-      final hasSapisid = authCookies.any((c) =>
-          c.name == 'SAPISID' ||
-          c.name == '__Secure-3PAPISID' ||
-          c.name == '__Secure-1PAPISID');
-
-      final hasSession = authCookies.any((c) =>
-          c.name == 'LOGIN_INFO' || c.name == 'SID' || c.name == 'SSID');
+      final hasYtLogin = ytCookies.any((c) => c.name.replaceAll('\u0000', '').trim() == 'LOGIN_INFO');
+      final hasYtSapisid = ytCookies.any((c) {
+        final n = c.name.replaceAll('\u0000', '').trim();
+        return n == 'SAPISID' || n == '__Secure-3PAPISID' || n == '__Secure-1PAPISID';
+      });
+      final hasYtSid = ytCookies.any((c) {
+        final n = c.name.replaceAll('\u0000', '').trim();
+        return n == 'SID' || n == '__Secure-3PSID' || n == '__Secure-1PSID';
+      });
 
       // Probe current page status, username and avatar via JavaScript
       String pageUserName = '';
       String pageAvatar = '';
       bool onMusicHome = false;
+      bool isYtLoggedIn = false;
 
       try {
         final jsProbe = await _desktopWebview!.evaluateJavaScript('''
           (function() {
             var name = '';
             var avatar = '';
-            var href = window.location.href || '';
+            var hostname = window.location.hostname || '';
+            var isYtm = (hostname === 'music.youtube.com');
+            var loggedIn = false;
             try {
               if (window.ytcfg) {
                 name = window.ytcfg.get('USER_NAME') || '';
+                loggedIn = Boolean(window.ytcfg.get('LOGGED_IN'));
               }
             } catch(e) {}
             try {
-              var img = document.querySelector('button#avatar-btn img, ytmusic-nav-bar img#img, .ytmusic-nav-bar img');
-              if (img && img.src) avatar = img.src;
+              var avatarBtn = document.querySelector('button#avatar-btn, ytmusic-avatar');
+              if (avatarBtn) loggedIn = true;
+              var img = document.querySelector('button#avatar-btn img, ytmusic-nav-bar #avatar-btn img');
+              if (img && img.src && !img.src.includes('logo') && !img.src.includes('svg')) {
+                avatar = img.src;
+              }
             } catch(e) {}
-            return JSON.stringify({href: href, name: name, avatar: avatar});
+            return JSON.stringify({hostname: hostname, isYtm: isYtm, loggedIn: loggedIn, name: name, avatar: avatar});
           })()
         ''');
         if (jsProbe != null) {
@@ -359,41 +364,55 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
           }
           final dynamic map = jsonDecode(clean);
           if (map is Map) {
-            final href = map['href']?.toString() ?? '';
+            final hostname = map['hostname']?.toString() ?? '';
+            onMusicHome = (hostname == 'music.youtube.com');
+            isYtLoggedIn = (map['loggedIn'] == true);
             pageUserName = map['name']?.toString() ?? '';
             pageAvatar = map['avatar']?.toString() ?? '';
-            onMusicHome = href.contains('music.youtube.com');
           }
         }
       } catch (e) {
         debugPrint('[GoogleLoginScreen Desktop] jsProbe error: $e');
       }
 
-      debugPrint('[GoogleLoginScreen Desktop] probe: onMusicHome=$onMusicHome, user=$pageUserName, hasSapisid=$hasSapisid, hasSession=$hasSession, totalCookies=${cookies.length}');
+      debugPrint('[GoogleLoginScreen Desktop] probe: onMusicHome=$onMusicHome, isYtLoggedIn=$isYtLoggedIn, hasYtLogin=$hasYtLogin, hasYtSapisid=$hasYtSapisid, hasYtSid=$hasYtSid, totalCookies=${cookies.length}');
 
-      final isAuthDetected = (hasSapisid && hasSession) || (onMusicHome && (hasSapisid || hasSession || pageAvatar.isNotEmpty || pageUserName.isNotEmpty));
+      // Authentication is ONLY possible if:
+      // 1. YouTube login cookie is present (LOGIN_INFO)
+      // 2. YouTube session/API auth is present (SAPISID or SID)
+      // 3. Current page is music.youtube.com OR user triggered manual verification
+      final isPotentialAuth = hasYtLogin && (hasYtSapisid || hasYtSid) && (onMusicHome || isManual);
 
-      if (isAuthDetected) {
+      if (isPotentialAuth) {
         final Map<String, String> cookieMap = {};
 
         // 1. Base / Google cookies first
         for (final c in cookies) {
-          if (!c.domain.toLowerCase().contains('youtube.com') && c.name.isNotEmpty && c.value.isNotEmpty) {
-            cookieMap[c.name] = c.value;
+          final n = c.name.replaceAll('\u0000', '').trim();
+          final v = c.value.replaceAll('\u0000', '').trim();
+          final d = c.domain.toLowerCase().replaceAll('\u0000', '').trim();
+          if (!d.contains('youtube.com') && n.isNotEmpty && v.isNotEmpty) {
+            cookieMap[n] = v;
           }
         }
 
         // 2. Overwrite with .youtube.com cookies
         for (final c in ytCookies) {
-          if (!c.domain.toLowerCase().contains('music.youtube.com') && c.name.isNotEmpty && c.value.isNotEmpty) {
-            cookieMap[c.name] = c.value;
+          final n = c.name.replaceAll('\u0000', '').trim();
+          final v = c.value.replaceAll('\u0000', '').trim();
+          final d = c.domain.toLowerCase().replaceAll('\u0000', '').trim();
+          if (!d.contains('music.youtube.com') && n.isNotEmpty && v.isNotEmpty) {
+            cookieMap[n] = v;
           }
         }
 
         // 3. Overwrite with music.youtube.com cookies (most specific)
         for (final c in ytCookies) {
-          if (c.domain.toLowerCase().contains('music.youtube.com') && c.name.isNotEmpty && c.value.isNotEmpty) {
-            cookieMap[c.name] = c.value;
+          final n = c.name.replaceAll('\u0000', '').trim();
+          final v = c.value.replaceAll('\u0000', '').trim();
+          final d = c.domain.toLowerCase().replaceAll('\u0000', '').trim();
+          if (d.contains('music.youtube.com') && n.isNotEmpty && v.isNotEmpty) {
+            cookieMap[n] = v;
           }
         }
 
@@ -406,18 +425,28 @@ class _GoogleLoginScreenState extends State<GoogleLoginScreen> {
           verifiedUser = await api
               .fetchYtmAccountInfo(cookieStr)
               .timeout(const Duration(seconds: 4));
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[GoogleLoginScreen Desktop] account verification check error: $e');
+        }
 
-        // Fallback user from page probe so login is never blocked if account_menu format varies
-        verifiedUser ??= GoogleUser(
-          name: pageUserName.isNotEmpty ? pageUserName : 'Utente Google',
-          email: '',
-          avatarUrl: pageAvatar,
-          cookie: cookieStr,
-        );
+        // Periodic check: ONLY trigger success if Innertube validated the real account!
+        // Never fall back to dummy "Utente Google" during periodic polling, as that prematurely closes login.
+        if (verifiedUser != null) {
+          await _handleSuccessfulDesktopAuth(cookieStr, verifiedUser: verifiedUser);
+          return;
+        }
 
-        await _handleSuccessfulDesktopAuth(cookieStr, verifiedUser: verifiedUser);
-        return;
+        // Manual check ("Fatto" button clicked): if verifiedUser is null, allow fallback if page probe found user
+        if (isManual && (pageUserName.isNotEmpty || isYtLoggedIn)) {
+          verifiedUser = GoogleUser(
+            name: pageUserName.isNotEmpty ? pageUserName : 'Utente Google',
+            email: '',
+            avatarUrl: pageAvatar,
+            cookie: cookieStr,
+          );
+          await _handleSuccessfulDesktopAuth(cookieStr, verifiedUser: verifiedUser);
+          return;
+        }
       }
 
       if (isManual && mounted) {

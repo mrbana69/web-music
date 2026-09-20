@@ -20,17 +20,22 @@ class WebviewCookie {
   });
 
   factory WebviewCookie.fromJson(Map<String, dynamic> json) {
+    final rawName = (json['name'] as String?)?.replaceAll('\u0000', '').trim() ?? '';
+    final rawValue = (json['value'] as String?)?.replaceAll('\u0000', '').trim() ?? '';
+    final rawDomain = (json['domain'] as String?)?.replaceAll('\u0000', '').trim() ?? '';
+    final rawPath = (json['path'] as String?)?.replaceAll('\u0000', '').trim() ?? '';
+
     return WebviewCookie(
-      name: json['name'],
-      value: json['value'],
-      domain: json['domain'],
+      name: rawName,
+      value: rawValue,
+      domain: rawDomain,
       expires: json['expires'] == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(
               ((json['expires'] as num) * 1000).toInt(),
             ),
       httpOnly: json['httpOnly'] ?? false,
-      path: json['path'],
+      path: rawPath,
       secure: json['secure'] ?? false,
       sessionOnly: json['sessionOnly'] ?? false,
     );

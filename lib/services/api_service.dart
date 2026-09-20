@@ -45,13 +45,13 @@ class ApiService {
 
     var cookie = (customCookie != null && customCookie.isNotEmpty) ? customCookie : _storage.getYtmCookie();
     if (cookie != null && cookie.isNotEmpty) {
-      final trimmed = cookie.trim();
+      final trimmed = cookie.replaceAll('\u0000', '').trim();
       if (!trimmed.contains('=') && !trimmed.contains(';')) {
         headers['Cookie'] = 'SAPISID=$trimmed; __Secure-3PAPISID=$trimmed; __Secure-1PAPISID=$trimmed';
       } else {
         headers['Cookie'] = trimmed;
       }
-      final authHeader = _generateSapisidHash(cookie);
+      final authHeader = _generateSapisidHash(trimmed);
       if (authHeader != null) {
         headers['Authorization'] = authHeader;
       }
@@ -108,7 +108,7 @@ class ApiService {
   String? _generateSapisidHash(String cookieString, [String origin = 'https://music.youtube.com']) {
     try {
       String? sapisid;
-      final trimmed = cookieString.trim();
+      final trimmed = cookieString.replaceAll('\u0000', '').trim();
       if (!trimmed.contains('=') && !trimmed.contains(';')) {
         sapisid = trimmed;
       } else {
@@ -116,8 +116,8 @@ class ApiService {
         for (final part in trimmed.split(';')) {
           final idx = part.indexOf('=');
           if (idx != -1) {
-            final k = part.substring(0, idx).trim();
-            final v = part.substring(idx + 1).trim();
+            final k = part.substring(0, idx).replaceAll('\u0000', '').trim();
+            final v = part.substring(idx + 1).replaceAll('\u0000', '').trim();
             if (k.isNotEmpty) {
               cookieMap[k] = v;
             }
@@ -1384,12 +1384,13 @@ class ApiService {
   // --- 9. Innertube & Google Library Sync ---
   Future<GoogleUser?> fetchYtmAccountInfo(String cookieString) async {
     try {
+      final sanitizedCookie = cookieString.replaceAll('\u0000', '').trim();
       final uri = Uri.parse('$_innertubeEndpoint/account/account_menu?prettyPrint=false');
       final payload = jsonEncode({
         'context': _buildClientContext(),
       });
 
-      final headers = _buildInnertubeHeaders(cookieString);
+      final headers = _buildInnertubeHeaders(sanitizedCookie);
 
       final res = await _client.post(uri, headers: headers, body: payload).timeout(const Duration(seconds: 8));
       if (res.statusCode == 200) {
@@ -1400,7 +1401,7 @@ class ApiService {
           final name = header['accountName']?['runs']?[0]?['text']?.toString() ??
                        header['accountName']?['simpleText']?.toString() ?? 'Utente Google';
           final email = header['email']?['runs']?[0]?['text']?.toString() ??
-                        header['email']?['simpleText']?.toString() ?? '';
+                       header['email']?['simpleText']?.toString() ?? '';
           final thumbs = header['accountPhoto']?['thumbnails'] as List? ?? [];
           final avatar = thumbs.isNotEmpty ? thumbs.last['url']?.toString() ?? '' : '';
 
@@ -1408,7 +1409,7 @@ class ApiService {
             name: name,
             email: email,
             avatarUrl: AppConfig.formatArtwork(avatar),
-            cookie: cookieString,
+            cookie: sanitizedCookie,
           );
         }
       }

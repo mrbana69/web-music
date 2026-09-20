@@ -30,7 +30,8 @@ class StorageService {
     final raw = _prefs.getString(_keyGoogleUser);
     if (raw == null || raw.isEmpty) return null;
     try {
-      return GoogleUser.fromJson(jsonDecode(raw));
+      final clean = raw.replaceAll('\u0000', '');
+      return GoogleUser.fromJson(jsonDecode(clean));
     } catch (_) {
       return null;
     }
@@ -40,9 +41,12 @@ class StorageService {
     if (user == null) {
       await _prefs.remove(_keyGoogleUser);
     } else {
-      await _prefs.setString(_keyGoogleUser, jsonEncode(user.toJson()));
-      if (user.cookie != null && user.cookie!.isNotEmpty) {
-        await setYtmCookie(user.cookie);
+      final sanitizedUser = user.copyWith(
+        cookie: user.cookie?.replaceAll('\u0000', '').trim(),
+      );
+      await _prefs.setString(_keyGoogleUser, jsonEncode(sanitizedUser.toJson()));
+      if (sanitizedUser.cookie != null && sanitizedUser.cookie!.isNotEmpty) {
+        await setYtmCookie(sanitizedUser.cookie);
       }
     }
   }
@@ -58,14 +62,15 @@ class StorageService {
 
   // --- YouTube Music Session Cookie ---
   String? getYtmCookie() {
-    return _prefs.getString(_keyCookie);
+    final raw = _prefs.getString(_keyCookie);
+    return raw?.replaceAll('\u0000', '').trim();
   }
 
   Future<void> setYtmCookie(String? cookie) async {
     if (cookie == null || cookie.isEmpty) {
       await _prefs.remove(_keyCookie);
     } else {
-      await _prefs.setString(_keyCookie, cookie.trim());
+      await _prefs.setString(_keyCookie, cookie.replaceAll('\u0000', '').trim());
     }
   }
 
