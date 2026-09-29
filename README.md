@@ -1,185 +1,190 @@
-# 🎵 Preluded (V2 - InnerTune Backend Architecture)
+# 🎵 Preluded
 
-A web music progressive web app (PWA) with a storefront UI inspired by Apple Music, backed by an **InnerTune-inspired Node.js / Express and Serverless architecture** bridging Spotify metadata and YouTube Music stream resolution.
+**An open-source music player PWA with an Apple Music-inspired interface.**
+Installable on your phone or desktop, synced lyrics, and one-click Google sign-in to bring your YouTube Music playlists with you.
+
+**[▶ Try it live](https://preluded.vercel.app)** · [Features](#-features) · [Run it locally](#-quick-start) · [Privacy](https://preluded.vercel.app/privacy) · [Terms](https://preluded.vercel.app/tos)
+
+<!-- Add a screenshot or GIF here, for example:
+![Preluded screenshot](docs/screenshot.png)
+-->
 
 ---
 
-## 🌟 Architecture Overview
+## ✨ Features
+
+**Listening**
+- Search for songs, artists and albums
+- Artist pages with top songs, discography and similar artists
+- Album and playlist pages
+- Home feed with YouTube Music **Quick Picks**
+- Queue, volume, playback speed and sleep timer
+- Lock-screen and notification controls through the Media Session API, plus a background-audio workaround for iOS
+
+**Lyrics**
+- Time-synced lyrics from [lrclib.net](https://lrclib.net)
+- Optional line-by-line translation to Italian
+
+**Your library**
+- Sign in with **Google** (read-only YouTube access) and import your playlists and liked songs
+- Or skip sign-in and import any public playlist by pasting a YouTube / YouTube Music link
+- Optional YouTube Music session for personalised mixes
+- Local playlists, liked songs and listening history, stored in your browser's `localStorage`
+
+**Sharing**
+- Share a track with a deep link that opens a "listen now" banner for the recipient
+
+**Installable**
+- Web app manifest and service worker, so it can be added to the home screen and runs standalone
+
+## 📱 Platforms
+
+| Platform | Status |
+| :--- | :--- |
+| Web / PWA | Live |
+| iOS / macOS | Coming soon |
+| Android | Coming soon |
+| Windows / Linux | Coming soon |
+
+Native builds are in development. Until then, the PWA works on all of them.
+
+---
+
+## 🧩 How it works
 
 ```mermaid
 flowchart TD
-    subgraph Frontend["Frontend (PWA Single-File)"]
-        UI[index.html Audio Player & UI]
-        SW[sw.js Service Worker & Cache]
+    subgraph Client["Client (PWA)"]
+        L["index.html · landing page"]
+        A["app.html · player"]
+        SW["sw.js · service worker"]
     end
 
-    subgraph Backend["Backend Architecture (/api)"]
-        Router[Express Router & Vercel Endpoints]
-        
-        subgraph Controllers
-            SC[searchController]
-            MC[musicController]
-            RC[resolveController]
-            StC[streamController]
-            AuC[authController]
-        end
-
-        subgraph Services["InnerTune Service Layer"]
-            SpotSvc[Spotify Metadata Service]
-            YTSvc[YouTube Music Search & Scrape]
-            Fuzz[Fuzzy Matcher + Duration Penalty]
-            StreamSvc[Stream Resolution Engine]
-            AuthSvc[1-Click Spotify & Google Auth]
-            CacheSvc[TTL Memory Cache]
-        end
+    subgraph Server["Backend (Express / Vercel Functions)"]
+        R["Router · /api/*"]
+        YT["youtubeMusicService<br/>search · browse · home"]
+        ST["streamResolutionService<br/>audio stream URLs"]
+        RS["trackResolverService<br/>fuzzy matching"]
+        AU["authService<br/>Google OAuth · TV device code"]
+        SP["spotifyService<br/>optional metadata"]
+        C["cacheService<br/>TTL cache"]
     end
 
-    UI --> Router
-    Router --> Controllers
-    Controllers --> Services
-    SpotSvc --> Fuzz
-    YTSvc --> Fuzz
-    Fuzz --> StreamSvc
-    StreamSvc --> CacheSvc
+    A --> R
+    R --> YT
+    R --> ST
+    R --> RS
+    R --> AU
+    R -. only if configured .-> SP
+    ST --> C
+    RS --> C
+    A -- "iframe audio bridge" --> YTI["YouTube IFrame API"]
+    A -- "lyrics" --> LRC["lrclib.net"]
 ```
 
-### Key Features
-- **Zero Frontend UI Regressions**: The existing frontend interface, typography, glassmorphism design, and animations in `index.html` are 100% preserved.
-- **InnerTune-Style Hybrid Architecture**:
-  - **Metadata & Catalog**: Uses Spotify Web API (Client Credentials or OAuth) for high-accuracy artist discographies, album tracks, and search indexing.
-  - **Track Resolver & Matcher**: Calculates Levenshtein string similarity and Token Set ratio, penalizing mismatches with duration thresholds ($\pm 7\text{s}$).
-  - **Audio Extraction**: Resolves candidate tracks to direct, playable audio streams (m4a/opus/mp3) with automatic caching and renewal.
-- **Frictionless 1-Click Login**:
-  - Instant guest mode without mandatory login barriers.
-  - 1-click Google sign-in.
-  - 1-click Spotify sign-in.
-  - Device-code TV login flow support (`/api/auth/yt/get-code`).
-- **Deploy Anywhere**: Works seamlessly as a standalone Express server (`npm start`) or as Vercel Serverless Functions (`/api/*`).
+- **Frontend:** two static pages, `index.html` (landing) and `app.html` (the player, served at `/app`). No build step.
+- **Backend:** an Express app that also runs unchanged as Vercel Serverless Functions (`api/index.js` re-exports it).
+- **Playback:** the player can use a hidden YouTube IFrame player as an audio bridge, or a direct audio stream resolved by the backend (`/api/stream`, `/api/stream-url`). Stream URLs expire, so they are cached with a TTL and re-resolved when needed.
+- **Sign-in:** Google OAuth (read-only YouTube scope) and the YouTube TV device-code flow. Tokens live in the browser, not on the server.
+- **Offline catalog:** a small built-in catalog lets the app start and respond even with no configuration.
+- **Spotify (legacy, optional):** if `SPOTIFY_*` keys are set, the backend can use the Spotify Web API for metadata. The app UI does **not** offer Spotify sign-in.
 
 ---
 
-## 🚀 Quick Start (Local Setup)
+## 🚀 Quick start
 
-### 1. Install Dependencies
 ```bash
+git clone https://github.com/mrbana69/web-music.git
+cd web-music
 npm install
-```
-
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env`:
-```bash
 cp .env.example .env
-```
-
-```ini
-PORT=3000
-NODE_ENV=development
-
-# Optional: Spotify Credentials (https://developer.spotify.com/dashboard)
-SPOTIFY_CLIENT_ID=your_spotify_client_id
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-SPOTIFY_REDIRECT_URI=http://localhost:3000/api/auth/spotify/callback
-
-# Optional: Google OAuth Credentials (https://console.cloud.google.com)
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
-```
-
-> **Note**: Even without any `.env` keys, the app starts and runs out of the box with the built-in offline music catalog and fallback resolver.
-
-### 3. Run the Server
-```bash
 npm start
 ```
-Open your browser at: `http://localhost:3000`
 
----
+Then open <http://localhost:3000>. Tested on Node.js 22.
 
-## 🧪 Testing & Verification
+The app starts without any keys. Add the following to `.env` to enable more:
 
-Run the automated endpoint test suite:
+| Variable | Needed for |
+| :--- | :--- |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Google sign-in and importing your playlists ([Google Cloud Console](https://console.cloud.google.com/apis/credentials)) |
+| `YTM_COOKIE` | Optional server-wide YouTube Music session |
+| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REDIRECT_URI` | Optional, legacy Spotify metadata |
+| `PORT`, `NODE_ENV`, `CORS_ORIGIN` | Server settings |
+| `RESOLVER_CACHE_TTL`, `STREAM_CACHE_TTL`, `METADATA_CACHE_TTL` | Cache lifetimes in seconds |
+| `SESSION_SECRET` | Set this to a random value in production |
+
+### Deploy on Vercel
+
+Import the repo in Vercel and add the same environment variables. `vercel.json` already routes `/app`, `/privacy`, `/tos` and `/api/*`.
+
+### Checks
+
 ```bash
-npm run test:api
+npm run check      # syntax-checks the inline scripts in index.html and app.html
+npm run test:api   # runs the API contract tests
 ```
 
-Run the frontend inline script syntax validator:
-```bash
-npm run check
-```
+---
+
+## 📡 API reference
+
+| Endpoint | Description |
+| :--- | :--- |
+| `GET /health` | Health check and cache status |
+| `GET /api/search` | Search (`s` track, `a` artist, `al` album, or `q`) |
+| `GET /api/info` | Track metadata (`id`) |
+| `GET /api/track` | Playable stream manifest for a track (`id`, `quality`) |
+| `GET /api/stream`, `/api/audio` | Audio stream for the player |
+| `GET /api/stream-url` | Direct audio URL with TTL (`videoId`) |
+| `GET /api/resolve` | Match a title/artist to a YouTube video (`title`, `artist`, `duration_ms`) |
+| `GET /api/mix` | Recommendations and radio for a track |
+| `GET /api/home`, `/api/quick-picks` | Home feed and Quick Picks |
+| `GET /api/artist`, `/api/artist/similar` | Artist details and similar artists |
+| `GET /api/album`, `/api/playlist` | Album and playlist contents |
+| `GET /api/auth/google/login` | Start Google sign-in |
+| `GET /api/auth/google/library` | Import playlists and liked songs (authenticated) |
+| `GET /api/auth/yt/get-code`, `/verify-code` | YouTube TV device-code flow |
+| `GET /api/auth/session` | Connection state |
+
+The Spotify auth routes (`/api/auth/spotify/*`) still exist in the backend but are not used by the app.
 
 ---
 
-## 📡 API Contract Reference
-
-| Endpoint | Method | Params | Description |
-| :--- | :---: | :--- | :--- |
-| `/health` | `GET` | — | Health check and cache status |
-| `/api/search` | `GET` | `s` (track), `a` (artist), `al` (album), `q` | Returns normalized search results |
-| `/api/info` | `GET` | `id` | Returns track metadata, artists, albums, and mix ID |
-| `/api/track` | `GET` | `id`, `quality` | Returns base64 encoded stream manifest for player |
-| `/api/mix` | `GET` | `id` | Returns track recommendations and radio items |
-| `/api/artist` | `GET` | `id` or `f` | Returns artist metadata, top tracks, and discography |
-| `/api/artist/similar` | `GET` | `id` | Returns similar/related artists |
-| `/api/album` | `GET` | `id` | Returns album details and track list |
-| `/api/resolve` | `GET` | `title`, `artist`, `duration_ms` | Resolves track to YouTube videoId with confidence score |
-| `/api/stream-url` | `GET` | `videoId` | Returns direct playable audio URL with TTL |
-| `/api/auth/spotify/login` | `GET` | `redirect=true` | 1-Click Spotify OAuth login URL |
-| `/api/auth/google/login` | `GET` | `redirect=true` | 1-Click Google OAuth login URL |
-| `/api/auth/yt/get-code` | `GET` | — | TV Device Code flow initiator |
-| `/api/auth/session` | `GET` | — | Active provider and connection state |
-
----
-
-## 📂 Project Structure
+## 📂 Project structure
 
 ```
 web-music/
-├── server.js                  # Main Express server entry point
-├── config/
-│   └── env.js                 # Environment configuration loader
-├── middleware/
-│   ├── auth.js                # Token authorization middleware
-│   ├── cors.js                # CORS configuration
-│   ├── errorHandler.js        # Centralized error handler
-│   └── requestLogger.js       # Request logging
-├── lib/
-│   ├── catalogData.js         # Rich fallback offline music catalog
-│   ├── fuzzyMatcher.js        # InnerTune fuzzy matching + duration penalty
-│   ├── httpClient.js          # HTTP fetch client with retries & timeout
-│   └── manifestGenerator.js   # Base64 stream manifest generator
-├── services/
-│   ├── authService.js         # Spotify PKCE + Google OAuth + Device flow
-│   ├── cacheService.js        # In-memory TTL key-value cache
-│   ├── spotifyService.js      # Spotify Web API client (metadata/search)
-│   ├── youtubeMusicService.js # YouTube Music search & scrape engine
-│   ├── trackResolverService.js# Track matcher bridging Spotify -> YouTube
-│   └── streamResolutionService.js # Direct audio stream extractor
-├── controllers/
-│   ├── authController.js      # Auth route handlers
-│   ├── musicController.js     # Info, track, mix, artist, album handlers
-│   ├── resolveController.js   # Track resolve handler
-│   ├── searchController.js    # Multi-provider search handler
-│   └── streamController.js     # Direct stream URL handler
-├── routes/
-│   ├── index.js               # Main API aggregator router
-│   ├── authRoutes.js          # /api/auth/*
-│   ├── healthRoutes.js        # /health
-│   ├── musicRoutes.js         # /api/info, /api/track, etc.
-│   ├── resolveRoutes.js       # /api/resolve
-│   ├── searchRoutes.js        # /api/search
-│   └── streamRoutes.js        # /api/stream-url
-├── api/                       # Vercel Serverless Function entrypoints
-├── index.html                 # Complete Apple Music-style PWA frontend
-├── manifest.json              # Web app manifest
-├── sw.js                      # Progressive Service Worker
-└── tools/
-    ├── check_script.js        # Frontend syntax validator
-    └── test_api.js            # Automated API contract test suite
+├── index.html            # Landing page
+├── app.html              # The player (served at /app)
+├── privacy.html, tos.html
+├── manifest.json, sw.js  # PWA manifest and service worker
+├── server.js             # Express entry point
+├── api/index.js          # Vercel Serverless entry point
+├── vercel.json           # Routes and rewrites
+├── config/env.js         # Environment loader
+├── middleware/           # CORS, auth extraction, logging, error handling
+├── routes/               # /api route definitions
+├── controllers/          # Request handlers
+├── services/             # YouTube Music, streams, resolver, auth, Spotify, cache
+├── lib/                  # Fuzzy matcher, HTTP client, offline catalog, helpers
+├── tools/                # Test and debugging scripts
+├── icons/                # PWA icons
+└── mvp.md                # Original design notes (in Italian)
 ```
+
+---
+
+## ⚠️ Disclaimer
+
+Preluded is an independent hobby project. It is **not affiliated with, endorsed by, or sponsored by** YouTube, Google or Spotify.
+
+To search and play audio, the backend talks to YouTube's **unofficial, undocumented Innertube endpoints**, not to a licensed music API. This may conflict with the [YouTube Terms of Service](https://www.youtube.com/t/terms) and can stop working at any time. All music, artwork and lyrics belong to their respective rights holders.
+
+It is provided for **personal, non-commercial, educational use**, as is and without warranty. If you deploy your own instance, you are responsible for how you use it.
 
 ---
 
 ## 📄 License
 
-GPL-3.0 License
+[GPL-3.0](LICENSE)
