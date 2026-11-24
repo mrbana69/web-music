@@ -1232,7 +1232,9 @@ h1 { font-size: 34px; font-weight: 800; }
                     <svg class="icon" viewBox="0 0 24 24" style="color:var(--accent);"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
                     <h3 style="margin:0; font-size:20px; font-weight:700;">Sleep Timer</h3>
                 </div>
-                <button class="btn-text" onclick="closeSleepTimerModal()" style="font-size:20px; padding:4px 8px;" aria-label="Chiudi Sleep Timer">✕</button>
+                <button class="btn-text" onclick="closeSleepTimerModal()" style="padding:4px 8px; display:flex; align-items:center; justify-content:center;" aria-label="Chiudi Sleep Timer">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="width:18px;height:18px;"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
             </div>
             <p style="font-size:13px; color:var(--text-secondary); margin-top:0; margin-bottom:20px;">Arresta gradualmente la musica prima di addormentarti.</p>
             <div style="display:flex; flex-direction:column; gap:8px;">
@@ -1254,7 +1256,9 @@ h1 { font-size: 34px; font-weight: 800; }
                     <svg class="icon" viewBox="0 0 24 24" style="color:var(--accent);"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
                     <h3 style="margin:0; font-size:20px; font-weight:700;">Equalizzatore</h3>
                 </div>
-                <button class="btn-text" onclick="closeEqualizerModal()" style="font-size:20px; padding:4px 8px;" aria-label="Chiudi Equalizzatore">✕</button>
+                <button class="btn-text" onclick="closeEqualizerModal()" style="padding:4px 8px; display:flex; align-items:center; justify-content:center;" aria-label="Chiudi Equalizzatore">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="width:18px;height:18px;"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
             </div>
             
             <!-- Presets row -->
@@ -1308,7 +1312,9 @@ h1 { font-size: 34px; font-weight: 800; }
         <div class="modal-card" style="max-width: 380px; width: 92%; padding: 26px 20px; background: rgba(24,24,27,0.96); border: 1px solid rgba(255,255,255,0.14); border-radius: 28px; box-shadow: 0 25px 60px rgba(0,0,0,0.85); text-align:center; animation: popIn 0.3s ease;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
                 <h3 style="margin:0; font-size:20px; font-weight:700;">Condividi Brano</h3>
-                <button class="btn-text" onclick="closeShareModal()" style="font-size:20px; padding:4px 8px;" aria-label="Chiudi Condividi">✕</button>
+                <button class="btn-text" onclick="closeShareModal()" style="padding:4px 8px; display:flex; align-items:center; justify-content:center;" aria-label="Chiudi Condividi">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="width:18px;height:18px;"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
             </div>
 
             <!-- Story Card Preview -->
@@ -1364,12 +1370,12 @@ h1 { font-size: 34px; font-weight: 800; }
             </div>
             <!-- Mood & Vibe Filter Chips -->
             <div class="mood-chips-container" id="moodChipsContainer" role="toolbar" aria-label="Filtri Mood">
-                <button class="mood-chip active" onclick="filterByMood('all', this)" role="button" aria-label="Mostra tutti i brani">✨ Tutti</button>
-                <button class="mood-chip" onclick="filterByMood('workout', this)" role="button" aria-label="Filtra per Allenamento">⚡ Allenamento</button>
-                <button class="mood-chip" onclick="filterByMood('chill', this)" role="button" aria-label="Filtra per Focus e Relax">☕ Focus & Chill</button>
-                <button class="mood-chip" onclick="filterByMood('night', this)" role="button" aria-label="Filtra per Notte">🌙 Notte</button>
-                <button class="mood-chip" onclick="filterByMood('party', this)" role="button" aria-label="Filtra per Party">🎉 Party</button>
-                <button class="mood-chip" onclick="filterByMood('vintage', this)" role="button" aria-label="Filtra per Anni 90 e 2000">📻 90s & 2000</button>
+                <button class="mood-chip active" onclick="filterByMood('all', this)" role="button" aria-label="Mostra tutti i brani">Tutti</button>
+                <button class="mood-chip" onclick="filterByMood('workout', this)" role="button" aria-label="Filtra per Allenamento">Allenamento</button>
+                <button class="mood-chip" onclick="filterByMood('chill', this)" role="button" aria-label="Filtra per Focus e Relax">Focus & Chill</button>
+                <button class="mood-chip" onclick="filterByMood('night', this)" role="button" aria-label="Filtra per Notte">Notte</button>
+                <button class="mood-chip" onclick="filterByMood('party', this)" role="button" aria-label="Filtra per Party">Party</button>
+                <button class="mood-chip" onclick="filterByMood('vintage', this)" role="button" aria-label="Filtra per Anni 90 e 2000">90s & 2000</button>
             </div>
         </header>
         <div class="container" id="homeContainer">
@@ -1548,10 +1554,12 @@ h1 { font-size: 34px; font-weight: 800; }
         <div class="modal-card" style="max-width:480px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:22px;">🔴</span>
+                    <span style="display:inline-block; width:14px; height:14px; border-radius:50%; background:#ef4444; box-shadow:0 0 8px rgba(239,68,68,0.6);"></span>
                     <h2 style="margin:0; font-size:18px;">Sessione YouTube Music</h2>
                 </div>
-                <button class="control-btn small" onclick="closeYtmCookieModal()" title="Chiudi" aria-label="Chiudi modale sessione YouTube Music" style="width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.08); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center;">✕</button>
+                <button class="control-btn small" onclick="closeYtmCookieModal()" title="Chiudi" aria-label="Chiudi modale sessione YouTube Music" style="width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.08); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="width:16px;height:16px;"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
             </div>
             <p style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin-bottom:12px;">
                 Come su <strong>SimpMusic</strong> e <strong>ViMusic</strong>, collegando la sessione del tuo account YouTube Music potrai avere le <strong>Scelte Rapide, i Mix e "Di nuovo all'ascolto" identici al 100%</strong> alla tua pagina reale di YouTube Music!
@@ -1766,7 +1774,7 @@ h1 { font-size: 34px; font-weight: 800; }
                             Artist Name
                         </button>
                         <button type="button" id="sleepTimerBadge" class="sleep-timer-badge hidden" onclick="openSleepTimerModal()" aria-label="Sleep timer attivo">
-                            <span>🌙</span>
+                            <svg class="icon icon-xs" viewBox="0 0 24 24" style="width:12px; height:12px;"><path fill="currentColor" d="M12.3 2a10 10 0 0 0-.19 20 10 10 0 0 0 8.35-4.52 8 8 0 0 1-8.16-15.48z"/></svg>
                             <span id="sleepTimerCountdown">30:00</span>
                         </button>
                         <button class="control-btn small" id="addToPlaylistBtn" onclick="openAddToPlaylistModal()" title="Aggiungi a playlist" aria-label="Aggiungi a playlist">
@@ -2019,13 +2027,18 @@ h1 { font-size: 34px; font-weight: 800; }
                     this.dummyAudio.playsInline = true;
                     this.dummyAudio.setAttribute('playsinline', '');
                     this.dummyAudio.setAttribute('webkit-playsinline', '');
-                    this.dummyAudio.volume = 0.02;
+                    this.dummyAudio.volume = 0.01;
                     this.dummyAudio.onerror = () => {
                         this.dummyAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
                     };
                 }
             },
             start() {
+                // Solo ed esclusivamente se c'è un brano in effettiva riproduzione
+                if (!state || !state.isPlaying) {
+                    this.stop();
+                    return;
+                }
                 try {
                     this.init();
                     if ('audioSession' in navigator) {
@@ -2062,6 +2075,12 @@ h1 { font-size: 34px; font-weight: 800; }
                 try {
                     if (this.dummyAudio && !this.dummyAudio.paused) {
                         this.dummyAudio.pause();
+                        this.dummyAudio.currentTime = 0;
+                    }
+                    if (this.oscNode) {
+                        try { this.oscNode.stop(); } catch (_) {}
+                        try { this.oscNode.disconnect(); } catch (_) {}
+                        this.oscNode = null;
                     }
                 } catch (e) {}
             }
@@ -2167,7 +2186,7 @@ h1 { font-size: 34px; font-weight: 800; }
                                         state.isPlaying = false;
                                         updatePlayIcons();
                                         releaseWakeLock();
-                                        showToast('Riproduzione completata e fermata dallo Sleep Timer 🌙');
+                                        showToast('Riproduzione completata e fermata dallo Sleep Timer');
                                         return;
                                     }
                                     const cur = this.getCurrentTime();
@@ -2283,8 +2302,12 @@ h1 { font-size: 34px; font-weight: 800; }
                 if ('audioSession' in navigator) {
                     navigator.audioSession.type = 'playback';
                 }
-                if (backgroundAudioManager && backgroundAudioManager.start) {
-                    backgroundAudioManager.start();
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) {
+                    const ctx = new AudioCtx();
+                    if (ctx.state === 'suspended') {
+                        ctx.resume().catch(() => {});
+                    }
                 }
             } catch (e) {}
         }
@@ -2378,7 +2401,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 state.isPlaying = false;
                 updatePlayIcons();
                 releaseWakeLock();
-                showToast('Riproduzione completata e fermata dallo Sleep Timer 🌙');
+                showToast('Riproduzione completata e fermata dallo Sleep Timer');
                 return;
             }
             const cur = nativeAudio.currentTime || 0;
@@ -2422,6 +2445,8 @@ h1 { font-size: 34px; font-weight: 800; }
                         try { navigator.audioSession.type = 'playback'; } catch (_) {}
                     }
                     backgroundAudioManager.start();
+                } else {
+                    backgroundAudioManager.stop();
                 }
             } else {
                 // Tornati in primo piano: risincronizza e mantieni attivo
@@ -2436,6 +2461,8 @@ h1 { font-size: 34px; font-weight: 800; }
                     }
                     updatePlayIcons();
                     updateProgress();
+                } else {
+                    backgroundAudioManager.stop();
                 }
                 if (state.isPlaying && !wakeLock) {
                     requestWakeLock();
@@ -2631,7 +2658,6 @@ h1 { font-size: 34px; font-weight: 800; }
             // iOS & Mobile Audio Gesture Unlock
             try {
                 backgroundAudioManager.init();
-                backgroundAudioManager.start();
                 if (typeof equalizerManager !== 'undefined' && equalizerManager.connectNativeAudio) {
                     equalizerManager.connectNativeAudio();
                 }
@@ -3361,17 +3387,14 @@ h1 { font-size: 34px; font-weight: 800; }
                     const res = await apiFetch(`/search/?${paramName}=${encodeURIComponent(query)}`);
                     const data = await res.json();
                     
-                    // 🐛 STEP 3: COMPREHENSIVE SEARCH DEBUG + ROBUST PARSING
-                    console.log('🔍 SEARCH DEBUG - Query:', query, 'Type:', state.searchType);
-                    console.log('🔍 Raw API Response:', JSON.stringify(data, null, 2));
-                    console.log('🔍 API Keys:', Object.keys(data));
+                    // Search parsing and fallback
+                    console.log('[Search] Query:', query, 'Type:', state.searchType);
                     
                     if (data.data) {
-                        console.log('🔍 data.data Keys:', Object.keys(data.data));
-                        console.log('🔍 data.data.items?', !!data.data.items, Array.isArray(data.data.items) ? data.data.items.length : 0);
+                        console.log('[Search] data.data keys:', Object.keys(data.data));
                     }
                     
-                    // ULTRA-ROBUST item extraction - handles ALL API response variations
+                    // Item extraction - handles all API response variations
                     let items = [];
                     if (data.data?.items) items = data.data.items;
                     else if (data.data?.tracks?.items) items = data.data.tracks.items;
@@ -3382,14 +3405,10 @@ h1 { font-size: 34px; font-weight: 800; }
                     
                     // Flatten nested arrays
                     if (Array.isArray(items) && items.length > 0 && Array.isArray(items[0])) {
-                        console.log('🔍 Flattening nested items array');
                         items = items.flat();
                     }
                     
-                    // ULTRA-COMPREHENSIVE API response parsing for v2.6 structure
-                    console.log('🔍 API v2.6 detected - checking type-specific arrays');
-                    
-                    // v2.6 structure: data.albums.items, data.artists.items, data.tracks.items
+                    // Type-specific extraction
                     let typeKey = '';
                     switch(state.searchType) {
                         case 'track': typeKey = 'tracks'; break;
@@ -3398,20 +3417,14 @@ h1 { font-size: 34px; font-weight: 800; }
                     }
                     
                     if (data.data && data.data[typeKey] && data.data[typeKey].items) {
-                        console.log(`🔍 Found ${typeKey}.items:`, data.data[typeKey].items.length);
                         items = data.data[typeKey].items;
                     } else {
-                        // Fallback to existing logic
-                        console.log('🔍 Falling back to generic items extraction');
                         if (data.data?.items) items = data.data.items;
                         else if (data.items) items = data.items;
                         else if (Array.isArray(data)) items = data;
                     }
-                    
-                    console.log(`🔍 Final items count:`, items.length);
-                    console.log('🔍 First item:', items[0]);
 
-                    // ✅ FIXED: Use correct search results container + create grid
+                    // Use correct search results container + create grid
                     const container = document.getElementById('searchResults');
                     const sectionTitle = container.querySelector('.section-title');
                     if (sectionTitle) {
@@ -4523,7 +4536,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 const parsedRows = parseSpotifyCSV(text);
 
                 if (!parsedRows || parsedRows.length === 0) {
-                    logMsg("❌ Error: Could not find headers 'Track Name' & 'Artist Name(s)'.");
+                    logMsg("[Errore] Formato non riconosciuto: intestazioni non trovate.");
                     alert("Invalid CSV format. Please use a Spotify export.");
                     input.value = '';
                     return;
@@ -4590,19 +4603,19 @@ h1 { font-size: 34px; font-weight: 800; }
                         if (bestMatch) {
                             importState.foundTracks.push(bestMatch);
                             trackDiv.style.color = 'green'; // Success
-                            logMsg(`✔ Added: ${bestMatch.title}`);
+                            logMsg(`[Aggiunto] ${bestMatch.title}`);
                         } else {
                             trackDiv.style.color = 'red'; // No match
-                            logMsg(`❌ No match for: ${row.title}`);
+                            logMsg(`[Non trovato] ${row.title}`);
                         }
                     } else {
                         trackDiv.style.color = 'red';
-                        logMsg(`❌ No results for: ${row.title}`);
+                        logMsg(`[Nessun risultato] ${row.title}`);
                     }
                 } catch (err) {
                     console.error("Import search error", err);
                     trackDiv.style.color = 'red';
-                    logMsg(`❌ Error: ${err.message}`);
+                    logMsg(`[Errore] ${err.message}`);
                 }
 
                 importState.currentIndex = i + 1;
@@ -4999,7 +5012,7 @@ h1 { font-size: 34px; font-weight: 800; }
             const curTime = curPlayer?.currentTime || 15;
             state.loginGateLimit = curTime + 30; // 30s additional preview
             if (!state.isPlaying) togglePlay();
-            showToast('Anteprima estesa di 30 secondi ⏳');
+            showToast('Anteprima estesa di 30 secondi');
         }
 
         async function checkResumePlayback() {
@@ -5019,7 +5032,7 @@ h1 { font-size: 34px; font-weight: 800; }
                     if (started && resumeState.time > 0) {
                         setTimeout(() => {
                             seekToSeconds(resumeState.time);
-                            showToast(`Bentornato! Riproduzione ripresa da ${formatTime(resumeState.time)} 🎵`, 4000);
+                            showToast(`Bentornato! Riproduzione ripresa da ${formatTime(resumeState.time)}`, 4000);
                         }, 800);
                     }
                 }
@@ -5324,7 +5337,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 state.sleepTimerRemaining = 1;
                 if (countdownEl) countdownEl.textContent = 'Fine brano';
                 if (badge) badge.classList.remove('hidden');
-                showToast('Sleep timer: musica arrestata alla fine di questo brano 🌙');
+                showToast('Sleep timer: musica arrestata alla fine di questo brano');
                 closeSleepTimerModal();
                 return;
             }
@@ -5361,13 +5374,13 @@ h1 { font-size: 34px; font-weight: 800; }
                     state.sleepTimerFading = false;
                     if (state.isPlaying) togglePlay();
                     if (badge) badge.classList.add('hidden');
-                    showToast('Musica interrotta dallo Sleep Timer. Buonanotte! 🌙', 4000);
+                    showToast('Musica interrotta dallo Sleep Timer. Buonanotte.', 4000);
                     return;
                 }
                 updateCountdownDisplay();
             }, 1000);
 
-            showToast(`Sleep timer impostato su ${minutes} minuti 🌙`);
+            showToast(`Sleep timer impostato su ${minutes} minuti`);
             closeSleepTimerModal();
         }
 
@@ -5428,7 +5441,7 @@ h1 { font-size: 34px; font-weight: 800; }
             const url = getShareTrackUrl();
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(url).then(() => {
-                    showToast('Link di condivisione copiato negli appunti! 🔗');
+                    showToast('Link di condivisione copiato negli appunti');
                 }).catch(() => {
                     prompt('Copia questo link:', url);
                 });
@@ -5581,10 +5594,10 @@ h1 { font-size: 34px; font-weight: 800; }
                 if (Math.abs(diffX) > 45 && Math.abs(diffY) < 50) {
                     if (diffX < 0) {
                         nextTrack();
-                        showToast('Brano successivo ⏭');
+                        showToast('Brano successivo');
                     } else {
                         prevTrack();
-                        showToast('Brano precedente ⏮');
+                        showToast('Brano precedente');
                     }
                 }
             }, { passive: true });
@@ -5781,7 +5794,7 @@ h1 { font-size: 34px; font-weight: 800; }
                         <div style="font-size:12px; color:var(--text-secondary);">${songs.length} brani</div>
                     </div>
                     <button class="btn-text" style="padding:6px 12px; font-size:12px; border-radius:100px; background:${already ? 'rgba(255,255,255,0.08)' : 'rgba(250,45,72,0.15)'}; color:${already ? 'var(--text-secondary)' : 'var(--accent)'}; font-weight:600; flex-shrink:0;" ${already ? 'disabled' : ''}>
-                        ${already ? '✓ Aggiunta' : '+ Aggiungi'}
+                        ${already ? 'Aggiunta' : '+ Aggiungi'}
                     </button>
                 `;
                 item.onclick = (e) => {
