@@ -651,17 +651,162 @@ h1 { font-size: 34px; font-weight: 800; }
 .lyrics-view.active, .queue-view.active { display: block; }
 
 .lyrics-line {
-    font-size: 20px; font-weight: 600; margin-bottom: 24px; color: rgba(255,255,255,0.3); filter: blur(1px);
-    transform: scale(0.95); transform-origin: left center; transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: pointer; line-height: 1.4;
+    font-size: 22px; font-weight: 600; margin-bottom: 20px; color: rgba(255,255,255,0.32); filter: blur(0.6px);
+    transform: scale(0.96); transform-origin: left center; transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: pointer; line-height: 1.45;
+    padding: 6px 12px; border-radius: 12px;
+}
+.lyrics-line:hover {
+    color: rgba(255,255,255,0.7);
+    filter: blur(0);
 }
 .lyrics-line.active {
-    font-family: 'Syne', sans-serif; font-size: 34px; color: #fff; filter: blur(0);
-    transform: scale(1.05); text-shadow: 0 0 20px rgba(255,255,255,0.5);
+    font-family: 'Syne', sans-serif; font-size: 32px; color: #fff; filter: blur(0);
+    transform: scale(1.04); text-shadow: 0 0 25px rgba(255,255,255,0.65), 0 0 10px var(--accent);
+    background: linear-gradient(90deg, rgba(255,255,255,0.1), transparent 85%);
+    padding: 10px 16px;
 }
 
 .lyric-word { display: inline-block; border-radius: 4px; transition: transform 0.1s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease, color 0.2s ease; opacity: 0.7; }
 .lyrics-line.active .lyric-word { opacity: 0.6; }
 .lyrics-line.active .lyric-word.active { opacity: 1; color: #fff; transform: scale(1.15); text-shadow: 0 0 15px rgba(255, 255, 255, 0.8); }
+
+/* --- Mood & Vibe Chips --- */
+.mood-chips-container {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 12px 0 6px 0;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.mood-chips-container::-webkit-scrollbar { display: none; }
+.mood-chip {
+    padding: 7px 16px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+    flex-shrink: 0;
+    scroll-snap-align: start;
+}
+.mood-chip:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+}
+.mood-chip.active {
+    background: var(--text-primary, #ffffff);
+    color: #000000;
+    border-color: #ffffff;
+    box-shadow: 0 4px 15px rgba(255, 255, 255, 0.25);
+}
+
+/* --- Equalizer & Presets --- */
+.eq-preset-btn {
+    padding: 6px 14px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.eq-preset-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.eq-preset-btn.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+}
+.eq-band-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.eq-band-label {
+    width: 60px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.eq-band-slider {
+    flex: 1;
+    accent-color: var(--accent);
+}
+.eq-band-val {
+    width: 48px;
+    text-align: right;
+    font-size: 12px;
+    font-family: monospace;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+/* --- Story Card & Share Modal --- */
+.story-card-preview {
+    width: 250px;
+    height: 360px;
+    border-radius: 20px;
+    margin: 0 auto 20px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 20px 45px rgba(0,0,0,0.75);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+.story-card-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(14, 14, 14, 0.65);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    z-index: 1;
+}
+.story-card-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+.story-card-art {
+    width: 130px;
+    height: 130px;
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.7);
+    margin-bottom: 16px;
+    object-fit: cover;
+}
+
+/* --- Sleep Timer Badge --- */
+.sleep-timer-badge {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    outline: none;
+}
 
 /* Utility & Plugins */
 .hidden { display: none !important; }
@@ -1049,6 +1194,148 @@ h1 { font-size: 34px; font-weight: 800; }
         </div>
     </div>
 
+    <!-- 15-Second Google Login Gate Modal -->
+    <div id="loginGateModal" class="splash-overlay hidden" style="background: rgba(0,0,0,0.85); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); z-index: 2200;">
+        <div class="modal-card" style="max-width: 380px; width: 90%; text-align: center; padding: 32px 24px; background: rgba(24,24,27,0.96); border: 1px solid rgba(255,255,255,0.14); border-radius: 28px; box-shadow: 0 25px 60px rgba(0,0,0,0.85); animation: popIn 0.3s ease;">
+            <div style="position:relative; width:90px; height:90px; margin: 0 auto 16px; border-radius: 18px; overflow:hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);">
+                <img id="loginGateArt" src="https://preluded.vercel.app/icons/512x512.png" alt="Artwork" width="90" height="90" style="width:100%; height:100%; object-fit:cover;">
+                <div style="position:absolute; inset:0; background:rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center;">
+                    <svg viewBox="0 0 24 24" style="width:28px; height:28px; fill:#fff;"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+            </div>
+            <div id="loginGateTitle" style="font-size: 19px; font-weight: 800; color: #fff; margin-bottom: 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Brano in riproduzione</div>
+            <div id="loginGateArtist" style="font-size: 13.5px; color: var(--text-secondary); margin-bottom: 18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Artista</div>
+            
+            <div style="background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px 16px; margin-bottom: 22px; text-align:left;">
+                <div style="font-size: 13.5px; font-weight: 700; color: #fff; margin-bottom: 4px;">Ti piace questa traccia?</div>
+                <div style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.45;">
+                    Accedi con Google per continuare l'ascolto da dove ti eri fermato e sbloccare musica illimitata, playlist e scelte rapide.
+                </div>
+            </div>
+
+            <button onclick="loginWithGoogleFromGate()" style="width: 100%; padding: 14px 20px; background: #ffffff; color: #000000; border: none; border-radius: 14px; font-weight: 700; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: transform 0.15s ease; box-shadow: 0 6px 20px rgba(255,255,255,0.2);">
+                <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+                <span>Accedi con Google</span>
+            </button>
+
+            <button onclick="dismissLoginGatePreview()" class="btn-text" style="width: 100%; margin-top: 12px; font-size: 13px; color: var(--text-secondary); padding: 8px;">
+                Continua l'anteprima (30s aggiuntivi)
+            </button>
+        </div>
+    </div>
+
+    <!-- Sleep Timer Modal -->
+    <div id="sleepTimerModal" class="splash-overlay hidden" style="background: rgba(0,0,0,0.85); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); z-index: 2200;">
+        <div class="modal-card" style="max-width: 360px; width: 90%; padding: 28px 24px; background: rgba(28,28,30,0.96); border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); animation: popIn 0.3s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <svg class="icon" viewBox="0 0 24 24" style="color:var(--accent);"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                    <h3 style="margin:0; font-size:20px; font-weight:700;">Sleep Timer</h3>
+                </div>
+                <button class="btn-text" onclick="closeSleepTimerModal()" style="font-size:20px; padding:4px 8px;" aria-label="Chiudi Sleep Timer">✕</button>
+            </div>
+            <p style="font-size:13px; color:var(--text-secondary); margin-top:0; margin-bottom:20px;">Arresta gradualmente la musica prima di addormentarti.</p>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <button class="list-item" onclick="setSleepTimer(15)" style="background:rgba(255,255,255,0.05); border:none; padding:12px 16px; border-radius:14px; color:#fff; font-weight:600; text-align:left; cursor:pointer;">15 Minuti</button>
+                <button class="list-item" onclick="setSleepTimer(30)" style="background:rgba(255,255,255,0.05); border:none; padding:12px 16px; border-radius:14px; color:#fff; font-weight:600; text-align:left; cursor:pointer;">30 Minuti</button>
+                <button class="list-item" onclick="setSleepTimer(45)" style="background:rgba(255,255,255,0.05); border:none; padding:12px 16px; border-radius:14px; color:#fff; font-weight:600; text-align:left; cursor:pointer;">45 Minuti</button>
+                <button class="list-item" onclick="setSleepTimer(60)" style="background:rgba(255,255,255,0.05); border:none; padding:12px 16px; border-radius:14px; color:#fff; font-weight:600; text-align:left; cursor:pointer;">1 Ora</button>
+                <button class="list-item" onclick="setSleepTimer('endOfTrack')" style="background:rgba(255,255,255,0.05); border:none; padding:12px 16px; border-radius:14px; color:#fff; font-weight:600; text-align:left; cursor:pointer;">Fine di questo brano</button>
+                <button id="cancelSleepTimerBtn" class="list-item hidden" onclick="cancelSleepTimer()" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); padding:12px 16px; border-radius:14px; color:#ef4444; font-weight:600; text-align:left; cursor:pointer; margin-top:6px;">Disattiva Timer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Equalizer Modal -->
+    <div id="equalizerModal" class="splash-overlay hidden" style="background: rgba(0,0,0,0.85); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); z-index: 2200;">
+        <div class="modal-card" style="max-width: 400px; width: 92%; padding: 26px 22px; background: rgba(24,24,27,0.96); border: 1px solid rgba(255,255,255,0.12); border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); animation: popIn 0.3s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <svg class="icon" viewBox="0 0 24 24" style="color:var(--accent);"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                    <h3 style="margin:0; font-size:20px; font-weight:700;">Equalizzatore</h3>
+                </div>
+                <button class="btn-text" onclick="closeEqualizerModal()" style="font-size:20px; padding:4px 8px;" aria-label="Chiudi Equalizzatore">✕</button>
+            </div>
+            
+            <!-- Presets row -->
+            <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:14px; margin-bottom:16px; scrollbar-width:none;">
+                <button class="eq-preset-btn active" onclick="applyEqPreset('flat', this)">Flat</button>
+                <button class="eq-preset-btn" onclick="applyEqPreset('bass', this)">Bass Boost</button>
+                <button class="eq-preset-btn" onclick="applyEqPreset('vocal', this)">Vocal</button>
+                <button class="eq-preset-btn" onclick="applyEqPreset('electronic', this)">Electronic</button>
+                <button class="eq-preset-btn" onclick="applyEqPreset('rock', this)">Rock</button>
+                <button class="eq-preset-btn" onclick="applyEqPreset('acoustic', this)">Acoustic</button>
+            </div>
+
+            <!-- 5 Bands -->
+            <div style="margin-bottom: 20px;">
+                <div class="eq-band-row">
+                    <span class="eq-band-label">60 Hz</span>
+                    <input type="range" class="eq-band-slider" min="-12" max="12" step="1" value="0" oninput="updateEqBand(0, this.value)" aria-label="Bassi 60Hz">
+                    <span class="eq-band-val" id="eqVal0">0 dB</span>
+                </div>
+                <div class="eq-band-row">
+                    <span class="eq-band-label">250 Hz</span>
+                    <input type="range" class="eq-band-slider" min="-12" max="12" step="1" value="0" oninput="updateEqBand(1, this.value)" aria-label="Medio-Bassi 250Hz">
+                    <span class="eq-band-val" id="eqVal1">0 dB</span>
+                </div>
+                <div class="eq-band-row">
+                    <span class="eq-band-label">1 kHz</span>
+                    <input type="range" class="eq-band-slider" min="-12" max="12" step="1" value="0" oninput="updateEqBand(2, this.value)" aria-label="Medi 1kHz">
+                    <span class="eq-band-val" id="eqVal2">0 dB</span>
+                </div>
+                <div class="eq-band-row">
+                    <span class="eq-band-label">4 kHz</span>
+                    <input type="range" class="eq-band-slider" min="-12" max="12" step="1" value="0" oninput="updateEqBand(3, this.value)" aria-label="Medio-Alti 4kHz">
+                    <span class="eq-band-val" id="eqVal3">0 dB</span>
+                </div>
+                <div class="eq-band-row">
+                    <span class="eq-band-label">12 kHz</span>
+                    <input type="range" class="eq-band-slider" min="-12" max="12" step="1" value="0" oninput="updateEqBand(4, this.value)" aria-label="Alti 12kHz">
+                    <span class="eq-band-val" id="eqVal4">0 dB</span>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
+                <button class="btn-text" onclick="resetEqualizer()" style="font-size:13px; color:var(--text-secondary);">Reimposta</button>
+                <button class="btn-primary" onclick="closeEqualizerModal()" style="padding:8px 20px; border-radius:16px; background:var(--accent); color:#000; font-weight:600; font-size:13.5px;">Fatto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share & Story Card Modal -->
+    <div id="shareModal" class="splash-overlay hidden" style="background: rgba(0,0,0,0.88); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); z-index: 2200;">
+        <div class="modal-card" style="max-width: 380px; width: 92%; padding: 26px 20px; background: rgba(24,24,27,0.96); border: 1px solid rgba(255,255,255,0.14); border-radius: 28px; box-shadow: 0 25px 60px rgba(0,0,0,0.85); text-align:center; animation: popIn 0.3s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <h3 style="margin:0; font-size:20px; font-weight:700;">Condividi Brano</h3>
+                <button class="btn-text" onclick="closeShareModal()" style="font-size:20px; padding:4px 8px;" aria-label="Chiudi Condividi">✕</button>
+            </div>
+
+            <!-- Story Card Preview -->
+            <div class="story-card-preview" id="shareStoryCard">
+                <div class="story-card-backdrop" id="storyCardBackdrop"></div>
+                <div class="story-card-content">
+                    <img id="storyCardArt" class="story-card-art" src="https://preluded.vercel.app/icons/512x512.png" alt="Cover" width="130" height="130">
+                    <div id="storyCardTitle" style="font-size:16px; font-weight:800; color:#fff; margin-bottom:4px; max-width:210px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Titolo Brano</div>
+                    <div id="storyCardArtist" style="font-size:12.5px; color:rgba(255,255,255,0.7); margin-bottom:16px; max-width:210px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Artista</div>
+                    <div style="display:inline-flex; align-items:center; gap:6px; background:rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.15); border-radius:20px; padding:4px 12px; font-size:11px; font-weight:700; color:#fff; letter-spacing:0.5px;">
+                        <span>ASCOLTA SU PRELUDED</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <button onclick="copyShareLink()" class="btn-primary" style="width:100%; padding:14px; border-radius:16px; background:var(--accent); color:#000; font-weight:700; font-size:14px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="width:18px;height:18px;"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" fill="currentColor"/></svg>
+                    <span>Copia Link Condivisione</span>
+                </button>
+                <button onclick="nativeShareStory()" id="nativeShareBtn" class="btn-text" style="width:100%; padding:12px; border-radius:16px; background:rgba(255,255,255,0.08); color:#fff; font-weight:600; font-size:14px;">
+                    Condividi via App (Instagram / Telegram)
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="deepLinkBanner" class="deep-link-banner hidden">
         <div class="deep-link-content">
             <div class="deep-link-art">
@@ -1074,6 +1361,15 @@ h1 { font-size: 34px; font-weight: 800; }
             <div class="header-actions" style="display:flex; justify-content:space-between; align-items:center;">
                 <h2 id="homeGreetingTitle" style="font-size:34px;font-weight:700;letter-spacing:-0.5px;margin:0;">Listen Now</h2>
                 <div id="homeAccountBadge" style="display:flex; align-items:center; gap:8px;"></div>
+            </div>
+            <!-- Mood & Vibe Filter Chips -->
+            <div class="mood-chips-container" id="moodChipsContainer" role="toolbar" aria-label="Filtri Mood">
+                <button class="mood-chip active" onclick="filterByMood('all', this)" role="button" aria-label="Mostra tutti i brani">✨ Tutti</button>
+                <button class="mood-chip" onclick="filterByMood('workout', this)" role="button" aria-label="Filtra per Allenamento">⚡ Allenamento</button>
+                <button class="mood-chip" onclick="filterByMood('chill', this)" role="button" aria-label="Filtra per Focus e Relax">☕ Focus & Chill</button>
+                <button class="mood-chip" onclick="filterByMood('night', this)" role="button" aria-label="Filtra per Notte">🌙 Notte</button>
+                <button class="mood-chip" onclick="filterByMood('party', this)" role="button" aria-label="Filtra per Party">🎉 Party</button>
+                <button class="mood-chip" onclick="filterByMood('vintage', this)" role="button" aria-label="Filtra per Anni 90 e 2000">📻 90s & 2000</button>
             </div>
         </header>
         <div class="container" id="homeContainer">
@@ -1337,6 +1633,23 @@ h1 { font-size: 34px; font-weight: 800; }
             <div class="section-title" style="margin-top: 30px;">
                 <span>Settings</span>
             </div>
+            <div class="list-item" style="cursor:default; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; margin-bottom: 12px; display:block; padding:14px 16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <div>
+                        <div class="card-title">Dissolvenza tra brani (Crossfade)</div>
+                        <div class="card-subtitle">Dissolvenza fluida tra le canzoni</div>
+                    </div>
+                    <span id="crossfadeValDisplay" style="font-weight:700; font-family:monospace; color:var(--accent);">3s</span>
+                </div>
+                <input type="range" id="crossfadeSettingSlider" min="0" max="10" step="1" value="3" oninput="setCrossfadeDuration(this.value)" style="width:100%; accent-color:var(--accent);" aria-label="Durata dissolvenza crossfade">
+            </div>
+            <button type="button" class="list-item" onclick="openEqualizerModal()" style="background:none; border:none; padding:12px; width:100%; text-align:left; cursor:pointer; color:inherit; font:inherit;">
+                <div class="list-artwork" style="display:flex; align-items:center; justify-content:center;"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg></div>
+                <div class="list-info">
+                    <div class="card-title">Equalizzatore Audio & Bass Boost</div>
+                    <div class="card-subtitle">Regola le frequenze sonore o scegli un preset</div>
+                </div>
+            </button>
             <button type="button" class="list-item" onclick="clearCacheAndUpdate()" style="background:none; border:none; padding:12px; width:100%; text-align:left; cursor:pointer; color:inherit; font:inherit;">
                 <div class="list-artwork" style="display:flex; align-items:center; justify-content:center;"><svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg></div>
                 <div class="list-info">
@@ -1429,6 +1742,7 @@ h1 { font-size: 34px; font-weight: 800; }
             <div class="player-visual-column">
                 <div class="full-art-container" id="artContainer">
                     <img src="" id="fullArt" alt="Copertina brano" width="300" height="300">
+                    <canvas id="ambientVisualizer" width="300" height="300" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; border-radius:16px; mix-blend-mode:screen; opacity:0.85;"></canvas>
                 </div>
 
                 <!-- Lyrics View -->
@@ -1450,6 +1764,10 @@ h1 { font-size: 34px; font-weight: 800; }
                     <div class="full-info-row">
                         <button class="full-artist" id="fullArtist" onclick="openArtistPageFromCurrent()" style="background:none;border:none;padding:0;color:inherit;text-align:left;cursor:pointer;">
                             Artist Name
+                        </button>
+                        <button type="button" id="sleepTimerBadge" class="sleep-timer-badge hidden" onclick="openSleepTimerModal()" aria-label="Sleep timer attivo">
+                            <span>🌙</span>
+                            <span id="sleepTimerCountdown">30:00</span>
                         </button>
                         <button class="control-btn small" id="addToPlaylistBtn" onclick="openAddToPlaylistModal()" title="Aggiungi a playlist" aria-label="Aggiungi a playlist">
                             <svg class="icon" viewBox="0 0 24 24">
@@ -1498,14 +1816,17 @@ h1 { font-size: 34px; font-weight: 800; }
                     <button class="control-btn" onclick="togglePlayerView('queue')" aria-label="Mostra coda di riproduzione">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
                     </button>
+                    <button class="control-btn" onclick="openEqualizerModal()" title="Equalizzatore" aria-label="Equalizzatore audio">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
+                    </button>
+                    <button class="control-btn" onclick="openSleepTimerModal()" title="Sleep Timer" aria-label="Timer di spegnimento">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                    </button>
                     <button class="control-btn" id="speedBtn" onclick="toggleSpeedMenu()" aria-label="Velocità di riproduzione" style="display: flex; flex-direction: column; align-items: center;">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
                         <span class="speed-display">1x</span>
                     </button>
-                    <button class="control-btn" onclick="toggleSleepTimer()" title="Sleep Timer" aria-label="Timer di spegnimento">
-                        <svg class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-                    </button>
-                    <button class="control-btn" onclick="shareCurrentTrack()" title="Condividi" aria-label="Condividi traccia">
+                    <button class="control-btn" onclick="openShareModal()" title="Condividi" aria-label="Condividi traccia">
                         <svg class="icon" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.03-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.17c-.05.21-.08.43-.08.64 0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3z"/></svg>
                     </button>
                 </div>
@@ -1839,6 +2160,16 @@ h1 { font-size: 34px; font-weight: 800; }
                                     }
                                     updatePlayIcons();
                                 } else if (e.data === 0) { // ENDED
+                                    if (state.sleepTimerType === 'endOfTrack') {
+                                        if (typeof cancelSleepTimer === 'function') cancelSleepTimer();
+                                        this.ended = true;
+                                        this.paused = true;
+                                        state.isPlaying = false;
+                                        updatePlayIcons();
+                                        releaseWakeLock();
+                                        showToast('Riproduzione completata e fermata dallo Sleep Timer 🌙');
+                                        return;
+                                    }
                                     const cur = this.getCurrentTime();
                                     const dur = this.getDuration();
                                     if (this.isInit && !this.paused && dur > 10 && cur >= dur - 3) {
@@ -1978,7 +2309,13 @@ h1 { font-size: 34px; font-weight: 800; }
             mixLoaded: false,
             deepLinkTrack: null,
             sleepTimer: null,
-            crossfadeDuration: 0.8,
+            sleepTimerRemaining: 0,
+            sleepTimerInterval: null,
+            sleepTimerType: null,
+            sleepTimerFading: false,
+            loginGateTriggered: false,
+            loginGateLimit: 15,
+            crossfadeDuration: 3,
             searchType: 'track'
         };
 
@@ -2036,6 +2373,14 @@ h1 { font-size: 34px; font-weight: 800; }
         });
 
         nativeAudio.addEventListener('ended', async () => {
+            if (state.sleepTimerType === 'endOfTrack') {
+                if (typeof cancelSleepTimer === 'function') cancelSleepTimer();
+                state.isPlaying = false;
+                updatePlayIcons();
+                releaseWakeLock();
+                showToast('Riproduzione completata e fermata dallo Sleep Timer 🌙');
+                return;
+            }
             const cur = nativeAudio.currentTime || 0;
             const dur = nativeAudio.duration || 0;
             if (dur > 5 && cur >= dur - 3) {
@@ -2280,11 +2625,16 @@ h1 { font-size: 34px; font-weight: 800; }
             if (!track) return false;
             addToHistory(track);
             state.mixLoaded = false;
+            state.loginGateTriggered = false;
+            state.loginGateLimit = 15;
             
             // iOS & Mobile Audio Gesture Unlock
             try {
                 backgroundAudioManager.init();
                 backgroundAudioManager.start();
+                if (typeof equalizerManager !== 'undefined' && equalizerManager.connectNativeAudio) {
+                    equalizerManager.connectNativeAudio();
+                }
             } catch(e) {}
             
             if (!fromQueue) {
@@ -2614,6 +2964,36 @@ h1 { font-size: 34px; font-weight: 800; }
             if (!dur || isNaN(dur) || dur <= 0) dur = 210;
             if (isNaN(cur) || cur < 0) cur = 0;
             if (cur > dur) cur = dur;
+
+            // 15-Second Google Login Gate Pipeline Check
+            const googleToken = localStorage.getItem('google_token');
+            const googleUser = localStorage.getItem('google_user');
+            const isAuthed = Boolean(googleToken || googleUser);
+            const gateThreshold = state.loginGateLimit || 15;
+
+            if (!isAuthed && cur >= gateThreshold && !state.loginGateTriggered && state.isPlaying) {
+                state.loginGateTriggered = true;
+                togglePlay();
+
+                const resumeState = {
+                    track: currentTrack,
+                    time: Math.floor(cur),
+                    queue: state.queue,
+                    currentIndex: state.currentIndex,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem('resume_playback_state', JSON.stringify(resumeState));
+
+                const gateArt = document.getElementById('loginGateArt');
+                const gateTitle = document.getElementById('loginGateTitle');
+                const gateArtist = document.getElementById('loginGateArtist');
+                if (gateArt) gateArt.src = formatArtworkUrl(currentTrack?.album?.cover || currentTrack?.cover || currentTrack?.thumbnail, '300x300') || 'https://preluded.vercel.app/icons/512x512.png';
+                if (gateTitle) gateTitle.textContent = currentTrack?.title || 'Brano in riproduzione';
+                if (gateArtist) gateArtist.textContent = formatArtistName(currentTrack?.artist?.name || currentTrack?.artist || 'Unknown Artist');
+
+                const modal = document.getElementById('loginGateModal');
+                if (modal) modal.classList.remove('hidden');
+            }
 
             const percent = dur > 0 ? (cur / dur) * 100 : 0;
             const progressFill = document.getElementById('progressFill');
@@ -4594,13 +4974,65 @@ h1 { font-size: 34px; font-weight: 800; }
             window.location.href = '/api/auth/google/login?redirect=true';
         }
 
+        function loginWithGoogleFromGate() {
+            const curPlayer = getActiveAudioPlayer();
+            const curTime = curPlayer?.currentTime || 15;
+            const currentTrack = state.queue[state.currentIndex];
+            if (currentTrack) {
+                const resumeState = {
+                    track: currentTrack,
+                    time: Math.floor(curTime),
+                    queue: state.queue,
+                    currentIndex: state.currentIndex,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem('resume_playback_state', JSON.stringify(resumeState));
+            }
+            loginWithGoogle();
+        }
+
+        function dismissLoginGatePreview() {
+            const modal = document.getElementById('loginGateModal');
+            if (modal) modal.classList.add('hidden');
+            state.loginGateTriggered = false;
+            const curPlayer = getActiveAudioPlayer();
+            const curTime = curPlayer?.currentTime || 15;
+            state.loginGateLimit = curTime + 30; // 30s additional preview
+            if (!state.isPlaying) togglePlay();
+            showToast('Anteprima estesa di 30 secondi ⏳');
+        }
+
+        async function checkResumePlayback() {
+            try {
+                const raw = localStorage.getItem('resume_playback_state');
+                if (!raw) return;
+                const resumeState = JSON.parse(raw);
+                localStorage.removeItem('resume_playback_state');
+
+                if (resumeState && resumeState.track) {
+                    console.log('[AuthGate] Resuming playback after Google login:', resumeState);
+                    if (Array.isArray(resumeState.queue) && resumeState.queue.length > 0) {
+                        state.queue = resumeState.queue;
+                        state.currentIndex = resumeState.currentIndex || 0;
+                    }
+                    const started = await playTrack(resumeState.track, true);
+                    if (started && resumeState.time > 0) {
+                        setTimeout(() => {
+                            seekToSeconds(resumeState.time);
+                            showToast(`Bentornato! Riproduzione ripresa da ${formatTime(resumeState.time)} 🎵`, 4000);
+                        }, 800);
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to restore resume playback state:', e);
+            }
+        }
+
         async function checkAuthOnStartup() {
             const user = localStorage.getItem('google_user');
             const authModal = document.getElementById('authModal');
-            if (!user) {
-                if (authModal) authModal.classList.remove('hidden');
-            } else {
-                if (authModal) authModal.classList.add('hidden');
+            if (authModal) authModal.classList.add('hidden'); // Guests can explore and preview
+            if (user) {
                 if (sessionStorage.getItem('open_google_import_on_load') === 'true') {
                     sessionStorage.removeItem('open_google_import_on_load');
                     setTimeout(() => {
@@ -4610,6 +5042,7 @@ h1 { font-size: 34px; font-weight: 800; }
             }
             updateAccountUI();
             loadRecommendations();
+            checkResumePlayback();
         }
 
         loadRecommendations();
@@ -4623,6 +5056,10 @@ h1 { font-size: 34px; font-weight: 800; }
             if (splash) splash.classList.add('hidden');
             checkAuthOnStartup();
             initAppBuildInfo();
+            if (typeof equalizerManager !== 'undefined') equalizerManager.init();
+            if (typeof initCrossfadeSettings === 'function') initCrossfadeSettings();
+            if (typeof initMiniPlayerGestures === 'function') initMiniPlayerGestures();
+            if (typeof visualizerManager !== 'undefined') visualizerManager.init();
         }, 2200);
 
         // --- Deep Linking / Invite Banner ---
@@ -4705,35 +5142,556 @@ h1 { font-size: 34px; font-weight: 800; }
             initDeepLinking();
         }
 
-        // --- Sharing / Copy Link ---
-        function shareTrack(trackId, title, artist) {
-            const url = new URL(window.location.href);
-            url.searchParams.set('track', trackId);
+        // --- Web Audio 5-Band Equalizer & Bass Boost ---
+        const equalizerManager = {
+            audioCtx: null,
+            sourceNode: null,
+            filters: [],
+            frequencies: [60, 250, 1000, 4000, 12000],
+            filterTypes: ['lowshelf', 'peaking', 'peaking', 'peaking', 'highshelf'],
+            presets: {
+                flat: [0, 0, 0, 0, 0],
+                bass: [8, 5, 1, 0, -1],
+                vocal: [-2, 1, 4, 3, 1],
+                electronic: [6, 4, -1, 3, 5],
+                rock: [5, 3, -1, 2, 4],
+                acoustic: [3, 2, 1, 2, 3]
+            },
+            currentPreset: 'flat',
+            gains: [0, 0, 0, 0, 0],
+            isInit: false,
 
+            init() {
+                try {
+                    const savedGains = localStorage.getItem('eq_gains');
+                    if (savedGains) {
+                        this.gains = JSON.parse(savedGains);
+                    }
+                    const savedPreset = localStorage.getItem('eq_preset');
+                    if (savedPreset) {
+                        this.currentPreset = savedPreset;
+                    }
+                    this.syncSlidersUI();
+                } catch (_) {}
+            },
+
+            connectNativeAudio() {
+                try {
+                    if (!this.audioCtx) {
+                        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                        if (!AudioCtx) return;
+                        this.audioCtx = new AudioCtx();
+                    }
+                    if (this.audioCtx.state === 'suspended') {
+                        this.audioCtx.resume().catch(() => {});
+                    }
+                    if (this.filters.length === 0) {
+                        this.filters = this.frequencies.map((freq, i) => {
+                            const filter = this.audioCtx.createBiquadFilter();
+                            filter.type = this.filterTypes[i];
+                            filter.frequency.value = freq;
+                            filter.gain.value = this.gains[i] || 0;
+                            return filter;
+                        });
+                        for (let i = 0; i < this.filters.length - 1; i++) {
+                            this.filters[i].connect(this.filters[i + 1]);
+                        }
+                    }
+                    if (!this.sourceNode && nativeAudio) {
+                        this.sourceNode = this.audioCtx.createMediaElementSource(nativeAudio);
+                        this.sourceNode.connect(this.filters[0]);
+                        this.filters[this.filters.length - 1].connect(this.audioCtx.destination);
+                    }
+                    this.isInit = true;
+                } catch (e) {
+                    console.warn('[Equalizer] MediaElementSource init info:', e);
+                }
+            },
+
+            setBandGain(index, db) {
+                const val = parseFloat(db);
+                this.gains[index] = val;
+                localStorage.setItem('eq_gains', JSON.stringify(this.gains));
+                
+                if (this.filters[index] && this.filters[index].gain) {
+                    this.filters[index].gain.value = val;
+                }
+                const valEl = document.getElementById(`eqVal${index}`);
+                if (valEl) valEl.textContent = (val > 0 ? `+${val}` : `${val}`) + ' dB';
+            },
+
+            applyPreset(presetName, btnEl) {
+                if (!this.presets[presetName]) return;
+                this.currentPreset = presetName;
+                localStorage.setItem('eq_preset', presetName);
+                const presetGains = this.presets[presetName];
+
+                presetGains.forEach((gain, i) => {
+                    this.setBandGain(i, gain);
+                    const slider = document.querySelector(`.eq-band-row:nth-child(${i + 1}) .eq-band-slider`);
+                    if (slider) slider.value = gain;
+                });
+
+                document.querySelectorAll('.eq-preset-btn').forEach(b => b.classList.remove('active'));
+                if (btnEl) {
+                    btnEl.classList.add('active');
+                } else {
+                    document.querySelectorAll('.eq-preset-btn').forEach(b => {
+                        if (b.textContent.trim().toLowerCase().includes(presetName.toLowerCase())) {
+                            b.classList.add('active');
+                        }
+                    });
+                }
+                showToast(`Equalizzatore: preset "${presetName.toUpperCase()}"`);
+            },
+
+            syncSlidersUI() {
+                this.gains.forEach((gain, i) => {
+                    const valEl = document.getElementById(`eqVal${i}`);
+                    if (valEl) valEl.textContent = (gain > 0 ? `+${gain}` : `${gain}`) + ' dB';
+                    const slider = document.querySelector(`.eq-band-row:nth-child(${i + 1}) .eq-band-slider`);
+                    if (slider) slider.value = gain;
+                });
+                document.querySelectorAll('.eq-preset-btn').forEach(b => {
+                    if (b.textContent.trim().toLowerCase().includes(this.currentPreset.toLowerCase())) {
+                        b.classList.add('active');
+                    } else {
+                        b.classList.remove('active');
+                    }
+                });
+            },
+
+            reset() {
+                this.applyPreset('flat');
+            }
+        };
+
+        function openEqualizerModal() {
+            equalizerManager.connectNativeAudio();
+            equalizerManager.syncSlidersUI();
+            const modal = document.getElementById('equalizerModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeEqualizerModal() {
+            const modal = document.getElementById('equalizerModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function applyEqPreset(preset, btn) {
+            equalizerManager.applyPreset(preset, btn);
+        }
+
+        function updateEqBand(index, val) {
+            equalizerManager.setBandGain(index, val);
+        }
+
+        function resetEqualizer() {
+            equalizerManager.reset();
+        }
+
+        // --- Sleep Timer ---
+        function openSleepTimerModal() {
+            const cancelBtn = document.getElementById('cancelSleepTimerBtn');
+            if (cancelBtn) {
+                if (state.sleepTimerRemaining > 0 || state.sleepTimerType === 'endOfTrack') {
+                    cancelBtn.classList.remove('hidden');
+                } else {
+                    cancelBtn.classList.add('hidden');
+                }
+            }
+            const modal = document.getElementById('sleepTimerModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeSleepTimerModal() {
+            const modal = document.getElementById('sleepTimerModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function setSleepTimer(minutesOrType) {
+            if (state.sleepTimerInterval) {
+                clearInterval(state.sleepTimerInterval);
+                state.sleepTimerInterval = null;
+            }
+            state.sleepTimerFading = false;
+
+            const badge = document.getElementById('sleepTimerBadge');
+            const countdownEl = document.getElementById('sleepTimerCountdown');
+
+            if (minutesOrType === 'endOfTrack') {
+                state.sleepTimerType = 'endOfTrack';
+                state.sleepTimerRemaining = 1;
+                if (countdownEl) countdownEl.textContent = 'Fine brano';
+                if (badge) badge.classList.remove('hidden');
+                showToast('Sleep timer: musica arrestata alla fine di questo brano 🌙');
+                closeSleepTimerModal();
+                return;
+            }
+
+            const minutes = parseInt(minutesOrType, 10) || 15;
+            state.sleepTimerType = 'time';
+            state.sleepTimerRemaining = minutes * 60;
+
+            const updateCountdownDisplay = () => {
+                const m = Math.floor(state.sleepTimerRemaining / 60);
+                const s = state.sleepTimerRemaining % 60;
+                if (countdownEl) countdownEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+            };
+            updateCountdownDisplay();
+            if (badge) badge.classList.remove('hidden');
+
+            state.sleepTimerInterval = setInterval(() => {
+                state.sleepTimerRemaining--;
+                
+                // 5-second smooth volume fade-out
+                if (state.sleepTimerRemaining <= 5 && state.sleepTimerRemaining > 0 && !state.sleepTimerFading) {
+                    state.sleepTimerFading = true;
+                    const p = getActiveAudioPlayer();
+                    if (p && typeof fadeOut === 'function') {
+                        fadeOut(p, 5);
+                    }
+                }
+
+                if (state.sleepTimerRemaining <= 0) {
+                    clearInterval(state.sleepTimerInterval);
+                    state.sleepTimerInterval = null;
+                    state.sleepTimerRemaining = 0;
+                    state.sleepTimerType = null;
+                    state.sleepTimerFading = false;
+                    if (state.isPlaying) togglePlay();
+                    if (badge) badge.classList.add('hidden');
+                    showToast('Musica interrotta dallo Sleep Timer. Buonanotte! 🌙', 4000);
+                    return;
+                }
+                updateCountdownDisplay();
+            }, 1000);
+
+            showToast(`Sleep timer impostato su ${minutes} minuti 🌙`);
+            closeSleepTimerModal();
+        }
+
+        function cancelSleepTimer() {
+            if (state.sleepTimerInterval) {
+                clearInterval(state.sleepTimerInterval);
+                state.sleepTimerInterval = null;
+            }
+            state.sleepTimerRemaining = 0;
+            state.sleepTimerType = null;
+            state.sleepTimerFading = false;
+            const badge = document.getElementById('sleepTimerBadge');
+            if (badge) badge.classList.add('hidden');
+            const cancelBtn = document.getElementById('cancelSleepTimerBtn');
+            if (cancelBtn) cancelBtn.classList.add('hidden');
+            closeSleepTimerModal();
+            showToast('Sleep timer disattivato');
+        }
+
+        // --- Story Card & Share Modal ---
+        function openShareModal() {
+            const track = state.queue[state.currentIndex];
+            if (!track) {
+                showToast('Nessun brano in riproduzione da condividere.');
+                return;
+            }
+            const title = track.title || 'Unknown Title';
+            const artist = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
+            const artUrl = formatArtworkUrl(track.album?.cover || track.cover || track.thumbnail, '640x640') || 'https://preluded.vercel.app/icons/512x512.png';
+
+            const titleEl = document.getElementById('storyCardTitle');
+            const artistEl = document.getElementById('storyCardArtist');
+            const artEl = document.getElementById('storyCardArt');
+            const backdropEl = document.getElementById('storyCardBackdrop');
+
+            if (titleEl) titleEl.textContent = title;
+            if (artistEl) artistEl.textContent = artist;
+            if (artEl) artEl.src = artUrl;
+            if (backdropEl) backdropEl.style.backgroundImage = `url('${artUrl}')`;
+
+            const modal = document.getElementById('shareModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeShareModal() {
+            const modal = document.getElementById('shareModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function getShareTrackUrl() {
+            const track = state.queue[state.currentIndex];
+            const trackId = track?.id || track?.videoId || '';
+            const baseUrl = window.location.origin + window.location.pathname;
+            return `${baseUrl}?track=${encodeURIComponent(trackId)}`;
+        }
+
+        function copyShareLink() {
+            const url = getShareTrackUrl();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(() => {
+                    showToast('Link di condivisione copiato negli appunti! 🔗');
+                }).catch(() => {
+                    prompt('Copia questo link:', url);
+                });
+            } else {
+                prompt('Copia questo link:', url);
+            }
+            closeShareModal();
+        }
+
+        function nativeShareStory() {
+            const track = state.queue[state.currentIndex];
+            if (!track) return;
+            const title = track.title || 'Unknown Title';
+            const artist = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
+            const url = getShareTrackUrl();
+
+            if (navigator.share) {
+                navigator.share({
+                    title: `${title} • ${artist}`,
+                    text: `Ascolta "${title}" di ${artist} su Preluded:`,
+                    url: url
+                }).catch(() => {});
+            } else {
+                copyShareLink();
+            }
+            closeShareModal();
+        }
+
+        function shareTrack(trackId, title, artist) {
+            const url = `${window.location.origin}${window.location.pathname}?track=${encodeURIComponent(trackId)}`;
             const shareData = {
                 title: `${title} • ${artist}`,
                 text: `Ascolta "${title}" di ${artist} su Preluded.`,
-                url: url.toString(),
+                url: url
             };
-
             if (navigator.share) {
-                navigator.share(shareData).catch(console.error);
-            } else if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(shareData.url)
-                    .then(() => alert('Link copiato negli appunti!'))
-                    .catch(() => prompt('Copia questo link:', shareData.url));
+                navigator.share(shareData).catch(() => {});
             } else {
-                prompt('Copia questo link:', shareData.url);
+                copyShareLink();
             }
         }
 
         function shareCurrentTrack() {
-            const track = state.queue[state.currentIndex];
-            if (!track) {
-                alert('Nessuna traccia in riproduzione.');
+            openShareModal();
+        }
+
+        // --- Fluid Canvas Ambient Visualizer ---
+        const visualizerManager = {
+            canvas: null,
+            ctx: null,
+            animId: null,
+            phase: 0,
+            init() {
+                this.canvas = document.getElementById('ambientVisualizer');
+                if (!this.canvas) return;
+                this.ctx = this.canvas.getContext('2d');
+                this.start();
+            },
+            start() {
+                if (this.animId) cancelAnimationFrame(this.animId);
+                const loop = () => {
+                    if (this.ctx && this.canvas) {
+                        this.draw();
+                    }
+                    this.animId = requestAnimationFrame(loop);
+                };
+                this.animId = requestAnimationFrame(loop);
+            },
+            draw() {
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+                this.ctx.clearRect(0, 0, w, h);
+
+                const fullPlayer = document.getElementById('fullPlayer');
+                if (!state.isPlaying || !fullPlayer || !fullPlayer.classList.contains('active')) {
+                    return;
+                }
+
+                this.phase += 0.04;
+                const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#fa2d48';
+
+                // Render harmonic wave layers
+                const layers = [
+                    { amp: 20, freq: 0.024, speed: 1.0, alpha: 0.4 },
+                    { amp: 14, freq: 0.038, speed: -1.2, alpha: 0.3 },
+                    { amp: 8,  freq: 0.048, speed: 0.7, alpha: 0.2 }
+                ];
+
+                layers.forEach((l) => {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, h);
+                    for (let x = 0; x <= w; x += 6) {
+                        const y = h - 36 + Math.sin(x * l.freq + this.phase * l.speed) * l.amp;
+                        this.ctx.lineTo(x, y);
+                    }
+                    this.ctx.lineTo(w, h);
+                    this.ctx.closePath();
+
+                    const grad = this.ctx.createLinearGradient(0, h - 60, 0, h);
+                    grad.addColorStop(0, primaryColor.trim());
+                    grad.addColorStop(1, 'transparent');
+                    this.ctx.fillStyle = grad;
+                    this.ctx.globalAlpha = l.alpha;
+                    this.ctx.fill();
+                });
+                this.ctx.globalAlpha = 1.0;
+            }
+        };
+
+        // --- Mini-Player Swipe Gestures ---
+        function initMiniPlayerGestures() {
+            const mini = document.getElementById('miniPlayer');
+            if (!mini || mini.dataset.gesturesInit) return;
+            mini.dataset.gesturesInit = 'true';
+
+            let startX = 0;
+            let startY = 0;
+            let endX = 0;
+            let endY = 0;
+            let startTime = 0;
+
+            mini.addEventListener('touchstart', (e) => {
+                if (!e.touches || e.touches.length === 0) return;
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                endX = startX;
+                endY = startY;
+                startTime = Date.now();
+            }, { passive: true });
+
+            mini.addEventListener('touchmove', (e) => {
+                if (!e.touches || e.touches.length === 0) return;
+                endX = e.touches[0].clientX;
+                endY = e.touches[0].clientY;
+            }, { passive: true });
+
+            mini.addEventListener('touchend', (e) => {
+                const diffX = endX - startX;
+                const diffY = endY - startY;
+                const elapsed = Date.now() - startTime;
+                if (elapsed > 1200) return;
+
+                // Swipe Up -> Open Full Player
+                if (diffY < -40 && Math.abs(diffX) < 50) {
+                    openFullPlayer();
+                    return;
+                }
+
+                // Horizontal Swipe -> Next / Prev
+                if (Math.abs(diffX) > 45 && Math.abs(diffY) < 50) {
+                    if (diffX < 0) {
+                        nextTrack();
+                        showToast('Brano successivo ⏭');
+                    } else {
+                        prevTrack();
+                        showToast('Brano precedente ⏮');
+                    }
+                }
+            }, { passive: true });
+        }
+
+        // --- Custom Crossfade Slider ---
+        function initCrossfadeSettings() {
+            const saved = localStorage.getItem('crossfade_duration');
+            const val = saved !== null ? parseFloat(saved) : 3;
+            state.crossfadeDuration = val;
+            const slider = document.getElementById('crossfadeSettingSlider');
+            const display = document.getElementById('crossfadeValDisplay');
+            if (slider) slider.value = val;
+            if (display) display.textContent = val + 's';
+        }
+
+        function setCrossfadeDuration(val) {
+            const duration = parseFloat(val);
+            state.crossfadeDuration = duration;
+            localStorage.setItem('crossfade_duration', duration);
+            const display = document.getElementById('crossfadeValDisplay');
+            if (display) display.textContent = duration + 's';
+        }
+
+        // --- Mood & Vibe Filter Chips ---
+        async function filterByMood(mood, chipEl) {
+            document.querySelectorAll('.mood-chip').forEach(c => c.classList.remove('active'));
+            if (chipEl) chipEl.classList.add('active');
+
+            if (mood === 'all') {
+                loadRecommendations();
                 return;
             }
-            shareTrack(track.id, track.title || 'Unknown', track.artist?.name || 'Unknown');
+
+            const moodQueries = {
+                workout: 'Allenamento Gym Motivation Hits',
+                chill: 'Lo-Fi Chill Beats Relax Focus',
+                night: 'Notte Relax Acoustic Lo-Fi Piano',
+                party: 'Party Dance Hits 2025 Club',
+                vintage: 'Best of 90s 2000s Hits Pop Rock'
+            };
+
+            const query = moodQueries[mood] || 'Popular Music';
+            const quickPicksContainer = document.getElementById('quickPicksGrid');
+            const quickPicksLabel = document.getElementById('quickPicksLabel');
+            const homeDynamicShelves = document.getElementById('homeDynamicShelves');
+
+            if (quickPicksLabel) {
+                quickPicksLabel.textContent = `VIBE: ${chipEl?.textContent || mood.toUpperCase()}`;
+            }
+
+            if (quickPicksContainer) {
+                quickPicksContainer.innerHTML = `
+                    <div style="grid-column: 1/-1; display:flex; align-items:center; gap:8px; padding:15px; color:var(--text-secondary); font-size:13px;">
+                        <div class="spinner" style="width:18px; height:18px;"></div>
+                        Caricamento atmosfera ${chipEl?.textContent || mood}...
+                    </div>
+                `;
+            }
+
+            try {
+                const res = await apiFetch(`/search?q=${encodeURIComponent(query)}&limit=16`);
+                const data = await res.json();
+                const items = data.items || data.tracks || data.data?.items || [];
+                
+                if (items.length > 0) {
+                    quickPicksList = items;
+                    if (quickPicksContainer) {
+                        quickPicksContainer.innerHTML = items.slice(0, 8).map((track, idx) => {
+                            const thumb = formatArtworkUrl(track.thumbnail || track.cover || track.album?.cover, '120x120') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+                            const artistName = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
+                            return `
+                                <div class="quick-pick-item animate-in" style="animation-delay:${idx * 20}ms" data-action='playQuickPickTrack(${idx})' role="button" tabindex="0">
+                                    <div class="quick-pick-thumb-wrapper">
+                                        <img class="quick-pick-thumb" src="${thumb}" loading="lazy" alt="${track.title}" width="48" height="48">
+                                        <div class="quick-pick-play-overlay">
+                                            <svg class="icon icon-sm" viewBox="0 0 24 24" style="width:20px;height:20px;"><path d="M8 5v14l11-7z" fill="white"/></svg>
+                                        </div>
+                                    </div>
+                                    <div class="quick-pick-info">
+                                        <div class="quick-pick-title" title="${track.title}">${track.title}</div>
+                                        <div class="quick-pick-artist" title="${artistName}">${artistName}</div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+
+                    if (homeDynamicShelves) {
+                        homeDynamicShelves.innerHTML = `
+                            <section class="shelf-section animate-in" style="margin-top:20px;">
+                                <div class="shelf-header">
+                                    <div>
+                                        <div class="shelf-badge">ATMOSFERA</div>
+                                        <h2 class="shelf-title">${chipEl?.textContent || 'Consigliati per Te'}</h2>
+                                    </div>
+                                </div>
+                                <div class="shelf-carousel">
+                                    ${items.slice(8).map((track, i) => createCard(track, i)).join('')}
+                                </div>
+                            </section>
+                        `;
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to load mood feed:', err);
+            }
         }
 
         let targetTrackForPlaylist = null;
