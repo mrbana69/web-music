@@ -35,10 +35,24 @@ app.get('/app', (req, res) => {
 app.get('/player', (req, res) => {
   res.sendFile(path.join(__dirname, 'app.html'));
 });
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'privacy.html'));
+});
+app.get('/tos', (req, res) => {
+  res.sendFile(path.join(__dirname, 'tos.html'));
+});
+app.get('/terms', (req, res) => {
+  res.sendFile(path.join(__dirname, 'tos.html'));
+});
 
-// SPA Fallback: serve index.html for all other routes
-app.get('*', (req, res) => {
+// SPA Fallback: serve index.html for root, 404 for unknown routes
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Unknown routes return 404 with branded error page
+app.use((req, res) => {
+  res.status(404).sendFile(path.join(__dirname, '404.html'));
 });
 
 // Error handling middleware

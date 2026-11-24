@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://preluded.vercel.app/sitemap.xml
