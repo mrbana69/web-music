@@ -997,12 +997,10 @@ class YouTubeMusicService {
 
   /**
    * Get authentic YouTube Music "Scelte rapide" (Quick Picks / Listen Again / Heavy Rotation)
-   * Uses SAPISIDHASH authentication when userCookie is provided (identical to SimpMusic / ViMusic)
-  /**
-   * Get authentic YouTube Music "Scelte rapide" (Quick Picks / Listen Again / Heavy Rotation)
-   * Seamlessly handles both Google OAuth 1-Click Tokens and Session Cookies
+   * Fetches the authentic YouTube Music Quick Picks shelf without overwriting with liked songs.
    */
   async getQuickPicks(authParam = null, limit = 20) {
+    const isCookie = Boolean(authParam && authParam.includes('='));
     const cacheKey = `yt_quick_picks_${authParam ? authParam.substring(0, 16) : 'guest'}_${limit}`;
     const cached = cacheService.get(cacheKey);
     if (cached) return cached;
@@ -1010,161 +1008,112 @@ class YouTubeMusicService {
     let quickPicks = [];
     let isPersonalized = Boolean(authParam);
 
-    // 1. If Google OAuth token is passed (1-Click Google Login)
-    if (authParam && (authParam.startsWith('ya29') || !authParam.includes('='))) {
-      try {
-        const authService = require('./authService');
-        const userLib = await authService.getUserLibrary(authParam);
-        const userTracks = [];
+    // 1. Query authentic Innertube browse FEmusic_home for Quick Picks shelf
+    try {
+      const userProvidedCookie = isCookie ? authParam : null;
+      const headers = this.buildInnertubeHeaders(userProvidedCookie, false);
+      const payload = {
+        context: {
+          client: {
+            clientName: 'WEB_REMIX',
+            clientVersion: '1.20241101.01.00',
+            hl: 'it',
+            gl: 'IT'
+          }
+        },
+        browseId: 'FEmusic_home'
+      };
 
-        if (userLib && Array.isArray(userLib.likedSongs) && userLib.likedSongs.length > 0) {
-          userTracks.push(...userLib.likedSongs);
-        }
+      const homeRes = await fetchJson(`${this.innertubeEndpoint}/browse`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        timeout: 7000
+      });
 
-        if (userLib && Array.isArray(userLib.playlists)) {
-          for (const pl of userLib.playlists) {
-            if (Array.isArray(pl.songs)) {
-              for (const s of pl.songs) {
-                if (!userTracks.some(u => u.id === s.id || u.videoId === s.id)) {
-                  userTracks.push(s);
+      const sectionPattern = /scelte rapide|quick picks|listen again|di nuovo all'ascolto|spesso all'ascolto|heavy rotation|mix brani|mix per te|mixed for you/i;
+      const fallbackPattern = /in primo piano|hit del momento|tendenze|classifiche|nuove uscite|popolari/i;
+
+      const traverse = (node, pattern) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.musicCarouselShelfRenderer) {
+          const headerText = node.musicCarouselShelfRenderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || '';
+          const lowerHeader = headerText.toLowerCase();
+
+          if (lowerHeader.includes('shorts') || lowerHeader.includes('clip') || lowerHeader.includes('campionati') || lowerHeader.includes('momenti musicali') || lowerHeader.includes('brevi')) {
+            return;
+          }
+
+          if (pattern.test(headerText)) {
+            const contents = node.musicCarouselShelfRenderer.contents || [];
+            for (const item of contents) {
+              const renderer = item.musicResponsiveListItemRenderer || item.musicTwoRowItemRenderer;
+              if (renderer) {
+                const flex = renderer.flexColumns || [];
+                const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.title?.runs?.[0]?.text;
+                const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.subtitle?.runs?.[0]?.text || 'Artist';
+                const tArtist = this.formatArtistName(rawArtist);
+
+                const navEndpoint = renderer.playlistItemData?.navigationEndpoint ||
+                  renderer.navigationEndpoint ||
+                  renderer.doubleTapCommand ||
+                  renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint;
+                const musicVideoType = navEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType;
+
+                if (musicVideoType === 'MUSIC_VIDEO_TYPE_UGC') continue;
+
+                const isSong = musicVideoType === 'MUSIC_VIDEO_TYPE_ATV' || !musicVideoType;
+                const isMusicVideo = musicVideoType === 'MUSIC_VIDEO_TYPE_OMV';
+
+                const vId = renderer.playlistItemData?.videoId ||
+                  navEndpoint?.watchEndpoint?.videoId ||
+                  renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+                const rawThumb = renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url ||
+                  renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
+                const thumb = this.formatThumb(rawThumb);
+
+                if (tTitle && vId && !quickPicks.some(p => p.id === vId || p.videoId === vId)) {
+                  quickPicks.push({
+                    id: vId,
+                    videoId: vId,
+                    title: tTitle,
+                    artist: { id: `art_${encodeURIComponent(tArtist)}`, name: tArtist, picture: thumb },
+                    artists: [{ id: `art_${encodeURIComponent(tArtist)}`, name: tArtist }],
+                    album: { id: `alb_${vId}`, title: tTitle, cover: thumb },
+                    duration: 210,
+                    duration_ms: 210000,
+                    thumbnail: thumb,
+                    cover: thumb,
+                    itemType: isSong ? 'song' : (isMusicVideo ? 'video' : 'song'),
+                    musicVideoType: musicVideoType || 'MUSIC_VIDEO_TYPE_ATV',
+                    isOfficial: true,
+                    source: 'ytmusic-quick-picks'
+                  });
                 }
               }
             }
           }
         }
+        for (const k of Object.keys(node)) traverse(node[k], pattern);
+      };
 
-        if (userTracks.length > 0) {
-          isPersonalized = true;
-          // Add user's real frequent tracks
-          for (const t of userTracks) {
-            if (!quickPicks.some(q => q.id === t.id || q.videoId === t.id)) {
-              quickPicks.push(t);
-            }
-          }
+      // Traverse first for authentic Quick Picks
+      traverse(homeRes, sectionPattern);
 
-          // Generate algorithmic Radio recommendations from their top 2 tracks
-          const seedTracks = userTracks.slice(0, 2);
-          for (const seed of seedTracks) {
-            if (seed.videoId || seed.id) {
-              try {
-                const radioRes = await this.getRadio(seed.videoId || seed.id);
-                if (Array.isArray(radioRes)) {
-                  for (const r of radioRes) {
-                    if (!quickPicks.some(q => q.id === r.id || q.videoId === r.id)) {
-                      quickPicks.push(r);
-                    }
-                  }
-                }
-              } catch (re) {}
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('[YouTubeMusicService] Google OAuth QuickPicks extraction error:', err.message);
+      // If still empty, traverse for primary shelf
+      if (quickPicks.length === 0) {
+        traverse(homeRes, fallbackPattern);
       }
+    } catch (e) {
+      console.warn('[YouTubeMusicService] getQuickPicks browse failed:', e.message);
     }
 
-    // 2. If Cookie session is passed or if quickPicks is empty, query Innertube browse FEmusic_home
-    if (quickPicks.length < limit) {
-      try {
-        const userProvidedCookie = authParam && authParam.includes('=') ? authParam : null;
-        const headers = this.buildInnertubeHeaders(userProvidedCookie, false);
-        const payload = {
-          context: {
-            client: {
-              clientName: 'WEB_REMIX',
-              clientVersion: '1.20241101.01.00',
-              hl: 'it',
-              gl: 'IT'
-            }
-          },
-          browseId: 'FEmusic_home'
-        };
-
-        const homeRes = await fetchJson(`${this.innertubeEndpoint}/browse`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
-          timeout: 7000
-        });
-
-        const sectionPattern = isPersonalized
-          ? /scelte rapide|quick picks|listen again|di nuovo all'ascolto|i tuoi brani preferiti|spesso all'ascolto|raccolta|heavy rotation|mix per te|mixed for you/i
-          : /in primo piano|hit del momento|tendenze|classifiche|nuove uscite|popolari|scelte rapide|quick picks/i;
-
-        const traverse = (node) => {
-          if (!node || typeof node !== 'object') return;
-          if (node.musicCarouselShelfRenderer) {
-            const headerText = node.musicCarouselShelfRenderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || '';
-            const lowerHeader = headerText.toLowerCase();
-
-            if (lowerHeader.includes('shorts') || lowerHeader.includes('clip') || lowerHeader.includes('campionati') || lowerHeader.includes('momenti musicali') || lowerHeader.includes('brevi')) {
-              return;
-            }
-
-            if (sectionPattern.test(headerText)) {
-              const contents = node.musicCarouselShelfRenderer.contents || [];
-              for (const item of contents) {
-                const renderer = item.musicResponsiveListItemRenderer || item.musicTwoRowItemRenderer;
-                if (renderer) {
-                  const flex = renderer.flexColumns || [];
-                  const tTitle = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.title?.runs?.[0]?.text;
-                  const rawArtist = flex[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || renderer.subtitle?.runs?.[0]?.text || 'Artist';
-                  const tArtist = this.formatArtistName(rawArtist);
-
-                  const navEndpoint = renderer.playlistItemData?.navigationEndpoint ||
-                    renderer.navigationEndpoint ||
-                    renderer.doubleTapCommand ||
-                    renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint;
-                  const musicVideoType = navEndpoint?.watchEndpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType;
-
-                  if (musicVideoType === 'MUSIC_VIDEO_TYPE_UGC') continue;
-
-                  const isSong = musicVideoType === 'MUSIC_VIDEO_TYPE_ATV' || !musicVideoType;
-                  const isMusicVideo = musicVideoType === 'MUSIC_VIDEO_TYPE_OMV';
-
-                  const vId = renderer.playlistItemData?.videoId ||
-                    navEndpoint?.watchEndpoint?.videoId ||
-                    renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
-                  const rawThumb = renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url ||
-                    renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails?.[0]?.url || '';
-                  const thumb = this.formatThumb(rawThumb);
-
-                  if (tTitle && vId && !quickPicks.some(p => p.id === vId || p.videoId === vId)) {
-                    quickPicks.push({
-                      id: vId,
-                      videoId: vId,
-                      title: tTitle,
-                      artist: { id: `art_${encodeURIComponent(tArtist)}`, name: tArtist, picture: thumb },
-                      artists: [{ id: `art_${encodeURIComponent(tArtist)}`, name: tArtist }],
-                      album: { id: `alb_${vId}`, title: tTitle, cover: thumb },
-                      duration: 210,
-                      duration_ms: 210000,
-                      thumbnail: thumb,
-                      cover: thumb,
-                      itemType: isSong ? 'song' : (isMusicVideo ? 'video' : 'song'),
-                      musicVideoType: musicVideoType || 'MUSIC_VIDEO_TYPE_ATV',
-                      isOfficial: true,
-                      source: 'ytmusic-quick-picks'
-                    });
-                  }
-                }
-              }
-            }
-          }
-          for (const k of Object.keys(node)) traverse(node[k]);
-        };
-
-        traverse(homeRes);
-      } catch (e) {
-        console.warn('[YouTubeMusicService] getQuickPicks browse failed:', e.message);
-      }
-    }
-
-    // 3. Fallback if still empty: search trending hits
+    // 2. Fallback if still empty: search trending Italian hits
     if (quickPicks.length === 0) {
-      const topHits = await this.search('Top Hits 2025', 'track', limit);
-      quickPicks = topHits?.tracks?.items || [];
+      try {
+        const topHits = await this.search('Top Hits Italia 2025', 'track', limit);
+        quickPicks = topHits?.tracks?.items || [];
+      } catch (_) {}
     }
 
     const result = {
@@ -1212,6 +1161,18 @@ class YouTubeMusicService {
         if (!node || typeof node !== 'object') return;
         if (node.musicCarouselShelfRenderer) {
           const header = node.musicCarouselShelfRenderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.[0]?.text || 'Consigliati';
+          const lowerH = header.toLowerCase();
+          let sectionType = 'tracks';
+          if (lowerH.includes('scelte') || lowerH.includes('quick') || lowerH.includes('ascolto') || lowerH.includes('mix')) {
+            sectionType = 'quick-picks';
+          } else if (lowerH.includes('uscit') || lowerH.includes('album') || lowerH.includes('singol')) {
+            sectionType = 'carousel';
+          } else if (lowerH.includes('playlist')) {
+            sectionType = 'playlists';
+          } else if (lowerH.includes('tendenza') || lowerH.includes('classific') || lowerH.includes('hit')) {
+            sectionType = 'charts';
+          }
+
           const items = [];
           const itemNodes = node.musicCarouselShelfRenderer.contents || [];
           for (const it of itemNodes) {
@@ -1234,6 +1195,8 @@ class YouTubeMusicService {
                   album: { id: `alb_${videoId}`, title, cover: thumb },
                   duration: 210,
                   duration_ms: 210000,
+                  cover: thumb,
+                  thumbnail: thumb,
                   source: 'youtube-home'
                 });
               }
@@ -1258,13 +1221,15 @@ class YouTubeMusicService {
                   album: { id: `alb_${finalId}`, title, cover: thumb },
                   duration: 210,
                   duration_ms: 210000,
+                  cover: thumb,
+                  thumbnail: thumb,
                   source: 'youtube-home'
                 });
               }
             }
           }
           if (items.length > 0) {
-            sections.push({ title: header, items });
+            sections.push({ title: header, type: sectionType, items });
           }
         }
         for (const k of Object.keys(node)) traverse(node[k]);
@@ -1272,9 +1237,45 @@ class YouTubeMusicService {
 
       traverse(browseRes);
 
+      // Deduplicate across sections so the same track never appears in multiple sections
+      const seenVideoIds = new Set();
+      const cleanSections = [];
+      for (const sec of sections) {
+        const uniqueItems = [];
+        for (const it of sec.items) {
+          const key = it.videoId || it.id;
+          if (!key || !seenVideoIds.has(key)) {
+            if (key) seenVideoIds.add(key);
+            uniqueItems.push(it);
+          }
+        }
+        if (uniqueItems.length > 0) {
+          cleanSections.push({
+            title: sec.title,
+            type: sec.type,
+            items: uniqueItems
+          });
+        }
+      }
+
+      // Enrich with Italian charts if fewer than 3 shelves
+      if (cleanSections.length < 3) {
+        try {
+          const topHits = await this.search('Top Hits Italia 2025', 'track', 15);
+          const topItems = (topHits?.tracks?.items || []).filter(t => !seenVideoIds.has(t.id));
+          if (topItems.length > 0) {
+            cleanSections.push({
+              title: 'Classifiche & Hit del Momento',
+              type: 'charts',
+              items: topItems
+            });
+          }
+        } catch (_) {}
+      }
+
       const result = {
         ok: true,
-        sections: sections.slice(0, 10),
+        sections: cleanSections.slice(0, 10),
         personalized: Boolean(userCookie),
         source: 'ytmusic'
       };

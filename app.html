@@ -350,7 +350,7 @@ h1 { font-size: 34px; font-weight: 800; }
     transform: scale(0.92);
 }
 
-.card { cursor: pointer; transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1); background: transparent; }
+.card { cursor: pointer; transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1); background: transparent; }
 .card:active { transform: scale(0.95); }
 .card:hover { transform: translateY(-4px); }
 
@@ -359,14 +359,103 @@ h1 { font-size: 34px; font-weight: 800; }
     background: var(--bg-tertiary);
     border-radius: 12px; overflow: hidden; margin-bottom: 12px; position: relative;
     border: 1px solid var(--glass-border);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.4);
-    transition: box-shadow 0.3s ease;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.45);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.35s ease;
 }
-.card:hover .artwork { box-shadow: 0 15px 30px rgba(0,0,0,0.6); }
+.card:hover .artwork {
+    box-shadow: 0 18px 36px rgba(0,0,0,0.65), 0 0 20px rgba(255,255,255,0.06);
+    transform: translateY(-2px);
+}
 .artwork img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
 
 .card-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; margin-top: 4px; }
 .card-subtitle { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* --- Multi-Shelf & Carousel Styles (Awwwards Design) --- */
+.shelf-section {
+    margin-bottom: 36px;
+    position: relative;
+}
+.shelf-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 14px;
+}
+.shelf-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.4px;
+    color: var(--text-primary, #fff);
+}
+.shelf-badge {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--accent);
+    margin-bottom: 4px;
+}
+.shelf-carousel {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding: 6px 2px 14px 2px;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+.shelf-carousel::-webkit-scrollbar { display: none; }
+.shelf-carousel .card {
+    flex-shrink: 0;
+    width: 156px;
+    scroll-snap-align: start;
+}
+@media (max-width: 600px) {
+    .shelf-carousel .card {
+        width: 136px;
+    }
+    .shelf-title {
+        font-size: 21px;
+    }
+}
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+}
+.chart-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+    user-select: none;
+}
+.chart-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+.chart-item:active {
+    transform: scale(0.98);
+}
+.chart-rank {
+    font-size: 16px;
+    font-weight: 800;
+    width: 22px;
+    text-align: center;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
 
 /* --- List View (Playlist) --- */
 .list-item {
@@ -963,7 +1052,7 @@ h1 { font-size: 34px; font-weight: 800; }
     <div id="deepLinkBanner" class="deep-link-banner hidden">
         <div class="deep-link-content">
             <div class="deep-link-art">
-                <img id="deepLinkArt" src="" alt="Artwork">
+                <img id="deepLinkArt" src="" alt="Artwork" width="60" height="60">
             </div>
             <div class="deep-link-info">
                 <div style="font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.65);">Qualcuno ti ha invitato a sentire questa canzone</div>
@@ -983,17 +1072,17 @@ h1 { font-size: 34px; font-weight: 800; }
     <div id="tab-home" class="main-container active-tab-content">
         <header>
             <div class="header-actions" style="display:flex; justify-content:space-between; align-items:center;">
-                <h2 style="font-size:34px;font-weight:700;letter-spacing:-0.5px;margin:0;">Listen Now</h2>
+                <h2 id="homeGreetingTitle" style="font-size:34px;font-weight:700;letter-spacing:-0.5px;margin:0;">Listen Now</h2>
                 <div id="homeAccountBadge" style="display:flex; align-items:center; gap:8px;"></div>
             </div>
         </header>
-        <div class="container">
+        <div class="container" id="homeContainer">
             <!-- Scelte Rapide Section (YouTube Music Quick Picks) -->
-            <div id="quickPicksSection" style="margin-bottom: 32px;">
-                <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:14px;">
+            <section id="quickPicksSection" class="shelf-section" aria-labelledby="quickPicksTitle">
+                <div class="shelf-header">
                     <div>
-                        <div id="quickPicksLabel" style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--accent); margin-bottom:4px;">INIZIA LA RADIO DA UN BRANO</div>
-                        <h2 class="section-title" style="margin:0; font-size:24px; font-weight:700;">Scelte rapide</h2>
+                        <div id="quickPicksLabel" class="shelf-badge">INIZIA LA RADIO DA UN BRANO</div>
+                        <h2 id="quickPicksTitle" class="shelf-title">Scelte rapide</h2>
                     </div>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <button id="playAllQuickPicksBtn" class="btn-text" style="font-size:13px; font-weight:600; color:var(--text-primary); padding:6px 14px; background:rgba(255,255,255,0.08); border-radius:20px; display:flex; align-items:center; gap:6px;" onclick="playAllQuickPicks()">
@@ -1013,11 +1102,35 @@ h1 { font-size: 34px; font-weight: 800; }
                 <div id="quickPicksGrid" class="quick-picks-container">
                     <!-- Dynamic Quick Picks Cards -->
                 </div>
+            </section>
+
+            <!-- Dynamic YouTube Music Shelves (Nuove Uscite, Playlist, Classifiche) -->
+            <div id="homeDynamicShelves">
+                <!-- Dynamic Shelves rendered from /api/home -->
             </div>
 
-            <h2 class="section-title">Top Picks & Daily Mix</h2>
-            <div class="grid" id="recommendations">
-            </div>
+            <!-- Listening History (Rendered only if distinct history exists) -->
+            <section id="homeHistorySection" class="shelf-section hidden" aria-labelledby="historyTitle">
+                <div class="shelf-header">
+                    <div>
+                        <div class="shelf-badge">LA TUA ATTIVITÀ</div>
+                        <h2 id="historyTitle" class="shelf-title">Ascoltati di recente</h2>
+                    </div>
+                </div>
+                <div class="shelf-carousel" id="homeHistoryGrid"></div>
+            </section>
+
+            <!-- Supermix & Personal Recommendations -->
+            <section id="recommendationsSection" class="shelf-section" aria-labelledby="recommendationsTitle">
+                <div class="shelf-header">
+                    <div>
+                        <div class="shelf-badge">SU MISURA PER TE</div>
+                        <h2 id="recommendationsTitle" class="shelf-title">Supermix & Daily Mix</h2>
+                    </div>
+                </div>
+                <div class="grid" id="recommendations">
+                </div>
+            </section>
         </div>
     </div>
 
@@ -1270,6 +1383,9 @@ h1 { font-size: 34px; font-weight: 800; }
     </main>
 
     <div class="mini-player" id="miniPlayer" role="button" tabindex="0" aria-label="Apri player a schermo intero" onkeydown="if(event.key==='Enter'||event.key===' ')openFullPlayer()">
+        <div class="mini-progress-strip" style="position:absolute; top:0; left:16px; right:16px; height:2.5px; background:rgba(255,255,255,0.12); border-radius:2px; overflow:hidden;">
+            <div id="miniProgressFill" style="height:100%; width:0%; background:var(--accent); transition:width 0.25s linear;"></div>
+        </div>
         <div class="mini-art">
             <img src="" id="miniArt" alt="Copertina brano" width="44" height="44">
             <div class="mini-equalizer" id="miniEqualizer" aria-hidden="true">
@@ -1412,8 +1528,8 @@ h1 { font-size: 34px; font-weight: 800; }
         </div>
     </div>
 
-    <audio id="nativeAudio" playsinline preload="auto"></audio>
-    <div id="ytAudioBridge" style="position:fixed; bottom:0; right:0; width:200px; height:200px; opacity:0.001; pointer-events:none; z-index:-1;"></div>
+    <audio id="nativeAudio" playsinline webkit-playsinline preload="auto"></audio>
+    <div id="ytAudioBridge" style="position:fixed; top:0; left:0; width:2px; height:2px; opacity:0.99; pointer-events:none; z-index:-1; overflow:hidden;"></div>
 
     <script>
         // --- 1. Track Stream Resolver & Audio Cache ---
@@ -1569,19 +1685,31 @@ h1 { font-size: 34px; font-weight: 800; }
         const backgroundAudioManager = {
             dummyAudio: null,
             ctx: null,
+            oscNode: null,
             init() {
+                try {
+                    if ('audioSession' in navigator) {
+                        navigator.audioSession.type = 'playback';
+                    }
+                } catch (_) {}
                 if (!this.dummyAudio) {
-                    this.dummyAudio = new Audio();
-                    // Ultra-lightweight 1-second silent WAV audio loop (separate from main player!)
-                    this.dummyAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+                    this.dummyAudio = new Audio('/assets/silence.wav');
                     this.dummyAudio.loop = true;
                     this.dummyAudio.playsInline = true;
-                    this.dummyAudio.volume = 0.0001;
+                    this.dummyAudio.setAttribute('playsinline', '');
+                    this.dummyAudio.setAttribute('webkit-playsinline', '');
+                    this.dummyAudio.volume = 0.02;
+                    this.dummyAudio.onerror = () => {
+                        this.dummyAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+                    };
                 }
             },
             start() {
                 try {
                     this.init();
+                    if ('audioSession' in navigator) {
+                        navigator.audioSession.type = 'playback';
+                    }
                     if (this.dummyAudio && this.dummyAudio.paused) {
                         this.dummyAudio.play().catch(() => {});
                     }
@@ -1592,6 +1720,19 @@ h1 { font-size: 34px; font-weight: 800; }
                         }
                         if (this.ctx.state === 'suspended') {
                             this.ctx.resume().catch(() => {});
+                        }
+                        if (!this.oscNode && this.ctx.state === 'running') {
+                            try {
+                                const osc = this.ctx.createOscillator();
+                                const gain = this.ctx.createGain();
+                                gain.gain.value = 0.0001; // virtually silent keep-alive graph
+                                osc.type = 'sine';
+                                osc.frequency.value = 220;
+                                osc.connect(gain);
+                                gain.connect(this.ctx.destination);
+                                osc.start();
+                                this.oscNode = osc;
+                            } catch (_) {}
                         }
                     }
                 } catch (e) {}
@@ -1682,6 +1823,14 @@ h1 { font-size: 34px; font-weight: 800; }
                                     updatePlayIcons();
                                     requestWakeLock();
                                 } else if (e.data === 2) { // PAUSED
+                                    if (document.hidden) {
+                                        // Background pause from OS - preserve active playback state and audio session
+                                        console.log('[AudioEngine] Background OS pause intercepted, preserving playback state');
+                                        if ('mediaSession' in navigator) {
+                                            navigator.mediaSession.playbackState = 'playing';
+                                        }
+                                        return;
+                                    }
                                     this.paused = true;
                                     state.isPlaying = false;
                                     iOSBackgroundAudio.stop();
@@ -1800,6 +1949,9 @@ h1 { font-size: 34px; font-weight: 800; }
             if (audioUnlocked) return;
             audioUnlocked = true;
             try {
+                if ('audioSession' in navigator) {
+                    navigator.audioSession.type = 'playback';
+                }
                 if (backgroundAudioManager && backgroundAudioManager.start) {
                     backgroundAudioManager.start();
                 }
@@ -1914,18 +2066,27 @@ h1 { font-size: 34px; font-weight: 800; }
         let savedState = { time: 0, wasPlaying: false, trackId: null };
 
         // Background & Visibility Change Handler for Mobile PWA (iOS Safari & Android) & Desktop
-        document.addEventListener('visibilitychange', async () => {
+        document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                // Pagina in background / finestra senza focus
-                if ('mediaSession' in navigator && state.isPlaying) {
-                    navigator.mediaSession.playbackState = 'playing';
+                // Pagina in background / lock screen
+                if (state.isPlaying) {
+                    if ('mediaSession' in navigator) {
+                        navigator.mediaSession.playbackState = 'playing';
+                    }
+                    if ('audioSession' in navigator) {
+                        try { navigator.audioSession.type = 'playback'; } catch (_) {}
+                    }
+                    backgroundAudioManager.start();
                 }
             } else {
-                // Tornati in primo piano / finestra con focus: sincronizza UI e riprendi se sospeso
+                // Tornati in primo piano: risincronizza e mantieni attivo
                 if (state.isPlaying) {
-                    if (nativeAudio.src && nativeAudio.paused) {
-                        nativeAudio.play().catch(() => showResumeButton());
-                    } else if (ytAudioPlayer.isInit && ytAudioPlayer.paused) {
+                    if ('mediaSession' in navigator) {
+                        navigator.mediaSession.playbackState = 'playing';
+                    }
+                    if (nativeAudio && nativeAudio.src && nativeAudio.paused) {
+                        nativeAudio.play().catch(() => {});
+                    } else if (ytAudioPlayer && ytAudioPlayer.isInit && ytAudioPlayer.paused) {
                         ytAudioPlayer.play();
                     }
                     updatePlayIcons();
@@ -2458,6 +2619,9 @@ h1 { font-size: 34px; font-weight: 800; }
             const progressFill = document.getElementById('progressFill');
             if (progressFill) progressFill.style.width = percent + '%';
 
+            const miniProgressFill = document.getElementById('miniProgressFill');
+            if (miniProgressFill) miniProgressFill.style.width = percent + '%';
+
             const curEl = document.getElementById('currentTime');
             if (curEl) curEl.textContent = formatTime(cur);
 
@@ -2967,7 +3131,9 @@ h1 { font-size: 34px; font-weight: 800; }
         });
 
         function createCard(track, index = 0, isSearchResult = false) {
-            const artUrl = formatArtworkUrl(track.album?.cover, '320x320');
+            const artUrl = formatArtworkUrl(track.album?.cover || track.cover || track.thumbnail, '320x320') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+            const cleanTitle = track.title || 'Unknown Title';
+            const cleanArtistName = formatArtistName(track.artist?.name || track.artist || 'Unknown');
             
             // Serialize track object for onclick
             const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
@@ -2976,7 +3142,7 @@ h1 { font-size: 34px; font-weight: 800; }
             return `
                 <div class="card animate-in" style="animation-delay: ${index * 50}ms" data-action='playTrack(${trackStr}, false, ${isSearchResult})' role="button" tabindex="0">
                     <div class="artwork">
-                        <img src="${artUrl}" alt="${track.title || 'Track artwork'}" loading="lazy">
+                        <img src="${artUrl}" alt="${track.title || 'Track artwork'}" loading="lazy" width="300" height="300">
                     </div>
                     <div class="card-title">${track.title}</div>
                     <div class="card-subtitle">
@@ -2996,7 +3162,7 @@ h1 { font-size: 34px; font-weight: 800; }
             return `
                 <div class="card animate-in" style="animation-delay: ${index * 50}ms" data-action='openAlbumPage(${albumStr})' role="button" tabindex="0">
                     <div class="artwork">
-                        <img src="${artUrl}" alt="${album.title || 'Album artwork'}" loading="lazy">
+                        <img src="${artUrl}" alt="${album.title || 'Album artwork'}" loading="lazy" width="300" height="300">
                     </div>
                     <div class="card-title">${album.title}</div>
                     <div class="card-subtitle">${album.artists?.[0]?.name || 'Unknown Artist'}</div>
@@ -3012,7 +3178,7 @@ h1 { font-size: 34px; font-weight: 800; }
             return `
                 <div class="card animate-in" style="animation-delay: ${index * 50}ms" data-action='openArtistPage(${artistStr})' role="button" tabindex="0">
                     <div class="artwork">
-                        <img src="${artUrl}" alt="${artist.name || 'Artist photo'}" loading="lazy">
+                        <img src="${artUrl}" alt="${artist.name || 'Artist photo'}" loading="lazy" width="300" height="300">
                     </div>
                     <div class="card-title">${artist.name}</div>
                     <div class="card-subtitle">Artist</div>
@@ -3248,7 +3414,7 @@ h1 { font-size: 34px; font-weight: 800; }
             }
         }
 
-        // Home "Listen Now" Personal Recommendations & YouTube Music Quick Picks
+        // Home "Listen Now" Multi-Shelf YouTube Music Feed & Personalized Quick Picks
         let quickPicksList = [];
         async function loadRecommendations() {
             const googleToken = localStorage.getItem('google_token');
@@ -3256,7 +3422,19 @@ h1 { font-size: 34px; font-weight: 800; }
             const ytmCookie = localStorage.getItem('ytm_cookie');
             const quickPicksContainer = document.getElementById('quickPicksGrid');
             const quickPicksLabel = document.getElementById('quickPicksLabel');
-            const grid = document.getElementById('recommendations');
+            const homeDynamicShelves = document.getElementById('homeDynamicShelves');
+            const historySection = document.getElementById('homeHistorySection');
+            const historyGrid = document.getElementById('homeHistoryGrid');
+            const recommendationsGrid = document.getElementById('recommendations');
+
+            // Dynamic greeting in header
+            const hour = new Date().getHours();
+            let greeting = "Listen Now";
+            if (hour >= 5 && hour < 12) greeting = "Buongiorno";
+            else if (hour >= 12 && hour < 18) greeting = "Buon pomeriggio";
+            else greeting = "Buonasera";
+            const greetingTitle = document.getElementById('homeGreetingTitle');
+            if (greetingTitle) greetingTitle.textContent = greeting;
 
             if (quickPicksContainer) {
                 quickPicksContainer.innerHTML = `
@@ -3266,11 +3444,21 @@ h1 { font-size: 34px; font-weight: 800; }
                     </div>
                 `;
             }
-            if (grid) {
-                grid.innerHTML = renderSkeletonGrid(8);
+            if (homeDynamicShelves) {
+                homeDynamicShelves.innerHTML = `
+                    <div style="padding: 20px 0; color:var(--text-secondary); font-size:13px; display:flex; align-items:center; gap:8px;">
+                        <div class="spinner" style="width:18px; height:18px;"></div>
+                        Caricamento novità e classifiche...
+                    </div>
+                `;
+            }
+            if (recommendationsGrid) {
+                recommendationsGrid.innerHTML = renderSkeletonGrid(6);
             }
 
-            // 1. Fetch YouTube Music Quick Picks (using connected YouTube Music Session Cookie or Google Token)
+            const seenSongIds = new Set();
+
+            // 1. Fetch YouTube Music Quick Picks (real Scelte Rapide)
             try {
                 const headers = {};
                 if (ytmCookie) {
@@ -3285,12 +3473,16 @@ h1 { font-size: 34px; font-weight: 800; }
                 const items = qpData.items || qpData.data?.items || [];
                 quickPicksList = items;
 
+                if (items.length > 0) {
+                    items.forEach(t => { if (t && (t.id || t.videoId)) seenSongIds.add(t.id || t.videoId); });
+                }
+
                 if (quickPicksContainer) {
                     if (items.length > 0) {
                         if (ytmCookie || qpData.personalized) {
                             if (quickPicksLabel) quickPicksLabel.innerHTML = `<span style="color:#22c55e;">●</span> DAL TUO YOUTUBE MUSIC REALE (Sessione Attiva)`;
                         } else if (googleUser) {
-                            if (quickPicksLabel) quickPicksLabel.textContent = `DAL TUO ACCOUNT GOOGLE (${googleUser})`;
+                            if (quickPicksLabel) quickPicksLabel.textContent = `PER TE • ${googleUser.toUpperCase()}`;
                         } else {
                             if (quickPicksLabel) quickPicksLabel.textContent = "INIZIA LA RADIO DA UN BRANO";
                         }
@@ -3301,7 +3493,7 @@ h1 { font-size: 34px; font-weight: 800; }
                             return `
                                 <div class="quick-pick-item animate-in" style="animation-delay:${idx * 15}ms" data-action='playQuickPickTrack(${idx})' role="button" tabindex="0">
                                     <div class="quick-pick-thumb-wrapper">
-                                        <img class="quick-pick-thumb" src="${thumb}" loading="lazy" alt="${track.title}">
+                                        <img class="quick-pick-thumb" src="${thumb}" loading="lazy" alt="${track.title}" width="48" height="48">
                                         <div class="quick-pick-play-overlay">
                                             <svg class="icon icon-sm" viewBox="0 0 24 24" style="width:20px;height:20px;"><path d="M8 5v14l11-7z" fill="white"/></svg>
                                         </div>
@@ -3327,48 +3519,137 @@ h1 { font-size: 34px; font-weight: 800; }
                 }
             }
 
-            // 2. Load personalized Daily Mix & Top Picks
-            const history = JSON.parse(localStorage.getItem('listening_history') || '[]');
-            const liked = state.likedSongs || [];
-            const userTracks = [...history, ...liked];
+            // 2. Fetch Multi-Shelf Live YouTube Music Home Feed (/api/home)
+            try {
+                const homeRes = await apiFetch('/home');
+                const homeData = await homeRes.json();
+                const sections = (homeData.sections || []).filter(sec => {
+                    const title = (sec.title || '').toLowerCase();
+                    // Avoid duplicating Scelte rapide since we already rendered it in the top shelf
+                    return !title.includes('scelte rapide') && !title.includes('quick picks');
+                });
 
-            if (grid) {
-                if (userTracks.length > 0) {
-                    // Deduplicate tracks by ID
-                    const uniqueTracks = [];
-                    const seenIds = new Set();
-                    for (const t of userTracks) {
-                        if (t && t.id && !seenIds.has(t.id)) {
-                            seenIds.add(t.id);
-                            uniqueTracks.push(t);
-                        }
+                if (homeDynamicShelves) {
+                    if (sections.length > 0) {
+                        homeDynamicShelves.innerHTML = sections.map((sec, secIdx) => {
+                            const secItems = (sec.items || []).filter(item => {
+                                const id = item.videoId || item.id;
+                                if (!id || seenSongIds.has(id)) return false;
+                                seenSongIds.add(id);
+                                return true;
+                            });
+
+                            if (secItems.length === 0) return '';
+
+                            const shelfBadge = sec.type === 'carousel' ? 'ALBUM & SINGOLI' : (sec.type === 'charts' ? 'CLASSIFICHE' : 'IN PRIMO PIANO');
+
+                            if (sec.type === 'charts') {
+                                // Render top rank list
+                                return `
+                                    <section class="shelf-section animate-in" style="animation-delay:${secIdx * 40}ms" aria-labelledby="shelf_title_${secIdx}">
+                                        <div class="shelf-header">
+                                            <div>
+                                                <div class="shelf-badge">${shelfBadge}</div>
+                                                <h2 id="shelf_title_${secIdx}" class="shelf-title">${sec.title}</h2>
+                                            </div>
+                                        </div>
+                                        <div class="chart-grid">
+                                            ${secItems.slice(0, 8).map((track, i) => {
+                                                const thumb = formatArtworkUrl(track.thumbnail || track.cover || track.album?.cover, '120x120') || 'https://cdn-icons-png.flaticon.com/512/4430/4430494.png';
+                                                const artName = formatArtistName(track.artist?.name || track.artist || 'Unknown Artist');
+                                                const trackStr = JSON.stringify(track).replace(/"/g, '&quot;').replace(/'/g, "&#39;");
+                                                return `
+                                                    <div class="chart-item" data-action='playTrack(${trackStr}, false, false)' role="button" tabindex="0">
+                                                        <span class="chart-rank">${i + 1}</span>
+                                                        <div class="quick-pick-thumb-wrapper">
+                                                            <img class="quick-pick-thumb" src="${thumb}" loading="lazy" alt="${track.title}" width="48" height="48">
+                                                            <div class="quick-pick-play-overlay">
+                                                                <svg class="icon icon-sm" viewBox="0 0 24 24" style="width:18px;height:18px;"><path d="M8 5v14l11-7z" fill="white"/></svg>
+                                                            </div>
+                                                        </div>
+                                                        <div class="quick-pick-info">
+                                                            <div class="quick-pick-title">${track.title}</div>
+                                                            <div class="quick-pick-artist">${artName}</div>
+                                                        </div>
+                                                    </div>
+                                                `;
+                                            }).join('')}
+                                        </div>
+                                    </section>
+                                `;
+                            }
+
+                            // Render horizontal carousel cards
+                            return `
+                                <section class="shelf-section animate-in" style="animation-delay:${secIdx * 40}ms" aria-labelledby="shelf_title_${secIdx}">
+                                    <div class="shelf-header">
+                                        <div>
+                                            <div class="shelf-badge">${shelfBadge}</div>
+                                            <h2 id="shelf_title_${secIdx}" class="shelf-title">${sec.title}</h2>
+                                        </div>
+                                    </div>
+                                    <div class="shelf-carousel">
+                                        ${secItems.map((track, i) => createCard(track, i)).join('')}
+                                    </div>
+                                </section>
+                            `;
+                        }).join('');
+                    } else {
+                        homeDynamicShelves.innerHTML = '';
                     }
+                }
+            } catch (err) {
+                console.warn("Failed to load home shelves:", err);
+                if (homeDynamicShelves) homeDynamicShelves.innerHTML = '';
+            }
 
-                    // Add Supermix / Daily Mix card
+            // 3. User Listening History (completely separate, rendered only if distinct history exists)
+            try {
+                const history = JSON.parse(localStorage.getItem('listening_history') || '[]');
+                const uniqueHistory = [];
+                for (const h of history) {
+                    const id = h.videoId || h.id;
+                    if (id && !seenSongIds.has(id)) {
+                        seenSongIds.add(id);
+                        uniqueHistory.push(h);
+                    }
+                }
+
+                if (historySection && historyGrid) {
+                    if (uniqueHistory.length > 0) {
+                        historySection.classList.remove('hidden');
+                        historyGrid.innerHTML = uniqueHistory.slice(0, 10).map((track, i) => createCard(track, i)).join('');
+                    } else {
+                        historySection.classList.add('hidden');
+                    }
+                }
+            } catch (_) {}
+
+            // 4. Recommendations & Supermix
+            if (recommendationsGrid) {
+                try {
                     const dailyMixCard = `
                         <div class="card animate-in" data-action="loadDailyMix()" role="button" tabindex="0">
                             <div class="artwork" style="background: linear-gradient(135deg, #FA2D48 0%, #FF6B6B 50%, #4ECDC4 100%); display:flex; align-items:center; justify-content:center;">
                                 <svg class="icon icon-xl" style="color:white; width:40px; height:40px;" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/></svg>
                             </div>
-                            <div class="card-title">Supermix</div>
-                            <div class="card-subtitle">Creato per te</div>
+                            <div class="card-title">Supermix Preluded</div>
+                            <div class="card-subtitle">Creato su misura per te</div>
                         </div>
                     `;
-                    grid.innerHTML = dailyMixCard + uniqueTracks.slice(0, 15).map((track, i) => createCard(track, i + 1)).join('');
-                } else {
-                    // Load trending hits on initial start
-                    try {
-                        const res = await apiFetch('/search/?s=Top+Hits+2025');
-                        const data = await res.json();
-                        const tracks = data?.data?.items || data?.data?.tracks?.items || [];
-                        if (tracks.length > 0) {
-                            grid.innerHTML = tracks.slice(0, 12).map((track, i) => createCard(track, i)).join('');
-                        } else {
-                            grid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Inizia ad ascoltare brani per ricevere consigli personalizzati.</p>';
-                        }
-                    } catch (e) {
-                        grid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Inizia ad ascoltare brani per ricevere consigli personalizzati.</p>';
+
+                    // Fetch trending Italian hits for the bottom grid, filtering out already seen songs
+                    const searchRes = await apiFetch('/search/?s=Top+Hits+Italia');
+                    const searchData = await searchRes.json();
+                    const tracks = (searchData?.data?.items || searchData?.data?.tracks?.items || []).filter(t => !seenSongIds.has(t.id));
+
+                    if (tracks.length > 0) {
+                        recommendationsGrid.innerHTML = dailyMixCard + tracks.slice(0, 11).map((track, i) => createCard(track, i + 1)).join('');
+                    } else {
+                        recommendationsGrid.innerHTML = dailyMixCard;
                     }
+                } catch (e) {
+                    recommendationsGrid.innerHTML = '<p style="color:var(--text-secondary); grid-column:1/-1;">Inizia ad ascoltare brani per ricevere consigli personalizzati.</p>';
                 }
             }
         }
@@ -4150,7 +4431,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 
                 return `
                     <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" data-action='handlePlaylistSongClick(${trackStr}, ${playlistIndex})' role="button" tabindex="0">
-                        <div class="list-artwork"><img src="${artUrl}" alt="Song artwork"></div>
+                        <div class="list-artwork"><img src="${artUrl}" alt="Song artwork" width="50" height="50"></div>
                         <div class="list-info"><div class="card-title">${track.title}</div><div class="card-subtitle">${track.artist?.name}</div></div>
                     </div>`;
             }).join('');
@@ -4192,7 +4473,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 
                 return `
                     <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" data-action='playTrack(${trackStr})' role="button" tabindex="0">
-                        <div class="list-artwork"><img src="${artUrl}" alt="Song artwork"></div>
+                        <div class="list-artwork"><img src="${artUrl}" alt="Song artwork" width="50" height="50"></div>
                         <div class="list-info"><div class="card-title">${track.title}</div><div class="card-subtitle">${track.artist?.name}</div></div>
                     </div>`;
             }).join('');
@@ -4749,7 +5030,7 @@ h1 { font-size: 34px; font-weight: 800; }
                                         };
                                         const albumStr = JSON.stringify(albumObj).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                                         return `<div class="card animate-in" style="animation-delay:${i * 30}ms; cursor:pointer;" data-action='openAlbumPage(${albumStr})' role="button" tabindex="0">
-                                                <div class="artwork"><img src="${cover}" alt="${albumName}" loading="lazy"></div>
+                                                <div class="artwork"><img src="${cover}" alt="${albumName}" loading="lazy" width="300" height="300"></div>
                                                 <div class="card-title">${albumName}</div>
                                                 <div class="card-subtitle">${artistLabel}${year}</div>
                                             </div>`;
@@ -4786,7 +5067,7 @@ h1 { font-size: 34px; font-weight: 800; }
                                 const artistName = a.name || '';
                                 const artistStr = JSON.stringify(a).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                                 return `<div class="card animate-in" style="animation-delay:${i * 30}ms" data-action='openArtistPage(${artistStr})' role="button" tabindex="0">
-                                        <div class="artwork"><img src="${pic}" alt="${artistName}" loading="lazy"></div>
+                                        <div class="artwork"><img src="${pic}" alt="${artistName}" loading="lazy" width="300" height="300"></div>
                                         <div class="card-title">${artistName}</div>
                                     </div>`;
                             }).join('')}
@@ -4830,7 +5111,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 const albumStr = JSON.stringify(albumObj).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                 return `
                     <div class="card animate-in" style="animation-delay:${i * 30}ms; cursor:pointer;" data-action='openAlbumPage(${albumStr})' role="button" tabindex="0">
-                        <div class="artwork"><img src="${cover}" alt="${albumName}" loading="lazy"></div>
+                        <div class="artwork"><img src="${cover}" alt="${albumName}" loading="lazy" width="300" height="300"></div>
                         <div class="card-title">${albumName}</div>
                         <div class="card-subtitle">${artistLabel}${year}</div>
                     </div>
@@ -4855,7 +5136,7 @@ h1 { font-size: 34px; font-weight: 800; }
                 const artistStr = JSON.stringify(a).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                 return `
                     <div class="card animate-in" style="animation-delay:${i * 30}ms" data-action='openArtistPage(${artistStr})' role="button" tabindex="0">
-                        <div class="artwork"><img src="${pic}" alt="${artistName}" loading="lazy"></div>
+                        <div class="artwork"><img src="${pic}" alt="${artistName}" loading="lazy" width="300" height="300"></div>
                         <div class="card-title">${artistName}</div>
                     </div>
                 `;
@@ -5013,7 +5294,7 @@ h1 { font-size: 34px; font-weight: 800; }
                             const artistDisplayName = track.artist?.name || resolvedArtist || 'Unknown';
                             return `
                                 <div class="list-item animate-in" style="animation-delay: ${i * 50}ms" data-action="playAlbumSong(${i})" role="button" tabindex="0">
-                                    <div class="list-artwork"><img src="${artUrl}" alt="Song artwork"></div>
+                                    <div class="list-artwork"><img src="${artUrl}" alt="Song artwork" width="50" height="50"></div>
                                     <div class="list-info">
                                         <div class="card-title">${track.title}</div>
                                         <div class="card-subtitle">
