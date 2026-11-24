@@ -12,7 +12,8 @@ router.get('/', (req, res) => {
     uptimeSeconds: Math.floor(process.uptime()),
     cacheItems: cacheService.size(),
     spotifyConfigured: Boolean(config.spotify.clientId && config.spotify.clientSecret),
-    googleConfigured: Boolean(config.google.clientId && config.google.clientSecret)
+    googleConfigured: Boolean(config.google.clientId && config.google.clientSecret),
+    hasServerYtmCookie: Boolean(config.youtubeMusic.cookie)
   });
 });
 

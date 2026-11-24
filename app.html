@@ -1863,6 +1863,18 @@ h1 { font-size: 34px; font-weight: 800; }
     <script>
         // --- 1. Track Stream Resolver & Audio Cache ---
         const streamUrlCache = new Map();
+        window.__serverHasYtmCookie = false;
+
+        async function checkServerCapabilities() {
+            try {
+                const res = await fetch('/health');
+                const data = await res.json();
+                if (data && data.hasServerYtmCookie) {
+                    window.__serverHasYtmCookie = true;
+                }
+            } catch (_) {}
+        }
+        checkServerCapabilities();
 
         async function resolveTrackAudio(track) {
             if (!track || !track.id) {
@@ -1877,11 +1889,12 @@ h1 { font-size: 34px; font-weight: 800; }
             }
 
             const customCookie = localStorage.getItem('ytm_cookie');
-            const hasDirectAudio = Boolean(customCookie);
+            const hasDirectAudio = Boolean(customCookie || window.__serverHasYtmCookie);
+            const streamParam = customCookie ? `&cookie=${encodeURIComponent(customCookie)}` : '';
 
             const result = {
                 trackId,
-                streamUrl: hasDirectAudio ? `/api/stream.mp4?id=${encodeURIComponent(videoId)}&cookie=${encodeURIComponent(customCookie)}` : null,
+                streamUrl: hasDirectAudio ? `/api/stream.mp4?id=${encodeURIComponent(videoId)}${streamParam}` : null,
                 isDirectAudio: hasDirectAudio,
                 mimeType: hasDirectAudio ? 'audio/mp4' : undefined,
                 source: hasDirectAudio ? 'server-stream-proxy' : 'youtube-embed-bridge',
