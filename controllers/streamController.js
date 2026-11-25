@@ -8,6 +8,9 @@ class StreamController {
       if (!videoId) {
         return res.status(400).json({ error: 'Missing videoId query parameter' });
       }
+      if (!/^[a-zA-Z0-9_-]{3,64}$/.test(String(videoId))) {
+        return res.status(400).json({ error: 'Invalid videoId parameter format' });
+      }
 
       const streamInfo = await streamResolutionService.resolveStreamUrl(videoId);
 

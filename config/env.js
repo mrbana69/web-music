@@ -1,4 +1,5 @@
 const path = require('path');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 
 // Load .env file from project root
@@ -8,6 +9,7 @@ const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   corsOrigin: process.env.CORS_ORIGIN || '*',
+  allowedHosts: (process.env.ALLOWED_HOSTS || '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean),
 
   // Spotify Configuration
   spotify: {
@@ -51,7 +53,7 @@ const config = {
     metadataTtl: parseInt(process.env.METADATA_CACHE_TTL || '3600', 10)  // 1 hour
   },
 
-  sessionSecret: process.env.SESSION_SECRET || 'preluded_dev_secret_session_key'
+  sessionSecret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex')
 };
 
 module.exports = config;

@@ -115,8 +115,8 @@ class MusicController {
     try {
       const authHeader = req.headers.authorization || '';
       const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
-      const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
-      const limit = parseInt(req.query.limit, 10) || 20;
+      const userCookie = cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
 
       const quickPicksData = await youtubeMusicService.getQuickPicks(userCookie, limit);
       return res.status(200).json({
@@ -177,10 +177,13 @@ class MusicController {
       if (!targetId) {
         return res.status(400).json({ error: 'Missing track id' });
       }
+      if (!/^[a-zA-Z0-9_-]{3,80}$/.test(String(targetId))) {
+        return res.status(400).json({ error: 'Invalid track id format' });
+      }
 
       const authHeader = req.headers.authorization || '';
       const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
-      const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
+      const userCookie = cookieHeader || req.query.ytm_cookie || req.query.cookie || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null));
 
       let resolvedVideoId = targetId;
       try {
@@ -234,7 +237,7 @@ class MusicController {
 
     } catch (err) {
       if (!res.headersSent) {
-        return res.status(500).json({ error: err.message, fallback: 'youtube-embed' });
+        return res.status(500).json({ error: 'Direct stream resolution failed', fallback: 'youtube-embed' });
       }
       next(err);
     }
@@ -286,7 +289,7 @@ class MusicController {
     try {
       const authHeader = req.headers.authorization || '';
       const cookieHeader = req.headers['x-ytm-cookie'] || req.headers['x-youtube-cookie'] || req.headers['cookie'];
-      const userCookie = req.query.ytm_cookie || req.query.cookie || cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : null);
+      const userCookie = cookieHeader || (authHeader.startsWith('Cookie ') ? authHeader.substring(7) : null);
       const homeFeed = await youtubeMusicService.getHome(userCookie);
       return res.status(200).json(homeFeed);
     } catch (err) {

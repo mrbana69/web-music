@@ -2,6 +2,8 @@ const express = require('express');
 const path = require('path');
 const config = require('./config/env');
 const corsMiddleware = require('./middleware/cors');
+const securityHeaders = require('./middleware/securityHeaders');
+const { createRateLimiter } = require('./middleware/rateLimit');
 const requestLogger = require('./middleware/requestLogger');
 const { extractAuth } = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
@@ -15,11 +17,16 @@ const PORT = config.port;
 app.set('trust proxy', 1);
 
 // Middleware
+app.use(securityHeaders);
 app.use(corsMiddleware);
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '256kb' }));
+app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 app.use(requestLogger);
 app.use(extractAuth);
+
+// Rate limiting on auth and API routes
+app.use('/api/auth', createRateLimiter({ windowMs: 60_000, max: 30 }));
+app.use('/api', createRateLimiter({ windowMs: 60_000, max: 180 }));
 
 // Mount API routes
 app.use('/api', apiRoutes);
